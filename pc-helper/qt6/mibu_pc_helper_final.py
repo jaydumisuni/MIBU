@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import sys
 import webbrowser
 from datetime import datetime, time, timedelta
@@ -10,11 +11,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
+from dependency_check import format_checks, run_all_checks
 from mibu_actions import install_package, launch_phone_app, list_devices
 
 BEIJING_ZONE = ZoneInfo('Asia/Shanghai')
 TARGET_TIME = time(23, 59, 58, 600000)
 LOGIN_URL = 'https://account.xiaomi.com/'
+DEFAULT_APK = os.path.join(os.getcwd(), 'dist', 'MIBU.apk')
 
 
 def target_times() -> tuple[str, str]:
@@ -72,6 +75,7 @@ class Window(QMainWindow):
         self.setCentralWidget(root)
         self.theme()
         self.refresh_time()
+        self.run_dependency_check(show_popup=False)
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
@@ -102,10 +106,15 @@ class Window(QMainWindow):
         self.progress.setObjectName('card')
         self.progress.setFixedHeight(90)
         v.addWidget(self.progress)
+        self.dep_status = QLabel('Dependencies\nChecking...')
+        self.dep_status.setObjectName('card')
+        self.dep_status.setWordWrap(True)
+        self.dep_status.setFixedHeight(150)
+        v.addWidget(self.dep_status)
         help_box = QLabel('Need help?\nLogin yourself in the browser, then use this helper to install and open MIBU.')
         help_box.setObjectName('card')
         help_box.setWordWrap(True)
-        help_box.setFixedHeight(130)
+        help_box.setFixedHeight(110)
         v.addWidget(help_box)
         v.addStretch(1)
         v.addWidget(QLabel('v1.0.0'))
@@ -150,6 +159,7 @@ class Window(QMainWindow):
         v.addWidget(times)
         buttons = QHBoxLayout()
         for text, handler in [
+            ('Check Deps', self.run_dependency_check),
             ('Open Login', self.open_login),
             ('Check Device', self.check_device),
             ('Install APK', self.install_apk),
@@ -171,6 +181,14 @@ class Window(QMainWindow):
         done = sum(1 for row in self.rows if row.status.text() in ('Ready', 'Done'))
         self.progress.setText(f'Progress\n{int(done / len(self.rows) * 100)}%')
 
+    def run_dependency_check(self, show_popup: bool = True) -> None:
+        checks = run_all_checks()
+        text = format_checks(checks)
+        all_ok = all(item.ok for item in checks)
+        self.dep_status.setText('Dependencies\n' + ('All ready' if all_ok else 'Needs attention'))
+        if show_popup:
+            QMessageBox.information(self, 'Dependency check', text)
+
     def open_login(self) -> None:
         webbrowser.open(LOGIN_URL)
         self.rows[0].set_status('Ready')
@@ -179,13 +197,15 @@ class Window(QMainWindow):
 
     def check_device(self) -> None:
         result = list_devices()
-        ok = result.ok and 'device' in result.message
+        ok = result.ok and '\tdevice' in result.message
         self.rows[1].set_status('Ready' if ok else 'Waiting')
         self.progress_update()
         QMessageBox.information(self, 'Device check', result.message or 'No output')
 
     def install_apk(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, 'Select MIBU APK', '', 'Android APK (*.apk)')
+        path = DEFAULT_APK if os.path.exists(DEFAULT_APK) else ''
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(self, 'Select MIBU APK', '', 'Android APK (*.apk)')
         if not path:
             return
         result = install_package(path)
