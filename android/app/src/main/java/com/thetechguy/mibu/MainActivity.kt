@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -123,17 +124,29 @@ class MainActivity : Activity() {
     }
 
     private fun heroBlock(): View {
-        val hero = TextView(this).apply {
-            text = "MI  👻  BU\nMi Bootloader Unlock Helper\nPhone-side helper for Xiaomi bootloader unlock."
-            textSize = 22f
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(10), dp(10), dp(16))
+            background = rounded(Color.rgb(8, 15, 30), dp(24), Color.rgb(32, 55, 90))
+        }
+        val art = ImageView(this).apply {
+            setImageResource(R.drawable.mibu_hero_art)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        card.addView(art, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220)))
+        val title = TextView(this).apply {
+            text = "Mi Bootloader Unlock Helper\nPhone-side helper for Xiaomi bootloader unlock."
+            textSize = 18f
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            setPadding(dp(18), dp(26), dp(18), dp(26))
-            background = rounded(Color.rgb(8, 15, 30), dp(24), Color.rgb(32, 55, 90))
+            setPadding(dp(12), dp(6), dp(12), 0)
         }
-        rootParams(hero, bottom = dp(14))
-        return hero
+        card.addView(title)
+        rootParams(card, bottom = dp(14))
+        return card
     }
 
     private fun statusTile(title: String, main: String, small: String): TextView {
