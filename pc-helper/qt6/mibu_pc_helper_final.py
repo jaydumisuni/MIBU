@@ -34,25 +34,28 @@ class Step(QFrame):
         super().__init__()
         self.setObjectName('step')
         row = QHBoxLayout(self)
-        row.setContentsMargins(14, 12, 14, 12)
+        row.setContentsMargins(10, 7, 10, 7)
+        row.setSpacing(10)
         badge = QLabel(str(n))
         badge.setObjectName('badge')
         badge.setAlignment(Qt.AlignCenter)
-        badge.setFixedSize(34, 34)
+        badge.setFixedSize(26, 26)
         row.addWidget(badge)
         col = QVBoxLayout()
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(1)
         name = QLabel(title)
         name.setObjectName('stepTitle')
         small = QLabel(desc)
         small.setObjectName('small')
-        small.setWordWrap(True)
+        small.setWordWrap(False)
         col.addWidget(name)
         col.addWidget(small)
         row.addLayout(col, 1)
         self.status = QLabel('Pending')
         self.status.setObjectName('pill')
         self.status.setAlignment(Qt.AlignCenter)
-        self.status.setFixedWidth(92)
+        self.status.setFixedWidth(70)
         row.addWidget(self.status)
 
     def set_status(self, text: str) -> None:
@@ -63,7 +66,8 @@ class Window(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle('MIBU PC Helper')
-        self.resize(980, 640)
+        self.resize(760, 520)
+        self.setMinimumSize(720, 500)
         self._center_once = True
         self.rows: list[Step] = []
         root = QWidget()
@@ -89,8 +93,10 @@ class Window(QMainWindow):
     def sidebar(self) -> QWidget:
         side = QFrame()
         side.setObjectName('side')
+        side.setFixedWidth(170)
         v = QVBoxLayout(side)
-        v.setContentsMargins(24, 24, 24, 24)
+        v.setContentsMargins(16, 16, 16, 14)
+        v.setSpacing(10)
         logo = QLabel('MIBU')
         logo.setObjectName('brand')
         v.addWidget(logo)
@@ -100,47 +106,49 @@ class Window(QMainWindow):
         ghost = QLabel('mi   BU')
         ghost.setObjectName('ghost')
         ghost.setAlignment(Qt.AlignCenter)
-        ghost.setFixedHeight(150)
+        ghost.setFixedHeight(92)
         v.addWidget(ghost)
         self.progress = QLabel('Progress\n0%')
         self.progress.setObjectName('card')
-        self.progress.setFixedHeight(90)
+        self.progress.setFixedHeight(58)
         v.addWidget(self.progress)
         self.dep_status = QLabel('Dependencies\nChecking...')
         self.dep_status.setObjectName('card')
         self.dep_status.setWordWrap(True)
-        self.dep_status.setFixedHeight(150)
+        self.dep_status.setFixedHeight(82)
         v.addWidget(self.dep_status)
-        help_box = QLabel('Need help?\nLogin yourself in the browser, then use this helper to install and open MIBU.')
+        help_box = QLabel('Need help?\nLogin in browser, then install and open MIBU.')
         help_box.setObjectName('card')
         help_box.setWordWrap(True)
-        help_box.setFixedHeight(110)
+        help_box.setFixedHeight(86)
         v.addWidget(help_box)
         v.addStretch(1)
-        v.addWidget(QLabel('v1.0.0'))
+        version = QLabel('v1.0.0')
+        version.setObjectName('muted')
+        v.addWidget(version)
         return side
 
     def main_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName('main')
         v = QVBoxLayout(panel)
-        v.setContentsMargins(30, 26, 30, 22)
-        v.setSpacing(16)
-        crumb = QLabel('THETECHGUY TOOLS  >  MIBU PC HELPER  >  SETUP WIZARD')
+        v.setContentsMargins(22, 18, 22, 16)
+        v.setSpacing(10)
+        crumb = QLabel('THETECHGUY TOOLS  >  MIBU PC HELPER')
         crumb.setObjectName('crumb')
         v.addWidget(crumb)
-        title = QLabel("Welcome to <span style='color:#ff7a2b;'>M</span><span style='color:#bd4dff;'>I</span><span style='color:#55a8ff;'>BU</span> PC Helper")
+        title = QLabel("<span style='color:#ff7a2b;'>M</span><span style='color:#bd4dff;'>I</span><span style='color:#55a8ff;'>BU</span> PC Helper")
         title.setObjectName('title')
         v.addWidget(title)
-        sub = QLabel('Follow the steps below. The user logs in themselves; MIBU only handles explicit token/session import and device setup.')
+        sub = QLabel('Small guided setup. User logs in themselves; MIBU only imports the explicit token/session.')
         sub.setObjectName('small')
         v.addWidget(sub)
         steps = [
-            (1, 'Browser login', 'Open the normal login page. User logs in themselves.'),
-            (2, 'Connection check', 'Connect phone and confirm the PC can see it.'),
-            (3, 'Install MIBU.apk', 'Install the phone-side app from this helper.'),
-            (4, 'Open on phone', 'Launch MIBU on the connected phone.'),
-            (5, 'Timing guide', 'Show Beijing time and matching local time.'),
+            (1, 'Browser login', 'Open normal login page.'),
+            (2, 'Connection check', 'Confirm ADB sees the phone.'),
+            (3, 'Install MIBU.apk', 'Install phone-side app.'),
+            (4, 'Open on phone', 'Launch MIBU on device.'),
+            (5, 'Timing guide', 'Beijing and local target time.'),
         ]
         for item in steps:
             row = Step(*item)
@@ -149,7 +157,11 @@ class Window(QMainWindow):
         times = QFrame()
         times.setObjectName('cardFrame')
         tv = QVBoxLayout(times)
-        tv.addWidget(QLabel('Time reference'))
+        tv.setContentsMargins(12, 9, 12, 9)
+        tv.setSpacing(3)
+        ref = QLabel('Time reference')
+        ref.setObjectName('cardTitle')
+        tv.addWidget(ref)
         self.bj = QLabel('-')
         self.loc = QLabel('-')
         self.bj.setObjectName('time')
@@ -158,13 +170,14 @@ class Window(QMainWindow):
         tv.addWidget(self.loc)
         v.addWidget(times)
         buttons = QHBoxLayout()
+        buttons.setSpacing(7)
         for text, handler in [
-            ('Check Deps', self.run_dependency_check),
-            ('Open Login', self.open_login),
-            ('Check Device', self.check_device),
-            ('Install APK', self.install_apk),
-            ('Open App', self.open_app),
-            ('Refresh Time', self.refresh_time),
+            ('Deps', self.run_dependency_check),
+            ('Login', self.open_login),
+            ('Device', self.check_device),
+            ('Install', self.install_apk),
+            ('Open', self.open_app),
+            ('Time', self.refresh_time),
         ]:
             b = QPushButton(text)
             b.setObjectName('button')
@@ -221,8 +234,8 @@ class Window(QMainWindow):
 
     def refresh_time(self) -> None:
         bj, loc = target_times()
-        self.bj.setText('Beijing target: ' + bj)
-        self.loc.setText('Local target: ' + loc)
+        self.bj.setText('Beijing: ' + bj)
+        self.loc.setText('Local: ' + loc)
         self.rows[4].set_status('Ready')
         self.progress_update()
 
@@ -231,25 +244,26 @@ class Window(QMainWindow):
         QWidget { background:#050913; color:#f4f6fa; font-family: Segoe UI, Arial; }
         #side { background:#090f1d; border-right:1px solid #162038; }
         #main { background:#070b15; }
-        #brand { font-size:34px; font-weight:800; }
-        #muted, #small { color:#94a4c2; font-size:13px; }
-        #ghost { background:#0b1120; border:1px solid #293657; border-radius:18px; color:#b17cff; font-size:34px; }
-        #card, #cardFrame { background:#0d1423; border:1px solid #1c2841; border-radius:16px; padding:14px; }
-        #crumb { color:#d58a34; font-size:12px; }
-        #title { font-size:32px; font-weight:800; }
-        #step { background:#0c1321; border:1px solid #1a2740; border-radius:16px; }
-        #badge { background:#0f1930; border:1px solid #334a78; border-radius:17px; color:#6bc1ff; font-size:16px; font-weight:800; }
-        #stepTitle { font-size:20px; font-weight:700; }
-        #pill { background:#172131; border:1px solid #283a56; border-radius:14px; padding:6px; color:#c9d5ea; }
-        #time { color:#55a8ff; font-weight:700; }
-        #button { background:#0e1728; border:1px solid #28426a; border-radius:12px; padding:10px 16px; }
+        #brand { font-size:28px; font-weight:800; }
+        #muted, #small { color:#94a4c2; font-size:11px; }
+        #ghost { background:#0b1120; border:1px solid #293657; border-radius:15px; color:#b17cff; font-size:26px; }
+        #card, #cardFrame { background:#0d1423; border:1px solid #1c2841; border-radius:13px; padding:9px; }
+        #cardTitle { color:#f4f6fa; font-size:11px; }
+        #crumb { color:#d58a34; font-size:10px; }
+        #title { font-size:28px; font-weight:800; }
+        #step { background:#0c1321; border:1px solid #1a2740; border-radius:13px; }
+        #badge { background:#0f1930; border:1px solid #334a78; border-radius:13px; color:#6bc1ff; font-size:13px; font-weight:800; }
+        #stepTitle { font-size:16px; font-weight:700; }
+        #pill { background:#172131; border:1px solid #283a56; border-radius:11px; padding:4px; color:#c9d5ea; font-size:11px; }
+        #time { color:#55a8ff; font-weight:700; font-size:11px; }
+        #button { background:#0e1728; border:1px solid #28426a; border-radius:10px; padding:8px 10px; font-size:11px; }
         ''')
 
 
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName('MIBU PC Helper')
-    app.setFont(QFont('Segoe UI', 10))
+    app.setFont(QFont('Segoe UI', 9))
     window = Window()
     window.show()
     return app.exec()
