@@ -32,6 +32,11 @@ class MainActivity : Activity() {
         refreshStatus()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::statusCard.isInitialized) refreshStatus()
+    }
+
     private fun buildUi() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -77,8 +82,12 @@ class MainActivity : Activity() {
             tokenStore.saveSession("dev-placeholder-session")
             refreshStatus("Demo session imported. Real PC handoff comes next.")
         })
-        root.addView(secondaryButton("Open Logs") { showMessage("Logs screen comes next.") })
-        root.addView(secondaryButton("Instructions") { showMessage("Instructions screen comes next.") })
+        root.addView(secondaryButton("Open Logs") {
+            startActivity(Intent(this, LogsActivity::class.java))
+        })
+        root.addView(secondaryButton("Instructions") {
+            startActivity(Intent(this, InstructionsActivity::class.java))
+        })
 
         val footer = TextView(this).apply {
             text = "By the THETECHGUY TOOL team"
@@ -207,10 +216,6 @@ class MainActivity : Activity() {
 
     private fun formatBlock(title: String, main: String, small: String): String {
         return if (small.isBlank()) "$title\n$main" else "$title\n$main\n$small"
-    }
-
-    private fun showMessage(text: String) {
-        statusCard.text = formatBlock("MIBU", text, "")
     }
 
     private fun rounded(color: Int, radius: Int, stroke: Int): GradientDrawable {
