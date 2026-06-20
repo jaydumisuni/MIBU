@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import os
 import sys
+import traceback
 import webbrowser
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
 from dependency_check import format_checks, run_all_checks
 from mibu_actions import install_package, launch_phone_app, list_devices
@@ -17,7 +18,25 @@ from mibu_actions import install_package, launch_phone_app, list_devices
 BEIJING_ZONE = ZoneInfo('Asia/Shanghai')
 TARGET_TIME = time(23, 59, 58, 600000)
 LOGIN_URL = 'https://account.xiaomi.com/'
-DEFAULT_APK = os.path.join(os.getcwd(), 'dist', 'MIBU.apk')
+
+
+def app_base_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def bundled_apk_path() -> str:
+    base = app_base_dir()
+    candidates = [
+        os.path.join(base, 'dist', 'MIBU.apk'),
+        os.path.join(base, 'MIBU.apk'),
+        os.path.join(os.getcwd(), 'dist', 'MIBU.apk'),
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return ''
 
 
 def target_times() -> tuple[str, str]:
@@ -66,10 +85,11 @@ class Window(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle('MIBU PC Helper - THETECHGUY TOOL')
-        self.resize(760, 520)
-        self.setMinimumSize(720, 500)
+        self.resize(760, 600)
+        self.setMinimumSize(720, 560)
         self._center_once = True
         self.rows: list[Step] = []
+        self.output: QTextEdit
         root = QWidget()
         layout = QHBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -78,8 +98,9 @@ class Window(QMainWindow):
         layout.addWidget(self.main_panel(), 1)
         self.setCentralWidget(root)
         self.theme()
-        self.refresh_time()
-        self.run_dependency_check(show_popup=False)
+        self.refresh_time(show_log=False)
+        self.run_dependency_check(show_log=False)
+        self.log('Ready. Use the buttons below. Results now appear here, not hidden.')
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
@@ -89,6 +110,17 @@ class Window(QMainWindow):
             if screen:
                 geo = screen.availableGeometry()
                 self.move(geo.center().x() - self.width() // 2, geo.center().y() - self.height() // 2)
+
+    def log(self, text: str) -> None:
+        self.output.append(text)
+        self.output.verticalScrollBar().setValue(self.output.verticalScrollBar().maximum())
+
+    def safe_call(self, name: str, func) -> None:
+        try:
+            self.log(f'\n> {name}')
+            func()
+        except Exception:
+            self.log('ERROR:\n' + traceback.format_exc())
 
     def sidebar(self) -> QWidget:
         side = QFrame()
@@ -133,7 +165,7 @@ class Window(QMainWindow):
         panel.setObjectName('main')
         v = QVBoxLayout(panel)
         v.setContentsMargins(22, 18, 22, 16)
-        v.setSpacing(10)
+        v.setSpacing(9)
         crumb = QLabel('THETECHGUY TOOL  >  MIBU HELPER')
         crumb.setObjectName('crumb')
         v.addWidget(crumb)
@@ -157,8 +189,8 @@ class Window(QMainWindow):
         times = QFrame()
         times.setObjectName('cardFrame')
         tv = QVBoxLayout(times)
-        tv.setContentsMargins(12, 9, 12, 9)
-        tv.setSpacing(3)
+        tv.setContentsMargins(12, 8, 12, 8)
+        tv.setSpacing(2)
         ref = QLabel('Time reference')
         ref.setObjectName('cardTitle')
         tv.addWidget(ref)
@@ -169,15 +201,20 @@ class Window(QMainWindow):
         tv.addWidget(self.bj)
         tv.addWidget(self.loc)
         v.addWidget(times)
+        self.output = QTextEdit()
+        self.output.setObjectName('output')
+        self.output.setReadOnly(True)
+        self.output.setFixedHeight(86)
+        v.addWidget(self.output)
         buttons = QHBoxLayout()
         buttons.setSpacing(7)
         for text, handler in [
-            ('Deps', self.run_dependency_check),
-            ('Login', self.open_login),
-            ('Device', self.check_device),
-            ('Install', self.install_apk),
-            ('Open', self.open_app),
-            ('Time', self.refresh_time),
+            ('Deps', lambda: self.safe_call('Check dependencies', self.run_dependency_check)),
+            ('Login', lambda: self.safe_call('Open login', self.open_login)),
+            ('Device', lambda: self.safe_call('Check device', self.check_device)),
+            ('Install', lambda: self.safe_call('Install APK', self.install_apk)),
+            ('Open', lambda: self.safe_call('Open app', self.open_app)),
+            ('Time', lambda: self.safe_call('Refresh time', self.refresh_time)),
         ]:
             b = QPushButton(text)
             b.setObjectName('button')
@@ -194,50 +231,56 @@ class Window(QMainWindow):
         done = sum(1 for row in self.rows if row.status.text() in ('Ready', 'Done'))
         self.progress.setText(f'Progress\n{int(done / len(self.rows) * 100)}%')
 
-    def run_dependency_check(self, show_popup: bool = True) -> None:
+    def run_dependency_check(self, show_log: bool = True) -> None:
         checks = run_all_checks()
         text = format_checks(checks)
         all_ok = all(item.ok for item in checks)
         self.dep_status.setText('Dependencies\n' + ('All ready' if all_ok else 'Needs attention'))
-        if show_popup:
-            QMessageBox.information(self, 'Dependency check', text)
+        if show_log:
+            self.log(text)
 
     def open_login(self) -> None:
-        webbrowser.open(LOGIN_URL)
-        self.rows[0].set_status('Ready')
+        ok = webbrowser.open(LOGIN_URL)
+        self.rows[0].set_status('Ready' if ok else 'Failed')
         self.progress_update()
-        QMessageBox.information(self, 'Login', 'Browser opened. Log in yourself, then continue in MIBU.')
+        self.log('Browser open result: ' + str(ok))
+        self.log('Login URL: ' + LOGIN_URL)
 
     def check_device(self) -> None:
         result = list_devices()
         ok = result.ok and '\tdevice' in result.message
         self.rows[1].set_status('Ready' if ok else 'Waiting')
         self.progress_update()
-        QMessageBox.information(self, 'Device check', result.message or 'No output')
+        self.log(result.message or 'No ADB output')
 
     def install_apk(self) -> None:
-        path = DEFAULT_APK if os.path.exists(DEFAULT_APK) else ''
+        path = bundled_apk_path()
+        self.log('Bundled APK path: ' + (path or 'not found'))
         if not path:
             path, _ = QFileDialog.getOpenFileName(self, 'Select MIBU APK', '', 'Android APK (*.apk)')
         if not path:
+            self.log('Install cancelled; no APK selected.')
             return
         result = install_package(path)
         self.rows[2].set_status('Done' if result.ok else 'Failed')
         self.progress_update()
-        QMessageBox.information(self, 'Install APK', result.message or 'No output')
+        self.log(result.message or 'No install output')
 
     def open_app(self) -> None:
         result = launch_phone_app()
         self.rows[3].set_status('Done' if result.ok else 'Failed')
         self.progress_update()
-        QMessageBox.information(self, 'Open MIBU', result.message or 'No output')
+        self.log(result.message or 'No launch output')
 
-    def refresh_time(self) -> None:
+    def refresh_time(self, show_log: bool = True) -> None:
         bj, loc = target_times()
         self.bj.setText('Beijing: ' + bj)
         self.loc.setText('Local: ' + loc)
         self.rows[4].set_status('Ready')
         self.progress_update()
+        if show_log:
+            self.log('Beijing: ' + bj)
+            self.log('Local: ' + loc)
 
     def theme(self) -> None:
         self.setStyleSheet('''
@@ -258,6 +301,8 @@ class Window(QMainWindow):
         #pill { background:#172131; border:1px solid #283a56; border-radius:11px; padding:4px; color:#c9d5ea; font-size:11px; }
         #time { color:#55a8ff; font-weight:700; font-size:11px; }
         #button { background:#0e1728; border:1px solid #28426a; border-radius:10px; padding:8px 10px; font-size:11px; }
+        #button:hover { border:1px solid #55a8ff; }
+        #output { background:#060a12; color:#dbe7ff; border:1px solid #1c2841; border-radius:10px; font-family: Consolas, monospace; font-size:10px; }
         ''')
 
 
