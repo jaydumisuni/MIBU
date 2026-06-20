@@ -12,6 +12,9 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="false">
 
+        <activity android:name=".InstructionsActivity" android:exported="false" />
+        <activity android:name=".LogsActivity" android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
