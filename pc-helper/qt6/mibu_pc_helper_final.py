@@ -65,7 +65,7 @@ class Step(QFrame):
 class Window(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle('MIBU PC Helper')
+        self.setWindowTitle('MIBU PC Helper - THETECHGUY TOOL')
         self.resize(760, 520)
         self.setMinimumSize(720, 500)
         self._center_once = True
@@ -93,21 +93,21 @@ class Window(QMainWindow):
     def sidebar(self) -> QWidget:
         side = QFrame()
         side.setObjectName('side')
-        side.setFixedWidth(170)
+        side.setFixedWidth(178)
         v = QVBoxLayout(side)
         v.setContentsMargins(16, 16, 16, 14)
         v.setSpacing(10)
-        logo = QLabel('MIBU')
+        logo = QLabel("<span style='color:#ff7a2b;'>MI</span><span style='color:#ffffff;'>BU</span>")
         logo.setObjectName('brand')
         v.addWidget(logo)
         fam = QLabel('THETECHGUY TOOL')
-        fam.setObjectName('muted')
+        fam.setObjectName('brandSub')
         v.addWidget(fam)
-        ghost = QLabel('mi   BU')
-        ghost.setObjectName('ghost')
-        ghost.setAlignment(Qt.AlignCenter)
-        ghost.setFixedHeight(92)
-        v.addWidget(ghost)
+        hero = QLabel("<div align='center'><span style='color:#ff7a2b;'>MI</span><br><span style='color:#ffffff;font-size:30px;'>◉</span><br><span style='color:#55a8ff;'>BU</span><br><span style='color:#bd4dff;font-size:18px;'>UNLOCK</span></div>")
+        hero.setObjectName('heroBrand')
+        hero.setAlignment(Qt.AlignCenter)
+        hero.setFixedHeight(122)
+        v.addWidget(hero)
         self.progress = QLabel('Progress\n0%')
         self.progress.setObjectName('card')
         self.progress.setFixedHeight(58)
@@ -120,11 +120,11 @@ class Window(QMainWindow):
         help_box = QLabel('Need help?\nLogin in browser, then install and open MIBU.')
         help_box.setObjectName('card')
         help_box.setWordWrap(True)
-        help_box.setFixedHeight(86)
+        help_box.setFixedHeight(82)
         v.addWidget(help_box)
         v.addStretch(1)
-        version = QLabel('v1.0.0')
-        version.setObjectName('muted')
+        version = QLabel('THETECHGUY TOOL • v1.0')
+        version.setObjectName('brandSub')
         v.addWidget(version)
         return side
 
@@ -134,10 +134,10 @@ class Window(QMainWindow):
         v = QVBoxLayout(panel)
         v.setContentsMargins(22, 18, 22, 16)
         v.setSpacing(10)
-        crumb = QLabel('THETECHGUY TOOLS  >  MIBU PC HELPER')
+        crumb = QLabel('THETECHGUY TOOL  >  MIBU HELPER')
         crumb.setObjectName('crumb')
         v.addWidget(crumb)
-        title = QLabel("<span style='color:#ff7a2b;'>M</span><span style='color:#bd4dff;'>I</span><span style='color:#55a8ff;'>BU</span> PC Helper")
+        title = QLabel("<span style='color:#ff7a2b;'>MI</span><span style='color:#55a8ff;'>BU</span> <span style='color:#ffffff;'>PC Helper</span>")
         title.setObjectName('title')
         v.addWidget(title)
         sub = QLabel('Small guided setup. User logs in themselves; MIBU only imports the explicit token/session.')
@@ -186,7 +186,7 @@ class Window(QMainWindow):
         v.addLayout(buttons)
         footer = QLabel('By the THETECHGUY TOOL team')
         footer.setAlignment(Qt.AlignCenter)
-        footer.setObjectName('muted')
+        footer.setObjectName('brandSub')
         v.addWidget(footer)
         return panel
 
@@ -244,12 +244,13 @@ class Window(QMainWindow):
         QWidget { background:#050913; color:#f4f6fa; font-family: Segoe UI, Arial; }
         #side { background:#090f1d; border-right:1px solid #162038; }
         #main { background:#070b15; }
-        #brand { font-size:28px; font-weight:800; }
+        #brand { font-size:28px; font-weight:900; letter-spacing:1px; }
+        #brandSub { color:#d58a34; font-size:10px; letter-spacing:1px; }
         #muted, #small { color:#94a4c2; font-size:11px; }
-        #ghost { background:#0b1120; border:1px solid #293657; border-radius:15px; color:#b17cff; font-size:26px; }
+        #heroBrand { background:#0b1120; border:1px solid #293657; border-radius:15px; font-size:21px; font-weight:800; }
         #card, #cardFrame { background:#0d1423; border:1px solid #1c2841; border-radius:13px; padding:9px; }
         #cardTitle { color:#f4f6fa; font-size:11px; }
-        #crumb { color:#d58a34; font-size:10px; }
+        #crumb { color:#d58a34; font-size:10px; letter-spacing:1px; }
         #title { font-size:28px; font-weight:800; }
         #step { background:#0c1321; border:1px solid #1a2740; border-radius:13px; }
         #badge { background:#0f1930; border:1px solid #334a78; border-radius:13px; color:#6bc1ff; font-size:13px; font-weight:800; }
