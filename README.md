@@ -1,44 +1,116 @@
 # MIBU
 
-**MIBU = Mi Bootloader Unlock Helper**
+**MIBU = Mi Bootloader Unlock Helper**  
+**Product family:** THETECHGUY TOOL  
+**Footer:** By the THETECHGUY TOOL team
 
-MIBU is planned as a two-part toolset:
+MIBU is a two-part helper:
 
 1. **MIBU Android app (`MIBU.apk`)**
    - Runs on the Android phone.
-   - Receives a Xiaomi session/token from the PC helper or future in-app login.
-   - Stores the token locally.
-   - Shows account/request status, Beijing unlock window, local converted time, countdown, and logs.
+   - Lets the user explicitly import their own token/session.
+   - Shows session status, Beijing target time, local converted time, countdown, reminders, logs, and instructions.
    - Runs a foreground service so the phone can stay awake/data-on near the request window.
 
 2. **MIBU PC Helper**
-   - Guides the user through login/token preparation on PC.
+   - Opens the normal browser login page so the user logs in themselves.
+   - Checks dependencies and ADB availability.
    - Installs `MIBU.apk` to the phone once ADB is enabled.
-   - Pushes the prepared token/session to the app over ADB in dev mode.
-   - Computes the Beijing unlock target time and converts it to the user's local timezone automatically.
+   - Opens MIBU on the phone.
+   - Shows Beijing target time and local converted time automatically.
 
 ## Guardrails
 
-MIBU is a timing and workflow helper for legitimate Xiaomi bootloader unlock requests using the user's own Xiaomi account. It should not bypass Xiaomi account ownership checks, device locks, waiting periods, rate limits, or other official restrictions.
+MIBU is a timing, workflow, and installation helper for legitimate Xiaomi bootloader unlock requests using the user's own Xiaomi account/device. It must not ask for the Xiaomi password, silently read unrelated browser data, bypass Xiaomi ownership checks, device locks, waiting periods, rate limits, or other official restrictions.
 
-If Xiaomi reports a daily limit, account restriction, expired login, or not-eligible state, MIBU should explain the result and tell the user when to retry instead of spamming requests.
+If Xiaomi reports a daily limit, account restriction, expired login, not-eligible state, or waiting period, MIBU should explain the result and tell the user the next safe retry path instead of spamming requests.
+
+## User-owned token flow
+
+```text
+PC Helper opens normal browser login
+  -> User logs in themselves
+  -> User obtains/approves the needed token/session value
+  -> User imports token/session explicitly into MIBU.apk
+  -> MIBU stores it locally and shows only a masked/length preview
+  -> MIBU handles timing, countdown, reminders, logs, and guide
+```
 
 ## Monorepo layout
 
 ```text
 android/      MIBU Android APK source
-pc-helper/   PC helper for ADB install, token handoff, and time guidance
-docs/        architecture, flow notes, safety notes
+pc-helper/   PC helper CLI, Qt6 UI, dependency checker, packaging script
+docs/        architecture, branding, UI baseline, token/login flow notes
 .github/     CI build/test workflows
 ```
 
-## First build target
+## Android build
 
-The first milestone is not the final unlock sender. It is a safe skeleton that proves:
+```powershell
+gradle :android:app:assembleDebug
+```
 
-- Android project builds.
-- PC helper can see ADB.
-- PC helper can install the APK.
-- PC helper can package and push a token payload to the APK.
-- The APK can receive and show token/session status without exposing secrets.
-- Time conversion to the Beijing 23:59:58.600 request window works regardless of the user's timezone.
+Debug APK output:
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+## PC helper local run
+
+```powershell
+cd MIBU
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r pc-helper\qt6\requirements.txt
+python pc-helper\qt6\mibu_pc_helper_final.py
+```
+
+## PC helper dependency check
+
+```powershell
+python pc-helper\qt6\dependency_check.py
+```
+
+Checks:
+
+```text
+Python 3.10+
+PySide6 / Qt6
+ADB platform-tools
+```
+
+## Windows helper packaging
+
+Build Android first, then package the PC helper:
+
+```powershell
+.\pc-helper\build_windows.ps1
+```
+
+The script packages the Qt6 helper and tries to bundle the debug APK as:
+
+```text
+pc-helper/qt6/dist/MIBU.apk
+```
+
+## V1 source readiness
+
+The v1 source baseline includes:
+
+- Android dashboard UI
+- Android token/session import screen
+- Android logs and instructions screens
+- Foreground service shell
+- Pullable MIBU launcher and hero drawable assets
+- Beijing/local time conversion
+- PC CLI helper
+- Final Qt6 helper UI with dependency panel
+- Browser login button
+- ADB device check
+- APK install flow
+- Open app flow
+- CI syntax/build checks
+
+Final confirmation still requires a real build and real device run.
