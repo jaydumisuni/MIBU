@@ -78,9 +78,8 @@ class MainActivity : Activity() {
             startService(Intent(this, MibuForegroundService::class.java))
             refreshStatus("Foreground service started.")
         })
-        root.addView(secondaryButton("Import session from PC") {
-            tokenStore.saveSession("dev-placeholder-session")
-            refreshStatus("Demo session imported. Real PC handoff comes next.")
+        root.addView(secondaryButton("Import session/token from PC") {
+            startActivity(Intent(this, TokenImportActivity::class.java))
         })
         root.addView(secondaryButton("Open Logs") {
             startActivity(Intent(this, LogsActivity::class.java))
@@ -204,10 +203,10 @@ class MainActivity : Activity() {
         val hours = duration.toHours()
         val minutes = duration.toMinutesPart()
         val seconds = duration.toSecondsPart()
-        val status = if (tokenStore.hasSession()) "Eligible to send request" else "Waiting for session"
-        val session = if (tokenStore.hasSession()) "From: MIBU PC Tool\nSession loaded successfully" else "Import from PC helper first"
+        val status = if (tokenStore.hasSession()) "Session/token ready" else "Waiting for session/token"
+        val session = if (tokenStore.hasSession()) "Imported by user\n${tokenStore.getSessionPreview()}" else "Import from PC helper first"
 
-        statusCard.text = formatBlock("Account Status", status, extra ?: "Use your own Xiaomi account and device.")
+        statusCard.text = formatBlock("Account Status", status, extra ?: "User logs in themselves; MIBU only stores the explicit token/session import.")
         sessionCard.text = formatBlock("Session Imported", session, "")
         beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8 China Standard Time"
         localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${local.id}"
