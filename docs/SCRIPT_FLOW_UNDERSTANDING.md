@@ -63,6 +63,26 @@ The uploaded archive `Avoid quota limit reached.7z` contains:
 - `timeshift.txt`
 - `token.txt`
 
+### Token capture count
+
+The guide and script require two token captures, not four separate logins:
+
+```text
+Capture 1: Firefox/Cookie Editor -> new_bbs_serviceToken
+Capture 2: Chrome/Javascript or Selenium -> popRunToken
+```
+
+Those two captured values are then duplicated into four token rows:
+
+```text
+token line 1 = Firefox new_bbs_serviceToken value
+token line 2 = Chrome popRunToken value
+token line 3 = Firefox new_bbs_serviceToken value
+token line 4 = Chrome popRunToken value
+```
+
+So the user should not log in four times. The four lanes reuse two captured token values.
+
 ### GetTokens.py behavior
 
 `GetTokens.py` does not merge the Firefox and Chrome values into one combined token. It writes a four-line token file:
@@ -102,7 +122,7 @@ Important detail: even when lane 2 or lane 4 uses the Chrome `popRunToken` value
 Cookie: new_bbs_serviceToken=<selected token value>;versionCode=500411;versionName=5.4.11;deviceId=<generated device id>;
 ```
 
-So MIBU should model these as four selected session values, not as a single merged token string.
+So MIBU should model these as four selected session values, built from two captures, not as a single merged token string and not as four separate logins.
 
 ### API endpoints used by NScript.py
 
@@ -176,23 +196,28 @@ For the timed POST:
 
 ## Token sources
 
-The script uses four token positions.
+The script uses four token positions built from two token captures.
 
 Based on the guide and uploaded script:
 
-- Firefox/Cookie Editor or `GetTokens.py` provides `new_bbs_serviceToken`.
-  - This token is written into positions 1 and 3 of `token.txt`.
-- Chrome/Javascript or Selenium extraction provides `popRunToken`.
-  - This token is written into positions 2 and 4 of `token.txt`.
+- Firefox/Cookie Editor or `GetTokens.py` provides one `new_bbs_serviceToken` capture.
+  - This one captured value is written into positions 1 and 3 of `token.txt`.
+- Chrome/Javascript or Selenium extraction provides one `popRunToken` capture.
+  - This one captured value is written into positions 2 and 4 of `token.txt`.
 
-So MIBU must support at least:
+So MIBU must support:
 
-- Token slot 1: Firefox service-token value
-- Token slot 2: Chrome pop-token value sent as selected cookie value
-- Token slot 3: Firefox service-token value
-- Token slot 4: Chrome pop-token value sent as selected cookie value
+- Capture A: Firefox service-token value
+- Capture B: Chrome pop-token value
 
-The app should not pretend this is only one token unless we later prove only one lane is needed.
+Then MIBU maps them internally:
+
+- Token slot 1: Capture A
+- Token slot 2: Capture B
+- Token slot 3: Capture A
+- Token slot 4: Capture B
+
+The app should not ask the user to log in four times. It should ask for two captures and then duplicate them into four lanes.
 
 ## Time-shift lanes
 
@@ -254,7 +279,7 @@ The app should have these states:
    - User logs in themselves.
    - MIBU does not ask for the Xiaomi password.
    - Session/token imported explicitly.
-   - Token slots should support the original four-lane script model.
+   - Two token captures should populate the four-lane script model.
 
 3. `WAITING_ARMED`
    - Beijing target time shown.
@@ -302,7 +327,7 @@ Do not redesign away from the user's visual baseline.
 
 The Android UI should show the real flow states:
 
-- Session/token slots
+- Two token captures and four populated token slots
 - Target time
 - Start Waiting
 - Time-shift queue/lane status
@@ -336,7 +361,8 @@ The user's older ADB enabler script is a guide for this logic.
 Before coding the upgraded app, every implementation must pass this checklist:
 
 - Does the app preserve the original four-lane script model?
-- Does it support four token slots, not just one session string?
+- Does it support two token captures that populate four token slots?
+- Does it avoid asking the user to log in four times?
 - Does it show the 1400 / 900 / 400 / 100 ms lanes somewhere?
 - Does `Start Waiting` arm the wait stage rather than jumping straight to binding result?
 - Does the app show precheck status for SIM/mobile data/Wi-Fi/Find Device/Xiaomi account/Google account?
