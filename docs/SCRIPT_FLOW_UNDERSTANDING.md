@@ -22,6 +22,18 @@ The guide is not just a countdown screen. It is a timed multi-lane request flow.
 - Xiaomi account limits still apply: one phone per month, three phones per year.
 - Even if the request is accepted, normal MIUI/Mi Unlock waiting time may still apply, such as 72 hours.
 
+## User-risk disclaimer rule
+
+MIBU is for users who already understand bootloader unlocking and device servicing risk. Do not make the app feel like a fear screen or a legal lecture.
+
+Use a small factual disclaimer in onboarding/about/instructions:
+
+```text
+Bootloader unlocking can erase data, affect warranty/security features, and may stop services such as Find Device from working normally. Continue only if you understand the risk, own or are authorised to service the device, and have backed up important data.
+```
+
+Do not repeat the disclaimer on every screen. Show it once during onboarding and keep it available in Instructions/About.
+
 ## China / Mainland / Community-app uncertainty
 
 The current public information around Xiaomi HyperOS bootloader unlock is messy and changes often. Treat this as a high-risk decision point, not a solved step.
@@ -205,6 +217,7 @@ Before coding the upgraded app, every implementation must pass this checklist:
 - Does `Start Waiting` arm the wait stage rather than jumping straight to binding result?
 - Does the app show precheck status for SIM/mobile data/Wi-Fi/Find Device/Xiaomi account/Google account?
 - Does it include a China/Community device check state for China-routed devices?
+- Does it show the concise risk disclaimer once during onboarding/about/instructions without turning the app into a fear screen?
 - Does it distinguish Settings toast from real server/binding confirmation?
 - Does it save lane results and binding evidence to logs?
 - Does the PC helper respect the real ADB enabling flow?
