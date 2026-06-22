@@ -1,0 +1,42 @@
+# Build outputs
+build/
+.kotlin/
+.gradle/
+**/build/
+**/__pycache__/
+*.pyc
+*.spec
+
+# Local Android/SDK config
+local.properties
+
+# Generated packages/logs
+pc-helper/release/
+pc-helper/release-image-hotspot/
+pc-helper/qt6/bundle-dist/
+pc-helper/qt6/dist/
+pc-helper/qt6/build/
+rebuild-log.txt
+image-hotspot-log.txt
+design-match-log.txt
+page-split-polish-log.txt
+visual-polish-log.txt
+
+# Protect local rendered UI/branding/audio resources from `git clean -fd`.
+# These are large binary assets restored locally and bundled by build_windows.ps1.
+resources/**
+!resources/
+!resources/.gitkeep
+!resources/expected ui/
+!resources/expected ui/.gitkeep
+!resources/expected ui/android/
+!resources/expected ui/android/.gitkeep
+!resources/expected ui/pc/
+!resources/expected ui/pc/.gitkeep
+!resources/branding/
+!resources/branding/.gitkeep
+
+# Local scripts/test dumps
+script/
+pc-helper/New Text Document.txt
+pc-helper/visual-final-four-button-helper.png
