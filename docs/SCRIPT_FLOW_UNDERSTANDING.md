@@ -54,29 +54,75 @@ Suggested status values:
 
 The app should save this as evidence so later results can be compared.
 
-## Token sources
+## Reverse engineering notes from uploaded script zip
 
-The script uses four token positions.
+The uploaded archive `Avoid quota limit reached.7z` contains:
 
-Based on the guide:
+- `GetTokens.py`
+- `NScript.py`
+- `timeshift.txt`
+- `token.txt`
 
-- Firefox/Cookie Editor provides `new_bbs_serviceToken`.
-  - This token is pasted into positions 1 and 3 of `token.txt`.
-- Chrome/Javascript prompt provides `popRunToken`.
-  - This token is pasted into positions 2 and 4 of `token.txt`.
+### GetTokens.py behavior
 
-So MIBU must support at least:
+`GetTokens.py` does not merge the Firefox and Chrome values into one combined token. It writes a four-line token file:
 
-- Token slot 1: serviceToken lane
-- Token slot 2: popRunToken lane
-- Token slot 3: serviceToken lane
-- Token slot 4: popRunToken lane
+```text
+token line 1 = Firefox new_bbs_serviceToken value
+token line 2 = Chrome popRunToken value
+token line 3 = Firefox new_bbs_serviceToken value
+token line 4 = Chrome popRunToken value
+```
 
-The app should not pretend this is only one token unless we later prove only one lane is needed.
+It then launches four terminal/script instances by piping `1`, `2`, `3`, and `4` into the selected script path.
 
-## Time-shift lanes
+### NScript.py behavior
 
-The original `timeshift.txt` shown by the user contains:
+`NScript.py` asks for a token row number.
+
+For the selected row number it reads:
+
+```text
+token = linecache.getline("token.txt", token_number).strip()
+feedtime = float(linecache.getline("timeshift.txt", token_number).strip())
+```
+
+So lane selection is exactly:
+
+```text
+lane 1 = token.txt line 1 + timeshift.txt line 1
+lane 2 = token.txt line 2 + timeshift.txt line 2
+lane 3 = token.txt line 3 + timeshift.txt line 3
+lane 4 = token.txt line 4 + timeshift.txt line 4
+```
+
+Important detail: even when lane 2 or lane 4 uses the Chrome `popRunToken` value, `NScript.py` still sends it in the request cookie header as the value of `new_bbs_serviceToken`:
+
+```text
+Cookie: new_bbs_serviceToken=<selected token value>;versionCode=500411;versionName=5.4.11;deviceId=<generated device id>;
+```
+
+So MIBU should model these as four selected session values, not as a single merged token string.
+
+### API endpoints used by NScript.py
+
+The script checks account/request state using:
+
+```text
+GET https://sgp-api.buy.mi.com/bbs/api/global/user/bl-switch/state
+```
+
+Then it submits the timed request using:
+
+```text
+POST https://sgp-api.buy.mi.com/bbs/api/global/apply/bl-auth
+```
+
+The script generates a random uppercase SHA1-style device id for request cookies.
+
+### Timing behavior confirmed from script
+
+`timeshift.txt` contains:
 
 ```text
 1400
@@ -85,14 +131,88 @@ The original `timeshift.txt` shown by the user contains:
 100
 ```
 
-The visible script output suggests each terminal lane targets a shifted send time near Chinese midnight:
+`NScript.py` computes the target time as:
+
+```text
+next midnight China time - (timeshift_ms / 1000)
+```
+
+Therefore the lanes target:
+
+```text
+lane 1: 1400 ms before 00:00:00 = 23:59:58.600
+lane 2:  900 ms before 00:00:00 = 23:59:59.100
+lane 3:  400 ms before 00:00:00 = 23:59:59.600
+lane 4:  100 ms before 00:00:00 = 23:59:59.900
+```
+
+### Account-state response logic seen in NScript.py
+
+The pre-check endpoint parses:
+
+- `code`
+- `data.is_pass`
+- `data.button_state`
+- `data.deadline_format`
+
+Known behavior in the script:
+
+- `code == 100004`: cookie expired.
+- `is_pass == 4` and `button_state == 1`: possible to send request.
+- `is_pass == 4` and `button_state == 2`: blocked until a deadline, but script lets user choose whether to continue.
+- `is_pass == 4` and `button_state == 3`: account less than 30 days old, but script lets user choose whether to continue.
+- `is_pass == 1`: request already approved/unlocking possible until the deadline.
+
+### Request response logic seen in NScript.py
+
+For the timed POST:
+
+- `code == 0` with `apply_result == 1`: request approved; script verifies status again.
+- `code == 0` with `apply_result == 3`: limit reached; try again after deadline.
+- `code == 0` with `apply_result == 4`: blocked until deadline.
+- `code == 100001`: request rejected.
+- `code == 100003`: request may have been approved; script checks status again.
+- unknown codes are printed as unknown.
+
+## Token sources
+
+The script uses four token positions.
+
+Based on the guide and uploaded script:
+
+- Firefox/Cookie Editor or `GetTokens.py` provides `new_bbs_serviceToken`.
+  - This token is written into positions 1 and 3 of `token.txt`.
+- Chrome/Javascript or Selenium extraction provides `popRunToken`.
+  - This token is written into positions 2 and 4 of `token.txt`.
+
+So MIBU must support at least:
+
+- Token slot 1: Firefox service-token value
+- Token slot 2: Chrome pop-token value sent as selected cookie value
+- Token slot 3: Firefox service-token value
+- Token slot 4: Chrome pop-token value sent as selected cookie value
+
+The app should not pretend this is only one token unless we later prove only one lane is needed.
+
+## Time-shift lanes
+
+The original `timeshift.txt` shown by the user and confirmed in the archive contains:
+
+```text
+1400
+900
+400
+100
+```
+
+The lanes target shifted send times near Chinese midnight:
 
 - Lane 1: 1400 ms offset, waits until 23:59:58.600 CST
 - Lane 2: 900 ms offset, waits until 23:59:59.100 CST
 - Lane 3: 400 ms offset, waits until 23:59:59.600 CST
 - Lane 4: 100 ms offset, waits until 23:59:59.900 CST
 
-This appears to mean: submit just before 00:00:00 China time, using different offsets to hit the server window.
+This means: submit just before 00:00:00 China time, using different offsets to hit the server window.
 
 ## Four terminal behavior
 
@@ -150,7 +270,11 @@ The app should have these states:
 5. `LANE_RESULTS`
    - Each lane records a result:
      - `REQUEST_SENT`
-     - `QUOTA_LIMIT`
+     - `APPROVED`
+     - `MAYBE_APPROVED_RECHECK`
+     - `LIMIT_REACHED`
+     - `BLOCKED_UNTIL_DEADLINE`
+     - `COOKIE_EXPIRED`
      - `COMMUNITY_GATE`
      - `NETWORK_ERROR`
      - `TOKEN_EXPIRED`
