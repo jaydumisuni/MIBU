@@ -76,8 +76,7 @@ class MainActivity : Activity() {
         root.addView(rowTile("Foreground Service", "Background helper is active when started.", "Ready"))
 
         root.addView(primaryButton("Start Waiting") {
-            startService(Intent(this, MibuForegroundService::class.java))
-            refreshStatus("Foreground service started.")
+            startActivity(Intent(this, StartWaitingActivity::class.java))
         })
         root.addView(secondaryButton("Import session/token from PC") {
             startActivity(Intent(this, TokenImportActivity::class.java))
@@ -217,7 +216,7 @@ class MainActivity : Activity() {
         val minutes = duration.toMinutesPart()
         val seconds = duration.toSecondsPart()
         val status = if (tokenStore.hasSession()) "Session/token ready" else "Waiting for session/token"
-        val session = if (tokenStore.hasSession()) "Imported by user\n${tokenStore.getSessionPreview()}" else "Import from PC helper first"
+        val session = if (tokenStore.hasSession()) "Imported by PC/helper\n${tokenStore.getSessionPreview()}" else "Import from PC helper first"
 
         statusCard.text = formatBlock("Account Status", status, extra ?: "User logs in themselves; MIBU only stores the explicit token/session import.")
         sessionCard.text = formatBlock("Session Imported", session, "")
