@@ -7,16 +7,32 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 
 class MibuForegroundService : Service() {
+    private val tokenStore by lazy { TokenStore(this) }
+
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
-        startForeground(49, buildNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
+        return try {
+            if (!tokenStore.hasSession()) {
+                Log.w("MIBU", "No session token imported; waiting service stopping cleanly")
+                stopSelf(startId)
+                START_NOT_STICKY
+            } else {
+                startForeground(49, buildNotification())
+                Log.i("MIBU", "Waiting service running")
+                START_STICKY
+            }
+        } catch (exc: Exception) {
+            Log.e("MIBU", "Waiting service failed", exc)
+            stopSelf(startId)
+            START_NOT_STICKY
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
