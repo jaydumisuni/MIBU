@@ -22,6 +22,26 @@ The guide is not just a countdown screen. It is a timed multi-lane request flow.
 - Xiaomi account limits still apply: one phone per month, three phones per year.
 - Even if the request is accepted, normal MIUI/Mi Unlock waiting time may still apply, such as 72 hours.
 
+## China / Mainland / Community-app uncertainty
+
+The current public information around Xiaomi HyperOS bootloader unlock is messy and changes often. Treat this as a high-risk decision point, not a solved step.
+
+Current working rule:
+
+- For China / Mainland-China-targeted devices, MIBU must warn that normal bootloader unlock may be unavailable or much more restricted depending on policy, account, ROM, device, and date.
+- If the device/account is on a China/Chinese Community path, MIBU should include a manual Community-app check step before the timed request attempt.
+- The user found that manually adding/checking the device inside Xiaomi Community may be needed for China devices. This is not proven universal, so the app should present it as `China device manual Community device check`, not as a guaranteed requirement.
+- MIBU must not silently skip this check. It should ask the user to confirm whether the device appears in Community / My Devices when the device looks China/Chinese-community routed.
+
+Suggested status values:
+
+- `COMMUNITY_DEVICE_CONFIRMED`
+- `COMMUNITY_DEVICE_NOT_FOUND`
+- `COMMUNITY_ROUTE_NOT_REQUIRED`
+- `COMMUNITY_ROUTE_UNKNOWN`
+
+The app should save this as evidence so later results can be compared.
+
 ## Token sources
 
 The script uses four token positions.
@@ -94,7 +114,9 @@ The app should have these states:
    - Wi-Fi/WLAN OFF
    - Find My Device / Find Hub enabled guidance
    - Xiaomi account present/confirmed by user
+   - Google account present/confirmed by user when required by the guide
    - Developer settings guidance where needed
+   - China/Community device check if the device/account is routed through Chinese Community
 
 2. `SESSION_IMPORT`
    - User logs in themselves.
@@ -148,6 +170,7 @@ The Android UI should show the real flow states:
 - Target time
 - Start Waiting
 - Time-shift queue/lane status
+- China/Community manual device check where relevant
 - Binding check/result capture
 - Logs
 - Instructions
@@ -171,6 +194,23 @@ Device Check must support the real ADB enabling flow:
 - Device online: proceed.
 
 The user's older ADB enabler script is a guide for this logic.
+
+## Proof-check / CodeRabbit review checklist
+
+Before coding the upgraded app, every implementation must pass this checklist:
+
+- Does the app preserve the original four-lane script model?
+- Does it support four token slots, not just one session string?
+- Does it show the 1400 / 900 / 400 / 100 ms lanes somewhere?
+- Does `Start Waiting` arm the wait stage rather than jumping straight to binding result?
+- Does the app show precheck status for SIM/mobile data/Wi-Fi/Find Device/Xiaomi account/Google account?
+- Does it include a China/Community device check state for China-routed devices?
+- Does it distinguish Settings toast from real server/binding confirmation?
+- Does it save lane results and binding evidence to logs?
+- Does the PC helper respect the real ADB enabling flow?
+- Does the UI remain close to the user's branding and not revert to a generic layout?
+- Does the build include resources safely and avoid `git clean -fd` wiping UI assets?
+- Does the final result avoid claiming success when the state is unknown?
 
 ## Core lesson
 
