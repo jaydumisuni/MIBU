@@ -11,6 +11,21 @@ class TokenImportActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val pushedToken = intent?.getStringExtra("mibu_session_token")?.trim().orEmpty()
+        if (pushedToken.length >= 8) {
+            tokenStore.saveSession(pushedToken)
+            mibuPage("MIBU", "Session Imported / THETECHGUY TOOL") {
+                addView(mibuCard("Session imported", "The session/token was securely received from MIBU PC Helper and saved on this phone."))
+                addView(mibuButton("Open Dashboard", true) {
+                    startActivity(android.content.Intent(this@TokenImportActivity, MainActivity::class.java))
+                    finish()
+                })
+                addView(mibuButton("Back") { finish() })
+                addView(footer())
+            }
+            return
+        }
+
         lateinit var input: EditText
         mibuPage("MIBU", "Import Session / THETECHGUY TOOL") {
             addView(mibuCard("Sensitive token", "Only paste a token/session value you obtained yourself through the visible browser login flow. MIBU does not need your Xiaomi password."))
