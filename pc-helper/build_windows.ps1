@@ -1,5 +1,5 @@
 param(
-    [string]$ApkPath = "..\android\app\build\outputs\apk\debug\app-debug.apk"
+    [string]$ApkPath = "android\app\build\outputs\apk\debug\app-debug.apk"
 )
 
 $ErrorActionPreference = "Stop"
