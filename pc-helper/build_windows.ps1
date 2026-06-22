@@ -40,6 +40,15 @@ if (Test-Path $ResolvedApk) {
     Write-Warning "APK not found at $ResolvedApk. Build Android first or pass -ApkPath."
 }
 
+$ResourceRoot = Join-Path $Root "resources"
+if (Test-Path $ResourceRoot) {
+    $BundleResources = Join-Path $BundleApp "resources"
+    Copy-Item $ResourceRoot $BundleResources -Recurse -Force
+    Write-Host "Bundled resources: $ResourceRoot" -ForegroundColor Green
+} else {
+    Write-Warning "resources folder not found. The helper will use code fallback UI until resources are restored."
+}
+
 $AudioRoots = @(
     (Join-Path $Root "resources\expected ui"),
     (Join-Path $Root "resources\expected ui\android"),
@@ -50,13 +59,18 @@ $AudioNames = @(
     "TTG_v4_clean_speaker_turn_on.wav"
 )
 foreach ($name in $AudioNames) {
+    $found = $false
     foreach ($dir in $AudioRoots) {
         $candidate = Join-Path $dir $name
         if (Test-Path $candidate) {
             Copy-Item $candidate (Join-Path $BundleDist $name) -Force
             Write-Host "Bundled audio: $candidate" -ForegroundColor Green
+            $found = $true
             break
         }
+    }
+    if (-not $found) {
+        Write-Warning "Audio not found: $name"
     }
 }
 
