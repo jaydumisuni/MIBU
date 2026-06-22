@@ -1,0 +1,1 @@
+# Keep resources folder tracked. Binary resources are ignored locally to protect them from git clean.
