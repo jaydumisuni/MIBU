@@ -3,8 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:theme="@style/AppTheme"
@@ -16,7 +16,8 @@
 
         <activity android:name=".InstructionsActivity" android:exported="false" />
         <activity android:name=".LogsActivity" android:exported="false" />
-        <activity android:name=".TokenImportActivity" android:exported="false" />
+        <activity android:name=".TokenImportActivity" android:exported="true" />
+        <activity android:name=".StartWaitingActivity" android:exported="true" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -24,6 +25,9 @@
             </intent-filter>
         </activity>
 
-        <service android:name=".MibuForegroundService" android:exported="false" />
+        <service
+            android:name=".MibuForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
