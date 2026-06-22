@@ -23,12 +23,13 @@ if (Test-Path $BundleDir) { Remove-Item $BundleDir -Recurse -Force }
 New-Item -ItemType Directory -Path $BundleDir | Out-Null
 
 Push-Location $HelperDir
-python -m PyInstaller --noconfirm --windowed --name "MIBU-PC-Helper" "mibu_pc_helper_final.py"
+python -m PyInstaller --noconfirm --windowed --name "MIBU-PC-Helper" --hidden-import PySide6.QtMultimedia "mibu_pc_helper_final.py"
 Pop-Location
 
 Copy-Item (Join-Path $HelperDir "dist\MIBU-PC-Helper") $BundleDir -Recurse -Force
 
-$BundleDist = Join-Path $BundleDir "MIBU-PC-Helper\dist"
+$BundleApp = Join-Path $BundleDir "MIBU-PC-Helper"
+$BundleDist = Join-Path $BundleApp "dist"
 New-Item -ItemType Directory -Path $BundleDist -Force | Out-Null
 
 $ResolvedApk = Join-Path $Root $ApkPath
@@ -37,6 +38,26 @@ if (Test-Path $ResolvedApk) {
     Write-Host "Bundled APK: $ResolvedApk" -ForegroundColor Green
 } else {
     Write-Warning "APK not found at $ResolvedApk. Build Android first or pass -ApkPath."
+}
+
+$AudioRoots = @(
+    (Join-Path $Root "resources\expected ui"),
+    (Join-Path $Root "resources\expected ui\android"),
+    (Join-Path $Root "resources")
+)
+$AudioNames = @(
+    "TTG_v4_clean_connected_success.wav",
+    "TTG_v4_clean_speaker_turn_on.wav"
+)
+foreach ($name in $AudioNames) {
+    foreach ($dir in $AudioRoots) {
+        $candidate = Join-Path $dir $name
+        if (Test-Path $candidate) {
+            Copy-Item $candidate (Join-Path $BundleDist $name) -Force
+            Write-Host "Bundled audio: $candidate" -ForegroundColor Green
+            break
+        }
+    }
 }
 
 Write-Host "Release folder: $BundleDir" -ForegroundColor Green
