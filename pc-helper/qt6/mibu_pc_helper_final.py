@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import sys
-import traceback
 import webbrowser
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -35,9 +34,13 @@ except Exception:  # pragma: no cover
 from dependency_check import format_checks, run_all_checks
 from mibu_actions import (
     check_device_ready,
+    check_fastboot_ready,
+    fastboot_oem_info,
     install_package,
     launch_phone_app,
     push_session_to_phone,
+    push_two_tokens_to_phone,
+    reboot_to_fastboot,
     start_phone_waiting,
 )
 
@@ -50,6 +53,7 @@ class AppState:
     device_ok = False
     apk_ok = False
     token_ok = False
+    fastboot_ok = False
 
 
 def app_base_dir() -> Path:
@@ -62,23 +66,9 @@ def asset_roots() -> list[Path]:
     base = app_base_dir()
     cwd = Path.cwd()
     return [
-        base,
-        base / 'dist',
-        base / 'resources',
-        base / 'resources' / 'expected ui',
-        base / 'resources' / 'expected ui' / 'pc',
-        base / 'resources' / 'expected ui' / 'android',
-        base / '_internal',
-        base / '_internal' / 'dist',
-        base / '_internal' / 'resources',
-        base / '_internal' / 'resources' / 'expected ui',
-        base / '_internal' / 'resources' / 'expected ui' / 'pc',
-        cwd,
-        cwd / 'dist',
-        cwd / 'resources',
-        cwd / 'resources' / 'expected ui',
-        cwd / 'resources' / 'expected ui' / 'pc',
-        cwd / 'resources' / 'expected ui' / 'android',
+        base, base / 'dist', base / 'resources', base / 'resources' / 'expected ui', base / 'resources' / 'expected ui' / 'pc',
+        base / '_internal', base / '_internal' / 'dist', base / '_internal' / 'resources', base / '_internal' / 'resources' / 'expected ui', base / '_internal' / 'resources' / 'expected ui' / 'pc',
+        cwd, cwd / 'dist', cwd / 'resources', cwd / 'resources' / 'expected ui', cwd / 'resources' / 'expected ui' / 'pc',
     ]
 
 
@@ -115,7 +105,6 @@ class ImageButton(QPushButton):
 class ImageDialog(QDialog):
     def __init__(self, parent: 'Window', title: str, image_names: tuple[str, ...]) -> None:
         super().__init__(parent)
-        self.parent_window = parent
         self.setWindowTitle(title)
         self.setModal(True)
         self.setMinimumSize(900, 650)
@@ -140,10 +129,6 @@ class ImageDialog(QDialog):
             h = QLabel(title)
             h.setObjectName('dialogTitle')
             self.layout.addWidget(h)
-            self.fallback_text = QLabel('Image resource missing. Restore resources/expected ui/pc then rebuild. Functional fallback controls are still available.')
-            self.fallback_text.setObjectName('dialogCard')
-            self.fallback_text.setWordWrap(True)
-            self.layout.addWidget(self.fallback_text)
             self.layout.addWidget(self.output)
             self.output.show()
 
@@ -217,17 +202,10 @@ class Window(QMainWindow):
         self.state = AppState()
         self.buttons: dict[str, QPushButton] = {}
         self.hotspots: list[tuple[QPushButton, tuple[float, float, float, float]]] = []
-        self.main_image = find_asset(
-            '01_pc_main_four_button_workflow.png',
-            'futuristic_neon_desktop_app_interface.png',
-            'visual-final-four-button-helper.png',
-        )
+        self.main_image = find_asset('01_pc_main_four_button_workflow.png', 'futuristic_neon_desktop_app_interface.png', 'visual-final-four-button-helper.png')
         self.sound_ok = self._sound('TTG_v4_clean_connected_success.wav')
         self.sound_fail = self._sound('TTG_v4_clean_speaker_turn_on.wav')
-        if self.main_image:
-            self.build_image_ui()
-        else:
-            self.build_fallback_ui()
+        self.build_image_ui() if self.main_image else self.build_fallback_ui()
         self.theme()
         self.refresh_time(show_log=False)
         self.run_dependency_check(show_log=False)
@@ -281,7 +259,7 @@ class Window(QMainWindow):
             button.clicked.connect(handler)
             self.buttons[name] = button
             self.hotspots.append((button, rect))
-        self.status = QLabel('Device: Waiting    ADB: Not authorized    APK: Not installed    Token: Not imported', root)
+        self.status = QLabel('Device: Waiting    ADB: Not authorized    APK: Not installed    Tokens: Not imported    Verify: Not started', root)
         self.status.setObjectName('floatingStatus')
         self.time_label = QLabel('-', root)
         self.time_label.setObjectName('floatingTime')
@@ -308,19 +286,15 @@ class Window(QMainWindow):
         logo.setMinimumHeight(160)
         logo.setAlignment(Qt.AlignCenter)
         v.addWidget(logo)
-        self.progress = QLabel('Setup Progress\n1 Device Check\n2 Install APK\n3 Login & Get Token\n4 Phone Guide')
+        self.progress = QLabel('Setup Progress\n1 Device Check\n2 Install APK\n3 Login & Get Tokens\n4 Phone Guide / Verify')
         self.progress.setObjectName('card')
         self.progress.setMinimumHeight(140)
         v.addWidget(self.progress)
-        help_box = QLabel('Need Help?\nRestore resources/expected ui/pc for exact image UI. Functional fallback remains available.')
-        help_box.setObjectName('card')
-        help_box.setWordWrap(True)
-        v.addWidget(help_box)
         self.dep_status = QLabel('Dependencies\nChecking...')
         self.dep_status.setObjectName('card')
         v.addWidget(self.dep_status)
         v.addStretch(1)
-        version = QLabel('THETECHGUY TOOL • v1.0')
+        version = QLabel('THETECHGUY TOOL • v1.1')
         version.setObjectName('brandSub')
         v.addWidget(version)
         return side
@@ -333,7 +307,7 @@ class Window(QMainWindow):
         v.setSpacing(14)
         title = QLabel('Welcome to MIBU PC Helper')
         title.setObjectName('title')
-        sub = QLabel('Fallback view. Put your rendered UI images in resources/expected ui/pc to restore the exact look.')
+        sub = QLabel('Guides device check, APK install, two-token import, phone waiting, and Mi Unlock verification.')
         sub.setObjectName('small')
         v.addWidget(title)
         v.addWidget(sub)
@@ -341,13 +315,13 @@ class Window(QMainWindow):
         actions = [
             ('Device Check', 'Check ADB, USB debugging and RSA authorization.', self.show_device_check),
             ('Install APK', 'Install bundled MIBU.apk and open the app.', self.show_install_apk),
-            ('Login & Get Token', 'Open browser, then paste/push token to phone.', self.show_login_token),
-            ('Phone Guide', 'Open phone app and start waiting bridge.', self.show_phone_guide),
+            ('Login & Get Token', 'Import Firefox service token and Chrome pop token.', self.show_login_token),
+            ('Phone Guide', 'Open phone app, start waiting, then verify with Mi Unlock Tool.', self.show_phone_guide),
         ]
-        for idx, (name, desc, handler) in enumerate(actions):
+        for idx, (name, desc, _handler) in enumerate(actions):
             grid.addWidget(self.action_card(idx + 1, name, desc), idx // 2, idx % 2)
         v.addLayout(grid)
-        self.status = QLabel('Device: Waiting    ADB: Not authorized    APK: Not installed    Token: Not imported')
+        self.status = QLabel('Device: Waiting    ADB: Not authorized    APK: Not installed    Tokens: Not imported    Verify: Not started')
         self.status.setObjectName('statusBar')
         v.addWidget(self.status)
         self.time_label = QLabel('-')
@@ -387,7 +361,7 @@ class Window(QMainWindow):
                 x, y, w, h = rect
                 button.setGeometry(int(root.width() * x), int(root.height() * y), int(root.width() * w), int(root.height() * h))
             self.output.setGeometry(int(root.width() * 0.255), int(root.height() * 0.690), int(root.width() * 0.500), int(root.height() * 0.115))
-            self.status.setGeometry(int(root.width() * 0.250), int(root.height() * 0.600), int(root.width() * 0.520), int(root.height() * 0.045))
+            self.status.setGeometry(int(root.width() * 0.250), int(root.height() * 0.600), int(root.width() * 0.600), int(root.height() * 0.045))
             self.time_label.setGeometry(int(root.width() * 0.555), int(root.height() * 0.645), int(root.width() * 0.395), int(root.height() * 0.050))
 
     def set_active(self, name: str) -> None:
@@ -422,7 +396,8 @@ class Window(QMainWindow):
             f'Device: {"Online" if self.state.device_ok else "Waiting"}    '
             f'ADB: {"Authorized" if self.state.device_ok else "Not authorized"}    '
             f'APK: {"Installed" if self.state.apk_ok else "Not installed"}    '
-            f'Token: {"Imported" if self.state.token_ok else "Not imported"}'
+            f'Tokens: {"Imported" if self.state.token_ok else "Not imported"}    '
+            f'Verify: {"Fastboot detected" if self.state.fastboot_ok else "Not started"}'
         )
 
     def image_dialog(self, title: str, images: tuple[str, ...]) -> ImageDialog | None:
@@ -433,34 +408,23 @@ class Window(QMainWindow):
     def show_device_check(self) -> None:
         self.set_active('Device Check')
         dlg = self.image_dialog('Device Check Guide', ('02_popup_device_check_guide.png', 'mibu_pc_helper_device_check_guide.png'))
-        if dlg:
-            status = {'label': 'waiting'}
-            def recheck() -> None:
-                result = check_device_ready()
-                self.log(result.message)
+        def recheck() -> None:
+            result = check_device_ready()
+            self.log(result.message)
+            self.state.device_ok = result.ok
+            self.update_status()
+            if dlg:
                 dlg.log(result.message)
-                self.state.device_ok = result.ok
-                self.update_status()
-                self.play_ok() if result.ok else self.play_fail()
+            self.play_ok() if result.ok else self.play_fail()
+        if dlg:
             dlg.add_hotspot('Open ADB Help', (0.420, 0.835, 0.210, 0.075), lambda: webbrowser.open('https://developer.android.com/tools/adb'))
             dlg.add_hotspot('Recheck Device', (0.650, 0.835, 0.250, 0.075), recheck, True)
             dlg.exec()
             return
         fallback = TextFallbackDialog(self, 'Device Check Guide', 'Get ADB online before continuing.')
-        for step in [
-            '1. Connect phone by USB. Use a good USB cable.',
-            '2. Enable USB debugging in Developer Options.',
-            '3. Accept the USB debugging warning and tap OK.',
-            '4. Accept the RSA prompt, tick “Always allow”, and tap OK.',
-        ]:
+        for step in ['1. Connect phone by USB.', '2. Enable USB debugging and OEM unlocking.', '3. Accept the RSA prompt and tick Always allow.', '4. Recheck until state is device/online.']:
             fallback.v.addWidget(fallback.card(step))
-        def recheck_fb() -> None:
-            result = check_device_ready()
-            self.log(result.message)
-            self.state.device_ok = result.ok
-            self.update_status()
-            self.play_ok() if result.ok else self.play_fail()
-        fallback.add_buttons([('Open ADB Help', lambda: webbrowser.open('https://developer.android.com/tools/adb'), False), ('Recheck Device', recheck_fb, True)])
+        fallback.add_buttons([('Open ADB Help', lambda: webbrowser.open('https://developer.android.com/tools/adb'), False), ('Recheck Device', recheck, True)])
         fallback.exec()
 
     def show_install_apk(self) -> None:
@@ -476,10 +440,9 @@ class Window(QMainWindow):
                     dlg.log('Selected APK: ' + path)
         def install() -> None:
             path = current_path['path']
-            msg = 'APK path: ' + (path or 'not found')
-            self.log(msg)
+            self.log('APK path: ' + (path or 'not found'))
             if dlg:
-                dlg.log(msg)
+                dlg.log('APK path: ' + (path or 'not found'))
             if not path:
                 self.play_fail()
                 return
@@ -516,8 +479,8 @@ class Window(QMainWindow):
             self.log('Login URL: ' + LOGIN_URL)
             if dlg:
                 dlg.log('Browser opened. User logs in themselves.')
-        def paste_push() -> None:
-            token, ok = QInputDialog.getText(self, 'Manual Token / Session Import', 'Paste approved token/session:', QLineEdit.Password)
+        def paste_one() -> None:
+            token, ok = QInputDialog.getText(self, 'Single Token Import', 'Paste one token/session:', QLineEdit.Password)
             if not ok:
                 return
             result = push_session_to_phone(token)
@@ -527,15 +490,29 @@ class Window(QMainWindow):
             self.state.token_ok = result.ok
             self.update_status()
             self.play_ok() if result.ok else self.play_fail()
+        def paste_two() -> None:
+            service, ok = QInputDialog.getText(self, 'Firefox Service Token', 'Paste Firefox new_bbs_serviceToken:', QLineEdit.Password)
+            if not ok:
+                return
+            pop, ok = QInputDialog.getText(self, 'Chrome Pop Token', 'Paste Chrome popRunToken:', QLineEdit.Password)
+            if not ok:
+                return
+            result = push_two_tokens_to_phone(service, pop)
+            self.log(result.message)
+            if dlg:
+                dlg.log(result.message)
+            self.state.token_ok = result.ok
+            self.update_status()
+            self.play_ok() if result.ok else self.play_fail()
         if dlg:
-            dlg.add_hotspot('Open Chrome / Browser', (0.180, 0.770, 0.200, 0.080), open_browser)
-            dlg.add_hotspot('Open Brave / Browser', (0.405, 0.770, 0.190, 0.080), open_browser)
-            dlg.add_hotspot('Paste / Push Token', (0.620, 0.770, 0.300, 0.080), paste_push, True)
+            dlg.add_hotspot('Open Browser', (0.180, 0.770, 0.200, 0.080), open_browser)
+            dlg.add_hotspot('Paste One', (0.405, 0.770, 0.190, 0.080), paste_one)
+            dlg.add_hotspot('Paste Two Tokens', (0.620, 0.770, 0.300, 0.080), paste_two, True)
             dlg.exec()
             return
         fallback = TextFallbackDialog(self, 'Login & Get Token', 'External browser login. MIBU never asks for the password.')
-        fallback.v.addWidget(fallback.card('1. Open browser\n2. User logs into Xiaomi\n3. Copy/approve token/session\n4. Paste/push token to phone'))
-        fallback.add_buttons([('Open Browser', open_browser, False), ('Paste / Push Token', paste_push, True)])
+        fallback.v.addWidget(fallback.card('Preferred: paste Firefox service token and Chrome pop token. MIBU sends both to the phone, and the APK fills four internal slots automatically.'))
+        fallback.add_buttons([('Open Browser', open_browser, False), ('Paste One Token', paste_one, False), ('Paste Two Tokens', paste_two, True)])
         fallback.exec()
 
     def show_phone_guide(self) -> None:
@@ -553,15 +530,36 @@ class Window(QMainWindow):
             if dlg:
                 dlg.log(result.message)
             self.play_ok() if result.ok else self.play_fail()
+        def verify_fastboot() -> None:
+            self.log('Rebooting to fastboot for official Mi Unlock Tool verification...')
+            if dlg:
+                dlg.log('Rebooting to fastboot for official Mi Unlock Tool verification...')
+            rb = reboot_to_fastboot()
+            self.log(rb.message)
+            if dlg:
+                dlg.log(rb.message)
+            fb = check_fastboot_ready()
+            self.log(fb.message)
+            if dlg:
+                dlg.log(fb.message)
+            info = fastboot_oem_info()
+            self.log(info.message)
+            if dlg:
+                dlg.log(info.message)
+            self.state.fastboot_ok = fb.ok
+            self.update_status()
+            self.play_ok() if fb.ok else self.play_fail()
+            self.log('Next: open official Mi Unlock Tool. If it says account/device not added, return to Mi Unlock Status binding. If it shows wait time, the verification path is accepted.')
         if dlg:
-            dlg.add_hotspot('Open MIBU', (0.130, 0.800, 0.240, 0.080), open_app)
-            dlg.add_hotspot('Start Phone Waiting', (0.390, 0.800, 0.280, 0.080), start_wait, True)
-            dlg.add_hotspot('Done', (0.700, 0.800, 0.200, 0.080), dlg.accept)
+            dlg.add_hotspot('Open MIBU', (0.080, 0.800, 0.200, 0.080), open_app)
+            dlg.add_hotspot('Start Waiting', (0.300, 0.800, 0.220, 0.080), start_wait, True)
+            dlg.add_hotspot('Verify Fastboot', (0.540, 0.800, 0.230, 0.080), verify_fastboot)
+            dlg.add_hotspot('Done', (0.790, 0.800, 0.120, 0.080), dlg.accept)
             dlg.exec()
             return
-        fallback = TextFallbackDialog(self, 'Continue on Phone', 'After login and token handoff, finish from the Android app.')
-        fallback.v.addWidget(fallback.card('1. Open MIBU on phone\n2. Confirm session imported\n3. Check status\n4. Keep mobile data on\n5. Tap Start Waiting'))
-        fallback.add_buttons([('Open MIBU', open_app, False), ('Start Phone Waiting', start_wait, True), ('Done', fallback.accept, False)])
+        fallback = TextFallbackDialog(self, 'Continue on Phone', 'After token handoff, start waiting from the Android app, then verify with Mi Unlock Tool from PC.')
+        fallback.v.addWidget(fallback.card('1. Open MIBU on phone\n2. Confirm two-token setup\n3. Tap Start Waiting\n4. After request stage, use Verify Fastboot\n5. Continue with official Mi Unlock Tool'))
+        fallback.add_buttons([('Open MIBU', open_app, False), ('Start Phone Waiting', start_wait, True), ('Verify Fastboot', verify_fastboot, False), ('Done', fallback.accept, False)])
         fallback.exec()
 
     def theme(self) -> None:
