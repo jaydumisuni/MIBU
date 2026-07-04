@@ -20,12 +20,15 @@ import java.time.format.DateTimeFormatter
 
 class MainActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
+    private val stateStore by lazy { MibuStateStore(this) }
     private lateinit var root: LinearLayout
     private lateinit var statusCard: TextView
     private lateinit var beijingCard: TextView
     private lateinit var localCard: TextView
     private lateinit var countdownCard: TextView
     private lateinit var sessionCard: TextView
+    private lateinit var laneCard: TextView
+    private lateinit var verifyCard: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,8 +59,11 @@ class MainActivity : Activity() {
         statusCard = statusTile("Account Status", "Checking...", "")
         root.addView(statusCard)
 
-        sessionCard = statusTile("Session Imported", "Waiting for PC helper", "")
+        sessionCard = statusTile("Token Setup", "Waiting for import", "")
         root.addView(sessionCard)
+
+        laneCard = statusTile("Hidden Request Lanes", "Not armed", "One visible countdown. Four lanes are tracked in the background.")
+        root.addView(laneCard)
 
         val timeRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -72,13 +78,16 @@ class MainActivity : Activity() {
         countdownCard = statusTile("Time Remaining", "-- : -- : --", "HOURS   MINUTES   SECONDS")
         root.addView(countdownCard)
 
-        root.addView(rowTile("Mobile Data Reminder", "Make sure Mobile Data is ON.", "Recommended"))
-        root.addView(rowTile("Foreground Service", "Background helper is active when started.", "Ready"))
+        verifyCard = statusTile("Verification", "Not started", "After request stage, verify with Mi Unlock Tool from PC Helper. Settings bind is fallback only.")
+        root.addView(verifyCard)
+
+        root.addView(rowTile("Mobile Data Reminder", "Make sure Mobile Data is ON and Wi-Fi/WLAN is OFF.", "Required"))
+        root.addView(rowTile("Community Device Check", "For China-routed devices, confirm device/account status in Xiaomi Community if needed.", stateStore.communityState().name))
 
         root.addView(primaryButton("Start Waiting") {
             startActivity(Intent(this, StartWaitingActivity::class.java))
         })
-        root.addView(secondaryButton("Import session/token from PC") {
+        root.addView(secondaryButton("Import Firefox + Chrome tokens") {
             startActivity(Intent(this, TokenImportActivity::class.java))
         })
         root.addView(secondaryButton("Open Logs") {
@@ -136,7 +145,7 @@ class MainActivity : Activity() {
         }
         card.addView(art, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220)))
         val title = TextView(this).apply {
-            text = "Mi Bootloader Unlock Helper\nPhone-side helper for Xiaomi bootloader unlock."
+            text = "Mi Bootloader Unlock Helper\nOne countdown. Four hidden lanes. PC verification."
             textSize = 18f
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
@@ -206,20 +215,21 @@ class MainActivity : Activity() {
         val beijing = ZoneId.of("Asia/Shanghai")
         val local = ZoneId.systemDefault()
         val nowChina = ZonedDateTime.now(beijing)
-        val targetChina = nowChina.toLocalDate().atTime(23, 59, 58, 600_000_000).atZone(beijing)
-            .let { if (it.isBefore(nowChina)) it.plusDays(1) else it }
+        val targetChina = MibuLane.defaultLanes().first().targetTime(nowChina)
         val localTarget = targetChina.withZoneSameInstant(local)
         val fmtDate = DateTimeFormatter.ofPattern("MMM dd, yyyy")
         val fmtTime = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
-        val duration = Duration.between(ZonedDateTime.now(beijing), targetChina).coerceAtLeast(Duration.ZERO)
+        val duration = Duration.between(ZonedDateTime.now(beijing), targetChina).let { if (it.isNegative) Duration.ZERO else it }
         val hours = duration.toHours()
         val minutes = duration.toMinutesPart()
         val seconds = duration.toSecondsPart()
-        val status = if (tokenStore.hasSession()) "Session/token ready" else "Waiting for session/token"
-        val session = if (tokenStore.hasSession()) "Imported by PC/helper\n${tokenStore.getSessionPreview()}" else "Import from PC helper first"
+        val status = if (tokenStore.hasRequiredCaptures()) "Full token setup ready" else if (tokenStore.hasSession()) "Partial token setup" else "Waiting for tokens"
+        val session = if (tokenStore.hasSession()) "${tokenStore.getSessionPreview()}\n${tokenStore.getSlotPreview()}" else "Import Firefox service token and Chrome pop token first"
 
-        statusCard.text = formatBlock("Account Status", status, extra ?: "User logs in themselves; MIBU only stores the explicit token/session import.")
-        sessionCard.text = formatBlock("Session Imported", session, "")
+        statusCard.text = formatBlock("Account Status", status, extra ?: "User logs in themselves. MIBU stores only explicit token/session imports.")
+        sessionCard.text = formatBlock("Token Setup", session, "Two captures populate four internal slots.")
+        laneCard.text = formatBlock("Hidden Request Lanes", stateStore.laneSummary(), "Main UI shows one countdown; advanced lane detail is logged.")
+        verifyCard.text = formatBlock("Verification", stateStore.verificationState().name, "PC Helper verifies with Mi Unlock Tool. Settings bind is fallback if account/device is not added.")
         beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8 China Standard Time"
         localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${local.id}"
         countdownCard.text = formatBlock("Time Remaining", "%02d : %02d : %02d".format(hours, minutes, seconds), "HOURS   MINUTES   SECONDS")
