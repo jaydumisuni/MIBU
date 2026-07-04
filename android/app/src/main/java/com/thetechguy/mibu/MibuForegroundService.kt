@@ -11,6 +11,7 @@ import android.util.Log
 
 class MibuForegroundService : Service() {
     private val tokenStore by lazy { TokenStore(this) }
+    private val stateStore by lazy { MibuStateStore(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -20,12 +21,14 @@ class MibuForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
             if (!tokenStore.hasSession()) {
-                Log.w("MIBU", "No session token imported; waiting service stopping cleanly")
+                Log.w("MIBU", "No token imported; waiting service stopping cleanly")
                 stopSelf(startId)
                 START_NOT_STICKY
             } else {
+                stateStore.armWaiting()
                 startForeground(49, buildNotification())
-                Log.i("MIBU", "Waiting service running")
+                Log.i("MIBU", "Waiting service running with lanes armed")
+                Log.i("MIBU", stateStore.laneSummary())
                 START_STICKY
             }
         } catch (exc: Exception) {
@@ -50,6 +53,7 @@ class MibuForegroundService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        val fullMode = if (tokenStore.hasRequiredCaptures()) "Full token setup" else "Partial token setup"
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, "mibu_wait")
         } else {
@@ -57,8 +61,8 @@ class MibuForegroundService : Service() {
             Notification.Builder(this)
         }
         return builder
-            .setContentTitle("MIBU is active")
-            .setContentText("Keeping the request-window helper alive.")
+            .setContentTitle("MIBU waiting armed")
+            .setContentText("$fullMode • one countdown shown, four lanes tracked")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .build()
     }
