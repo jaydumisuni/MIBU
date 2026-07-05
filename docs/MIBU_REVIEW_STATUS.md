@@ -6,7 +6,7 @@ This review applies the THETECHGUY Build Standard: finish first, review hard, fr
 
 ## Current conclusion
 
-MIBU has now moved past the old one-token visual shell.
+MIBU has moved past the old one-token visual shell.
 
 The repo now contains the safe state/control-flow layer needed before runtime proof:
 
@@ -15,8 +15,11 @@ The repo now contains the safe state/control-flow layer needed before runtime pr
 - lane metadata for 1400 / 900 / 400 / 100 ms
 - one visible countdown on Android
 - waiting service that arms lane state
+- Android Community Device Check screen
+- Android Logs screen showing real stored token/slot/lane/community/verification state
 - PC helper two-token push
 - PC helper fastboot verification guide
+- PC helper build script that handles locked release folders by renaming them instead of failing immediately
 
 This still must be clean-built and runtime-tested on the user's PC/phone before it can be claimed as fully proven.
 
@@ -45,6 +48,12 @@ This still must be clean-built and runtime-tested on the user's PC/phone before 
   - manual two-token paste
 - StartWaitingActivity arms lane state before starting the foreground service.
 - MibuForegroundService logs and notifies that waiting is armed.
+- CommunityCheckActivity lets the user set:
+  - COMMUNITY_DEVICE_CONFIRMED
+  - COMMUNITY_DEVICE_NOT_FOUND
+  - COMMUNITY_ROUTE_NOT_REQUIRED
+  - COMMUNITY_ROUTE_UNKNOWN
+- LogsActivity displays current stored token preview, four-slot status, lane state, community state, and verification state.
 
 ### PC Helper
 
@@ -55,13 +64,14 @@ This still must be clean-built and runtime-tested on the user's PC/phone before 
   - Phone Guide
 - PC helper checks ADB device state and distinguishes no device, unauthorized, offline, and online states.
 - PC helper can install an APK, launch MIBU, push one token/session, push two token captures, and start phone waiting.
-- PC helper now includes fastboot verification helpers:
+- PC helper includes fastboot verification helpers:
   - reboot to bootloader
   - detect fastboot devices
   - query fastboot device info / unlocked state
-- Phone Guide now has a Verify Fastboot path that hands off to official Mi Unlock Tool result interpretation.
+- Phone Guide has a Verify Fastboot path that hands off to official Mi Unlock Tool result interpretation.
 - PC helper supports image-hotspot UI with fallback controls when resources are missing.
 - PC helper sets the window maximize button hint and minimum size.
+- Build script copies APK/resources/audio when present and handles locked release folders by renaming old folders.
 
 ## Remaining gaps before runtime proof
 
@@ -69,8 +79,6 @@ This still must be clean-built and runtime-tested on the user's PC/phone before 
 
 - The lane request execution engine is intentionally not implemented in this safe patch.
 - Real endpoint/result handling must not be claimed until a permitted implementation and test exist.
-- Community device check is stored as state but still needs a polished user control to set confirmed/not-found/not-required/unknown from the UI.
-- Logs screen should be upgraded to display stored token/slot/lane/verification state instead of static placeholder text.
 
 ### PC Helper
 
@@ -111,7 +119,9 @@ Then build/install Android using the available project build path, open the PC h
 3. Login & Get Token -> Paste Two Tokens
 4. Phone Guide -> Open MIBU
 5. Phone Guide -> Start Phone Waiting
-6. Phone Guide -> Verify Fastboot
+6. Community Check -> save current Community route evidence
+7. Open Logs -> confirm stored state shows correctly
+8. Phone Guide -> Verify Fastboot
 
 ## Current confidence
 
