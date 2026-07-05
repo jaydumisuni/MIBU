@@ -29,6 +29,7 @@ class MainActivity : Activity() {
     private lateinit var sessionCard: TextView
     private lateinit var laneCard: TextView
     private lateinit var verifyCard: TextView
+    private lateinit var communityCard: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,13 +83,17 @@ class MainActivity : Activity() {
         root.addView(verifyCard)
 
         root.addView(rowTile("Mobile Data Reminder", "Make sure Mobile Data is ON and Wi-Fi/WLAN is OFF.", "Required"))
-        root.addView(rowTile("Community Device Check", "For China-routed devices, confirm device/account status in Xiaomi Community if needed.", stateStore.communityState().name))
+        communityCard = rowTile("Community Device Check", "For China-routed devices, confirm device/account status in Xiaomi Community if needed.", stateStore.communityState().name)
+        root.addView(communityCard)
 
         root.addView(primaryButton("Start Waiting") {
             startActivity(Intent(this, StartWaitingActivity::class.java))
         })
         root.addView(secondaryButton("Import Firefox + Chrome tokens") {
             startActivity(Intent(this, TokenImportActivity::class.java))
+        })
+        root.addView(secondaryButton("Community Check") {
+            startActivity(Intent(this, CommunityCheckActivity::class.java))
         })
         root.addView(secondaryButton("Open Logs") {
             startActivity(Intent(this, LogsActivity::class.java))
@@ -230,6 +235,7 @@ class MainActivity : Activity() {
         sessionCard.text = formatBlock("Token Setup", session, "Two captures populate four internal slots.")
         laneCard.text = formatBlock("Hidden Request Lanes", stateStore.laneSummary(), "Main UI shows one countdown; advanced lane detail is logged.")
         verifyCard.text = formatBlock("Verification", stateStore.verificationState().name, "PC Helper verifies with Mi Unlock Tool. Settings bind is fallback if account/device is not added.")
+        communityCard.text = "Community Device Check\nFor China-routed devices, confirm device/account status in Xiaomi Community if needed.\n[${stateStore.communityState().name}]"
         beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8 China Standard Time"
         localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${local.id}"
         countdownCard.text = formatBlock("Time Remaining", "%02d : %02d : %02d".format(hours, minutes, seconds), "HOURS   MINUTES   SECONDS")
