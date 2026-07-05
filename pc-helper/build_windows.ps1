@@ -15,11 +15,23 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     throw "Python was not found in PATH. Install Python 3.10+ first."
 }
 
+function Remove-SafeDir([string]$Path) {
+    if (-not (Test-Path $Path)) { return }
+    try {
+        Remove-Item $Path -Recurse -Force -ErrorAction Stop
+    } catch {
+        $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $renamed = "$Path.locked_$stamp"
+        Write-Warning "Could not remove $Path, probably because the helper is still running or a DLL is locked. Renaming old folder to $renamed"
+        Rename-Item $Path $renamed -ErrorAction Stop
+    }
+}
+
 python -m pip install --upgrade pip
 python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
 
-if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
-if (Test-Path $BundleDir) { Remove-Item $BundleDir -Recurse -Force }
+Remove-SafeDir $DistDir
+Remove-SafeDir $BundleDir
 New-Item -ItemType Directory -Path $BundleDir | Out-Null
 
 Push-Location $HelperDir
