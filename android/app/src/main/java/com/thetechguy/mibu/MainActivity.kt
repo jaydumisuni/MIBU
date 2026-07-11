@@ -167,6 +167,10 @@ class MainActivity : Activity() {
         val targetChina = MibuLane.defaultLanes().first().targetTime(nowChina)
         val localTarget = targetChina.withZoneSameInstant(ZoneId.systemDefault())
         val duration = Duration.between(nowChina, targetChina).let { if (it.isNegative) Duration.ZERO else it }
+        val totalSeconds = duration.seconds.coerceAtLeast(0L)
+        val hours = totalSeconds / 3600L
+        val minutes = (totalSeconds % 3600L) / 60L
+        val seconds = totalSeconds % 60L
         val fmtDate = DateTimeFormatter.ofPattern("MMM dd, yyyy")
         val fmtTime = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
         val status = when {
@@ -184,7 +188,7 @@ class MainActivity : Activity() {
         communityCard.text = "Community Device Check\nFor China-routed devices, confirm device/account status in Xiaomi Community if needed.\n[${stateStore.communityState().name}]"
         beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8"
         localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${localTarget.zone.id}"
-        countdownCard.text = formatBlock("Time Remaining", "%02d : %02d : %02d".format(duration.toHours(), duration.toMinutesPart(), duration.toSecondsPart()), "HOURS   MINUTES   SECONDS")
+        countdownCard.text = formatBlock("Time Remaining", "%02d : %02d : %02d".format(hours, minutes, seconds), "HOURS   MINUTES   SECONDS")
     }
 
     private fun formatBlock(title: String, main: String, small: String) = if (small.isBlank()) "$title\n$main" else "$title\n$main\n$small"
