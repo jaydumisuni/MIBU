@@ -17,6 +17,8 @@ The repo now contains the safe state/control-flow layer needed before runtime pr
 - waiting service that arms lane state
 - Android Community Device Check screen
 - Android Logs screen showing real stored token/slot/lane/community/verification state
+- shared Android UI helper functions restored for all simple activity screens
+- compile-safe Android hero artwork resource present
 - PC helper two-token push
 - PC helper fastboot verification guide
 - PC helper build script that handles locked release folders by renaming them instead of failing immediately
@@ -54,6 +56,9 @@ This still must be clean-built and runtime-tested on the user's PC/phone before 
   - COMMUNITY_ROUTE_NOT_REQUIRED
   - COMMUNITY_ROUTE_UNKNOWN
 - LogsActivity displays current stored token preview, four-slot status, lane state, community state, and verification state.
+- MibuUiHelpers provides shared `mibuPage`, `mibuCard`, `mibuButton`, `footer`, `dp`, and `rounded` helpers used by TokenImportActivity, LogsActivity, InstructionsActivity, and CommunityCheckActivity.
+- AndroidManifest registers CommunityCheckActivity, TokenImportActivity, StartWaitingActivity, LogsActivity, InstructionsActivity, MainActivity, and MibuForegroundService.
+- Drawable resources include `ic_mibu` and `mibu_hero_art`, so MainActivity's hero image reference has a repo resource behind it.
 
 ### PC Helper
 
@@ -126,5 +131,7 @@ Then build/install Android using the available project build path, open the PC h
 ## Current confidence
 
 I am confident the repo now matches the safe architecture we agreed on, based on source review.
+
+I also corrected the important code-level compile risk introduced by moving UI helper logic out of MainActivity: MibuUiHelpers now supplies the shared helpers used by the other Android screens.
 
 I am not claiming runtime success until the clean build and phone test are completed.
