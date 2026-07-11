@@ -30,6 +30,23 @@ function Remove-SafeDir([string]$Path) {
 python -m pip install --upgrade pip
 python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
 
+Write-Host "Rendering deterministic hotspot UI assets..." -ForegroundColor Cyan
+python (Join-Path $HelperDir "render_svg_assets.py")
+
+$RequiredUi = @(
+    (Join-Path $Root "resources\expected ui\pc\01_pc_main_four_button_workflow.png"),
+    (Join-Path $Root "resources\expected ui\pc\02_popup_device_check_guide.png"),
+    (Join-Path $Root "resources\expected ui\pc\03_popup_install_apk.png"),
+    (Join-Path $Root "resources\expected ui\pc\04_popup_login_get_token.png"),
+    (Join-Path $Root "resources\expected ui\pc\05_popup_phone_guide.png")
+)
+foreach ($asset in $RequiredUi) {
+    if (-not (Test-Path $asset)) {
+        throw "Required hotspot UI asset was not rendered: $asset"
+    }
+}
+Write-Host "Hotspot UI assets verified." -ForegroundColor Green
+
 Remove-SafeDir $DistDir
 Remove-SafeDir $BundleDir
 New-Item -ItemType Directory -Path $BundleDir | Out-Null
@@ -58,8 +75,17 @@ if (Test-Path $ResourceRoot) {
     Copy-Item $ResourceRoot $BundleResources -Recurse -Force
     Write-Host "Bundled resources: $ResourceRoot" -ForegroundColor Green
 } else {
-    Write-Warning "resources folder not found. The helper will use code fallback UI until resources are restored."
+    throw "resources folder not found. Hotspot UI cannot be bundled."
 }
+
+foreach ($asset in $RequiredUi) {
+    $relative = $asset.Substring($ResourceRoot.Length).TrimStart('\')
+    $bundled = Join-Path (Join-Path $BundleApp "resources") $relative
+    if (-not (Test-Path $bundled)) {
+        throw "Required hotspot UI asset missing from release bundle: $bundled"
+    }
+}
+Write-Host "Release hotspot assets verified." -ForegroundColor Green
 
 $AudioRoots = @(
     (Join-Path $Root "resources\expected ui"),
