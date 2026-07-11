@@ -42,8 +42,13 @@ data class MibuLane(
     val status: LaneStatus = LaneStatus.PENDING
 ) {
     fun targetTime(nowChina: ZonedDateTime = ZonedDateTime.now(CHINA_ZONE)): ZonedDateTime {
-        val todayTarget = nowChina.toLocalDate().plusDays(1).atStartOfDay(CHINA_ZONE).minusNanos(offsetMs * 1_000_000L)
-        return if (todayTarget.isBefore(nowChina)) todayTarget.plusDays(1) else todayTarget
+        val midnightToday = nowChina.toLocalDate().atStartOfDay(CHINA_ZONE)
+        val targetToday = midnightToday.minusNanos(offsetMs * 1_000_000L)
+        return if (targetToday.isAfter(nowChina)) {
+            targetToday
+        } else {
+            midnightToday.plusDays(1).minusNanos(offsetMs * 1_000_000L)
+        }
     }
 
     fun summary(): String = "Lane $number • $sourceLabel • ${offsetMs}ms • $status"
