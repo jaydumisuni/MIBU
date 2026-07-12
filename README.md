@@ -4,101 +4,105 @@
 **Product family:** THETECHGUY TOOL  
 **Footer:** By the THETECHGUY TOOL team
 
-MIBU is a two-part timing and verification assistant.
+MIBU is a two-part timing, state-proof and official-tool handoff assistant for Xiaomi devices the user owns or is authorised to service.
 
-## 1. MIBU Android app
+MIBU does **not** send or replay Xiaomi request traffic in the current implementation. It does **not** claim that reaching a timing window means Xiaomi approved an unlock request. The official Mi Unlock Tool remains authoritative.
+
+## Android app — `0.2.0-dev`
 
 The Android app:
 
-- accepts two explicit user-provided captures:
+- accepts exactly two explicit user-provided captures:
   - Firefox `new_bbs_serviceToken`
   - Chrome `popRunToken`
-- maps them internally to four slots:
-  - slot 1 Firefox
-  - slot 2 Chrome
-  - slot 3 Firefox
-  - slot 4 Chrome
-- tracks the two capture timestamps independently
-- expires each locally stored capture after 30 minutes
-- prevents waiting from being armed when either capture cannot remain fresh until the selected Beijing timing window
-- persists the target Beijing midnight so the countdown, foreground service, logs and PC proof bridge use one schedule
-- shows one live countdown instead of four noisy countdowns
-- tracks the four confirmed timing offsets in the foreground service:
-  - 1400 ms
-  - 900 ms
-  - 400 ms
-  - 100 ms
-- reconciles timing state from persisted wall-clock targets if the Android process is recreated
-- records when each timing window is reached
-- stores Community-check and verification state
-- exposes detailed lane state through Logs
-- exposes a restricted ADB status bridge that returns state only, never token values
+- maps them internally to four timing lanes:
+  - lane 1: Firefox, 1400 ms before Beijing midnight
+  - lane 2: Chrome, 900 ms before Beijing midnight
+  - lane 3: Firefox, 400 ms before Beijing midnight
+  - lane 4: Chrome, 100 ms before Beijing midnight
+- validates capture length and rejects control characters;
+- limits each capture to 8192 characters;
+- tracks the two capture timestamps independently;
+- expires each capture after 30 minutes;
+- fails closed if the phone clock moves backwards rather than extending token lifetime;
+- refuses to arm if the captures cannot remain fresh until the final lane;
+- persists one Beijing-midnight target for the dashboard, foreground service, Logs and PC proof bridge;
+- shows one user-facing countdown while keeping four-lane detail in Logs;
+- reconciles reached lanes after Android process recreation;
+- resumes an already-armed wait without resetting completed lanes;
+- enters foreground immediately on every foreground-service start path;
+- uses a bounded partial wake lock only for the remaining waiting interval;
+- requests notification permission on Android 13+ so the foreground state can remain visible;
+- preserves timing completion and every recorded official result;
+- lets the user record only results actually shown by the official route:
+  - official wait time shown;
+  - account/device not added;
+  - Xiaomi Community authorisation required;
+  - device unlocked;
+- provides an explicit confirmed reset for a fresh authorised workflow;
+- exposes DUMP-protected ADB activities for import, waiting and state-only proof;
+- never returns token values through its status proof.
 
-MIBU does **not** claim request approval, account/device binding, or unlock success by itself.
+## PC Helper v3
 
-## 2. MIBU PC Helper
+The active helper is:
 
-The PC helper provides the guided four-step workflow:
+```text
+pc-helper/qt6/mibu_pc_helper_v3.py
+```
+
+Its four image-hotspot workflow is:
 
 1. Device Check
 2. Install APK
 3. Login & Get Tokens
 4. Phone Guide / Fastboot Verification
 
-It:
+The helper:
 
-- uses the platform-tools bundled inside the release before any unrelated system ADB installation
-- rejects ambiguous multiple-device ADB or fastboot states
-- distinguishes no device, unauthorized, offline, and online ADB states
-- requires Android to report `adb_enabled=1`
-- installs and verifies the bundled APK
-- falls back to copying the APK and opening the Android/MIUI system installer when silent ADB install is blocked
-- transfers one legacy service capture or the preferred two-token capture using URL-safe Base64 extras
-- confirms token import through an Android log proof marker
-- starts the phone waiting activity through the restricted ADB bridge
-- queries the restricted Android state bridge before and after waiting
-- refuses fastboot handoff until Android reports the timing stage complete
-- reboots the phone to bootloader
-- waits for exactly one fastboot device
-- reads available fastboot device/unlocked information
-- hands the user to the official Mi Unlock Tool for the authoritative result
+- prioritises platform-tools bundled with the release;
+- requires exactly one normal online ADB device;
+- distinguishes missing, unauthorised, offline and unsupported ADB states;
+- verifies Android reports `adb_enabled=1`;
+- requires Android app version `0.2.0-dev`;
+- updates an older installed MIBU version instead of treating any installed package as current;
+- verifies the installed version after ADB installation;
+- falls back to the Android/MIUI system installer when silent installation is blocked;
+- rejects malformed or oversized captures before transfer;
+- transfers captures with URL-safe Base64 extras;
+- gives every import, status and service-proof request a random correlation nonce;
+- never clears the phone's whole logcat merely to establish proof;
+- ignores stale proof lines carrying a different nonce;
+- treats `WAITING_ACTIVITY_STARTED` as activity-launch evidence only;
+- reports waiting success only after the foreground service emits:
+  - `WAITING_SERVICE_ARMED`, or
+  - a correlated completed-state marker when the timing stage races ahead;
+- accepts early, correlated rejection markers instead of timing out ambiguously;
+- refuses fastboot handoff until Android reports timing completion;
+- parses only real fastboot-device rows and rejects multiple-device ambiguity;
+- reboots to bootloader, checks available device/unlocked information and hands off to the official Mi Unlock Tool.
 
 ## Guardrails
 
-MIBU is for legitimate servicing of a device the user owns or is authorised to service.
+MIBU must not:
 
-It must not:
+- ask for the Xiaomi account password;
+- silently read unrelated browser data;
+- expose token values through logs or the status bridge;
+- claim success from a Settings toast, a timing marker or fastboot presence alone;
+- bypass ownership checks, device locks, waiting periods, rate limits or official restrictions;
+- automatically retry or spam official endpoints.
 
-- ask for the Xiaomi account password
-- silently read unrelated browser data
-- expose token values through the status bridge or logs
-- claim success from a Settings toast alone
-- bypass ownership checks, device locks, waiting periods, rate limits, or official restrictions
-- claim that reaching the timing window means Xiaomi approved the request
+For China-routed or Community-routed devices, Community status is saved as manual evidence. It is not converted into an invented pass/fail result.
 
-If Xiaomi or Mi Unlock reports a restriction, waiting period, account/device-not-added state, or Community requirement, MIBU records and explains that result rather than inventing success.
-
-## User-owned token flow
+## Two captures, not four logins
 
 ```text
-Firefox login/capture -> new_bbs_serviceToken -> slots 1 and 3
-Chrome login/capture  -> popRunToken           -> slots 2 and 4
-
-Two captures only. No four-login flow.
+Firefox login/capture -> new_bbs_serviceToken -> lanes 1 and 3
+Chrome login/capture  -> popRunToken           -> lanes 2 and 4
 ```
 
-The captures can be imported manually in the Android app or pushed from PC Helper after the user obtains them themselves.
-
-## Monorepo layout
-
-```text
-android/      Android APK source and unit tests
-pc-helper/    PC helper actions, proof-gated Qt UI, visual renderer, packaging
-resources/    Source-controlled SVG artwork, icon and rendered hotspot assets
-tools/        THETECHGUY source-contract reviewer
-docs/         architecture, review status, flow and build standards
-.github/      Android, PC, visual-contract and Windows release CI
-```
+The user obtains each capture once. MIBU reuses those two values across the four local timing lanes.
 
 ## Complete Windows build
 
@@ -110,22 +114,26 @@ From the repository root:
 
 The build script:
 
-1. locates Python
-2. locates the Android SDK and Gradle when an APK must be built
-3. runs Android unit tests and creates the debug APK when needed
-4. verifies Android platform-tools for a self-contained release
-5. validates SVG button geometry against the shared hotspot contract
-6. renders the five required PNG screens plus branded PNG/ICO application icons
-7. runs PC helper unit tests
-8. performs an offscreen proof-gated v3 import smoke check
-9. builds `mibu_pc_helper_v3.py` with the branded Windows icon
-10. bundles and verifies the EXE, APK, platform-tools, resources, icon and required UI images
+1. locates Python, Gradle and the Android SDK;
+2. runs Android lint, unit tests and APK assembly when an APK must be built;
+3. runs the THETECHGUY source-contract review;
+4. validates the restored Android expected-UI baseline;
+5. validates shared PC artwork/hotspot geometry;
+6. renders the five required hotspot screens and branded application icons;
+7. discovers and runs every PC helper unit test;
+8. performs an offscreen v3 import/version proof check;
+9. removes or safely renames stale locked build/release folders;
+10. creates a clean PyInstaller build;
+11. bundles the APK, ADB, fastboot, Windows platform-tool DLLs and visual evidence;
+12. writes `SHA256SUMS.txt` for the protected release files;
+13. fails rather than publishing a partial release.
 
-Complete release output:
+Complete release contract:
 
 ```text
 pc-helper/release/MIBU-PC-Helper/
 ├── MIBU-PC-Helper.exe
+├── SHA256SUMS.txt
 ├── dist/
 │   └── MIBU.apk
 ├── platform-tools/
@@ -133,58 +141,58 @@ pc-helper/release/MIBU-PC-Helper/
 │   ├── fastboot.exe
 │   ├── AdbWinApi.dll
 │   └── AdbWinUsbApi.dll
-└── resources/expected ui/pc/
-    ├── 01_pc_main_four_button_workflow.png
-    ├── 02_popup_device_check_guide.png
-    ├── 03_popup_install_apk.png
-    ├── 04_popup_login_get_token.png
-    ├── 05_popup_phone_guide.png
-    ├── mibu_app_icon.png
-    └── mibu_app_icon.ico
+└── resources/expected ui/
+    ├── pc/
+    │   ├── 01_pc_main_four_button_workflow.png
+    │   ├── 02_popup_device_check_guide.png
+    │   ├── 03_popup_install_apk.png
+    │   ├── 04_popup_login_get_token.png
+    │   ├── 05_popup_phone_guide.png
+    │   ├── mibu_app_icon.png
+    │   └── mibu_app_icon.ico
+    └── android/
+        ├── approved_android_ui_baseline_sheet.svg
+        └── README.md
 ```
 
-The build fails instead of producing an incomplete release when the APK, platform-tools, application icon, or required hotspot artwork is missing.
+The brand audio files remain optional. The build does not fabricate replacements when the approved audio is absent.
 
-## Android-only build
+## Source runs
+
+Android:
 
 ```powershell
-gradle :android:app:testDebugUnitTest :android:app:assembleDebug
+gradle :android:app:lintDebug :android:app:testDebugUnitTest :android:app:assembleDebug
 ```
 
-Output:
-
-```text
-android/app/build/outputs/apk/debug/app-debug.apk
-```
-
-## PC helper source run
-
-Render the required images and icon first, then run the proof-gated v3 helper:
+PC Helper:
 
 ```powershell
 python pc-helper\qt6\validate_ui_contract.py
 python pc-helper\qt6\render_svg_assets.py
-python pc-helper\qt6\mibu_pc_helper_v3.py
+cd pc-helper\qt6
+python -m unittest discover -v
+python mibu_pc_helper_v3.py
 ```
 
 ## CI proof
 
-GitHub Actions checks:
+GitHub Actions is defined to check:
 
-- THETECHGUY source contracts
-- Android timing unit tests
-- Android APK compilation
-- Python syntax for active helper modules
-- PC device/status/timing/geometry unit tests
-- one shared source of truth for visual and hotspot geometry
-- SVG-to-PNG rendering and PNG-to-ICO branding generation
-- Qt offscreen v3 construction and application icon loading
-- Beijing target-time math
-- complete Windows release packaging
-- non-empty EXE, APK, platform-tools, icon and required UI assets
+- the THETECHGUY source contract;
+- the five-state restored Android UI baseline and provenance manifest;
+- Android lint, timing/freshness/state unit tests and APK compilation;
+- Python syntax and complete unittest discovery;
+- nonce-correlated proof handling;
+- version-aware APK update behaviour;
+- ADB and fastboot parsing;
+- image-hotspot geometry and visible close-hitbox coverage;
+- deterministic SVG-to-PNG/ICO rendering;
+- offscreen Qt v3 construction;
+- complete Windows release contents and checksum manifest.
 
 ## Proof boundary
 
-Source review and CI can prove architecture, compilation, timing math, visual contracts, button wiring, status gating and release contents.
+Static review and CI can prove source structure, compilation, time math, freshness rules, state transitions, proof correlation, UI geometry, button wiring and release composition.
 
-A physical device run remains the final proof for external facts such as USB authorization, driver state, the connected phone's fastboot response, and the official Mi Unlock Tool result.
+A physical-device run is still required to prove external facts such as USB authorisation, local drivers, MIUI installer behaviour, foreground-service behaviour on the target ROM, fastboot detection on the servicing PC and the official Mi Unlock Tool result.
