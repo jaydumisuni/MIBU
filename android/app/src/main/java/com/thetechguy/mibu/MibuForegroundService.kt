@@ -30,6 +30,10 @@ class MibuForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
+            callbacks.forEach(handler::removeCallbacks)
+            callbacks.clear()
+            reachedCount = 0
+
             if (!tokenStore.hasRequiredCaptures()) {
                 Log.w("MIBU", "Fresh Firefox + Chrome captures are not available; waiting service stopping")
                 stopSelf(startId)
@@ -37,30 +41,29 @@ class MibuForegroundService : Service() {
             } else {
                 val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
                 val lanes = MibuLane.defaultLanes()
-                val delays = lanes.associateWith { Duration.between(nowChina, it.targetTime(nowChina)).toMillis().coerceAtLeast(0L) }
+                val delays = lanes.associateWith {
+                    Duration.between(nowChina, it.targetTime(nowChina)).toMillis().coerceAtLeast(0L)
+                }
                 val latestDelay = delays.values.maxOrNull() ?: 0L
                 if (latestDelay > tokenStore.millisRemaining()) {
                     Log.w("MIBU", "Tokens expire before latest timing window; stopping")
                     stateStore.setVerificationState(VerificationState.UNKNOWN)
                     stopSelf(startId)
-                    return START_NOT_STICKY
-                }
+                    START_NOT_STICKY
+                } else {
+                    stateStore.armWaiting()
+                    stateStore.setVerificationState(VerificationState.WAITING_ARMED)
+                    startForeground(NOTIFICATION_ID, buildNotification("Waiting armed • 0/4 timing windows reached"))
+                    acquireWakeLock(latestDelay + 60_000L)
 
-                stateStore.armWaiting()
-                stateStore.setVerificationState(VerificationState.WAITING_ARMED)
-                startForeground(NOTIFICATION_ID, buildNotification("Waiting armed • 0/4 timing windows reached"))
-                acquireWakeLock(latestDelay + 60_000L)
-                reachedCount = 0
-                callbacks.forEach(handler::removeCallbacks)
-                callbacks.clear()
-
-                lanes.forEach { lane ->
-                    val callback = Runnable { markWindowReached(lane.number) }
-                    callbacks += callback
-                    handler.postDelayed(callback, delays.getValue(lane))
+                    lanes.forEach { lane ->
+                        val callback = Runnable { markWindowReached(lane.number) }
+                        callbacks += callback
+                        handler.postDelayed(callback, delays.getValue(lane))
+                    }
+                    Log.i("MIBU", "Waiting service scheduled four timing windows")
+                    START_NOT_STICKY
                 }
-                Log.i("MIBU", "Waiting service scheduled four timing windows")
-                START_NOT_STICKY
             }
         } catch (exc: Exception) {
             Log.e("MIBU", "Waiting service failed", exc)
@@ -96,6 +99,7 @@ class MibuForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun acquireWakeLock(timeoutMs: Long) {
+        wakeLock?.let { if (it.isHeld) it.release() }
         val power = getSystemService(PowerManager::class.java)
         wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MIBU:TimingWindow").apply {
             setReferenceCounted(false)
@@ -105,23 +109,25 @@ class MibuForegroundService : Service() {
 
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "MIBU waiting service", NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
 
     private fun buildNotification(message: String): Notification {
-        val openIntent = Intent(this, MainActivity::class.java)
         val pending = PendingIntent.getActivity(
             this,
             49,
-            openIntent,
+            Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID)
-        else @Suppress("DEPRECATION") Notification.Builder(this)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
         return builder
             .setContentTitle("MIBU timing assistant")
             .setContentText(message)
