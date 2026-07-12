@@ -4,7 +4,7 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from ui_geometry import SCREENS
+from ui_geometry import POPUP_CLOSE_ART_BOUNDS, POPUP_CLOSE_RECT, SCREENS
 
 ACTIVE_ORANGE = {"#ff7a2b", "#FF7A2B"}
 
@@ -50,10 +50,20 @@ def close_enough(actual: tuple[int, int, int, int], expected: tuple[int, int, in
     return all(abs(a - b) <= tolerance for a, b in zip(actual, expected))
 
 
+def contains(outer: tuple[int, int, int, int], inner: tuple[int, int, int, int]) -> bool:
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ox <= ix and oy <= iy and ox + ow >= ix + iw and oy + oh >= iy + ih
+
+
 def validate(asset_dir: Path) -> None:
     errors: list[str] = []
     if len(SCREENS) != 5:
         errors.append(f"Expected five screens in geometry contract, found {len(SCREENS)}")
+    if not contains(POPUP_CLOSE_RECT, POPUP_CLOSE_ART_BOUNDS):
+        errors.append(
+            f"Shared popup close hotspot {POPUP_CLOSE_RECT} does not fully contain visible close artwork {POPUP_CLOSE_ART_BOUNDS}"
+        )
 
     seen_svgs: set[str] = set()
     seen_pngs: set[str] = set()
@@ -107,7 +117,9 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[2]
     asset_dir = repo_root / "resources" / "expected ui" / "pc"
     validate(asset_dir)
-    print(f"UI contract valid for {len(SCREENS)} screens; close affordances align and active glow is not baked in.")
+    print(
+        f"UI contract valid for {len(SCREENS)} screens; visible close artwork is fully clickable and active glow is not baked in."
+    )
     return 0
 
 
