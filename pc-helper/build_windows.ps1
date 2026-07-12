@@ -1,5 +1,6 @@
 param(
-    [string]$ApkPath = "android\app\build\outputs\apk\debug\app-debug.apk"
+    [string]$ApkPath = "android\app\build\outputs\apk\debug\app-debug.apk",
+    [switch]$UseExistingApk
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,7 @@ $RequiredPlatformTools = @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUs
 
 Write-Host "MIBU PC Helper build" -ForegroundColor Cyan
 Write-Host "Root: $Root"
+Write-Host "APK mode: $(if ($UseExistingApk) { 'explicit prebuilt artifact' } else { 'rebuild from current Android source' })"
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     throw "Python was not found in PATH. Install Python 3.10+ first."
@@ -62,26 +64,28 @@ python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
 if ($LASTEXITCODE -ne 0) { throw "Python dependency installation failed with exit code $LASTEXITCODE" }
 
 $AndroidSdk = Resolve-AndroidSdk
-if (-not (Test-Path $ResolvedApk)) {
+if ($UseExistingApk) {
+    Assert-NonEmptyFile $ResolvedApk "Explicit prebuilt Android APK"
+} else {
     $GradlePath = Resolve-Gradle
     if (-not $GradlePath) {
-        throw "Android APK is missing and Gradle was not found. Expected gradle in PATH, D:\mibu-build-tools\gradle\bin\gradle.bat, D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat, or gradlew.bat in the repo."
+        throw "A source-fresh release requires Gradle. Expected gradle in PATH, D:\mibu-build-tools\gradle\bin\gradle.bat, D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat, or gradlew.bat in the repo. Use -UseExistingApk only for an APK already produced by the current CI commit."
     }
     if (-not $AndroidSdk) {
-        throw "Android APK is missing and Android SDK was not found. Set ANDROID_SDK_ROOT/ANDROID_HOME or install it at D:\mibu-build-tools\android-sdk."
+        throw "A source-fresh release requires Android SDK. Set ANDROID_SDK_ROOT/ANDROID_HOME or install it at D:\mibu-build-tools\android-sdk."
     }
     $LocalProperties = Join-Path $Root "local.properties"
     $EscapedSdk = $AndroidSdk.Replace('\', '\\')
     Set-Content -Path $LocalProperties -Value "sdk.dir=$EscapedSdk" -Encoding ASCII
     Push-Location $Root
     try {
-        & $GradlePath :android:app:lintDebug :android:app:testDebugUnitTest :android:app:assembleDebug --stacktrace
-        if ($LASTEXITCODE -ne 0) { throw "Android lint/test/build failed with exit code $LASTEXITCODE" }
+        & $GradlePath :android:app:clean :android:app:lintDebug :android:app:testDebugUnitTest :android:app:assembleDebug --stacktrace
+        if ($LASTEXITCODE -ne 0) { throw "Android clean/lint/test/build failed with exit code $LASTEXITCODE" }
     } finally {
         Pop-Location
     }
+    Assert-NonEmptyFile $ResolvedApk "Android APK built from current source"
 }
-Assert-NonEmptyFile $ResolvedApk "Android APK required for a complete MIBU release"
 
 if (-not $AndroidSdk) { $AndroidSdk = Resolve-AndroidSdk }
 if (-not $AndroidSdk) {
