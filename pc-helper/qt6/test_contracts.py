@@ -35,41 +35,75 @@ class DeviceParsingTests(unittest.TestCase):
         output = "* daemon started successfully *\nList of devices attached\nABC123\tdevice\nXYZ999\toffline\n"
         self.assertEqual([("ABC123", "device"), ("XYZ999", "offline")], mibu_actions.parse_devices(output))
 
+    def test_adb_parser_ignores_unrecognised_noise(self) -> None:
+        output = "List of devices attached\nerror: protocol fault\nABC123\tdevice product:x\n"
+        self.assertEqual([("ABC123", "device")], mibu_actions.parse_devices(output))
+
+    def test_fastboot_parser_requires_real_device_rows(self) -> None:
+        output = "< waiting for any device >\nABC123\tfastboot\nFinished. Total time: 0.001s\n"
+        self.assertEqual([("ABC123", "fastboot")], mibu_actions.parse_fastboot_devices(output))
+
     def test_token_encoding_is_url_safe_and_reversible(self) -> None:
-        original = "abc+/= token value\nwith symbols"
+        original = "abc+/= token value with symbols"
         encoded = mibu_actions._encode_token(original)
         self.assertNotIn("\n", encoded)
         decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
         self.assertEqual(original, decoded)
 
+    def test_token_validation_bounds_and_control_characters(self) -> None:
+        self.assertTrue(mibu_actions._valid_token("abcdefgh"))
+        self.assertFalse(mibu_actions._valid_token("short"))
+        self.assertFalse(mibu_actions._valid_token("valid-but\nnot-safe"))
+        self.assertFalse(mibu_actions._valid_token("x" * (mibu_actions.MAX_TOKEN_LENGTH + 1)))
+
 
 class ServiceProofTests(unittest.TestCase):
-    def test_service_armed_marker_is_success(self) -> None:
+    def test_service_armed_marker_is_success_for_matching_nonce(self) -> None:
         with patch.object(
             mibu_actions,
             "run_tool",
-            return_value=mibu_actions.Result(True, "I/MIBU_SERVICE: WAITING_SERVICE_ARMED targetMidnight=123 lanes=1,2,3,4"),
+            return_value=mibu_actions.Result(True, "I/MIBU_SERVICE: WAITING_SERVICE_ARMED targetMidnight=123 nonce=abc12345"),
         ):
             result = mibu_actions._wait_for_log_outcome(
                 "MIBU_SERVICE",
                 "WAITING_SERVICE_ARMED",
                 failure_markers=("WAITING_SERVICE_FAILED",),
                 wait_seconds=1,
+                nonce="abc12345",
             )
         self.assertTrue(result.ok)
         self.assertIn("WAITING_SERVICE_ARMED", result.message)
+
+    def test_stale_success_marker_with_wrong_nonce_is_rejected(self) -> None:
+        with patch.object(
+            mibu_actions,
+            "run_tool",
+            return_value=mibu_actions.Result(True, "I/MIBU_SERVICE: WAITING_SERVICE_ARMED nonce=oldnonce"),
+        ), patch.object(mibu_actions.time, "sleep", return_value=None), patch.object(
+            mibu_actions.time,
+            "monotonic",
+            side_effect=[0.0, 0.0, 2.0],
+        ):
+            result = mibu_actions._wait_for_log_outcome(
+                "MIBU_SERVICE",
+                "WAITING_SERVICE_ARMED",
+                wait_seconds=1,
+                nonce="newnonce",
+            )
+        self.assertFalse(result.ok)
 
     def test_service_failure_marker_rejects_immediately(self) -> None:
         with patch.object(
             mibu_actions,
             "run_tool",
-            return_value=mibu_actions.Result(True, "E/MIBU_SERVICE: WAITING_SERVICE_FAILED IllegalStateException"),
+            return_value=mibu_actions.Result(True, "E/MIBU_SERVICE: WAITING_SERVICE_FAILED nonce=abc12345"),
         ):
             result = mibu_actions._wait_for_log_outcome(
                 "MIBU_SERVICE",
                 "WAITING_SERVICE_ARMED",
                 failure_markers=("WAITING_SERVICE_FAILED",),
                 wait_seconds=1,
+                nonce="abc12345",
             )
         self.assertFalse(result.ok)
         self.assertIn("WAITING_SERVICE_FAILED", result.message)
@@ -78,33 +112,39 @@ class ServiceProofTests(unittest.TestCase):
         with patch.object(
             mibu_actions,
             "run_tool",
-            return_value=mibu_actions.Result(True, "I/MIBU_WAIT: WAITING_ACTIVITY_STARTED targetMidnight=123"),
+            return_value=mibu_actions.Result(True, "I/MIBU_WAIT: WAITING_ACTIVITY_STARTED nonce=abc12345"),
         ), patch.object(mibu_actions.time, "sleep", return_value=None), patch.object(
             mibu_actions.time,
             "monotonic",
-            side_effect=[0.0, 2.0],
+            side_effect=[0.0, 0.0, 2.0],
         ):
             result = mibu_actions._wait_for_log_outcome(
                 "MIBU_SERVICE",
                 "WAITING_SERVICE_ARMED",
                 wait_seconds=1,
+                nonce="abc12345",
             )
         self.assertFalse(result.ok)
 
 
 class PhoneStatusTests(unittest.TestCase):
-    def test_status_parser_accepts_proof_line(self) -> None:
-        line = "I/MIBU_STATUS: STATUS captures=READY verification=WAITING_ARMED community=COMMUNITY_ROUTE_UNKNOWN lanes=1:ARMED,2:ARMED,3:ARMED,4:ARMED"
-        status = mibu_status._parse_status(line)
+    def test_status_parser_accepts_matching_proof_line(self) -> None:
+        line = "I/MIBU_STATUS: STATUS nonce=abc12345 captures=READY verification=WAITING_ARMED community=COMMUNITY_ROUTE_UNKNOWN lanes=1:ARMED,2:ARMED,3:ARMED,4:ARMED"
+        status = mibu_status._parse_status(line, expected_nonce="abc12345")
         self.assertIsNotNone(status)
         assert status is not None
+        self.assertEqual("abc12345", status.nonce)
         self.assertTrue(status.captures_ready)
         self.assertFalse(status.timing_complete)
         self.assertEqual("WAITING_ARMED", status.verification)
 
+    def test_status_parser_rejects_wrong_nonce(self) -> None:
+        line = "STATUS nonce=stale123 captures=READY verification=WAITING_ARMED community=COMMUNITY_ROUTE_UNKNOWN lanes=1:ARMED"
+        self.assertIsNone(mibu_status._parse_status(line, expected_nonce="fresh123"))
+
     def test_timing_complete_only_accepts_completion_states(self) -> None:
-        line = "STATUS captures=READY verification=TIMING_WINDOW_REACHED community=COMMUNITY_DEVICE_CONFIRMED lanes=1:WINDOW_REACHED,2:WINDOW_REACHED,3:WINDOW_REACHED,4:WINDOW_REACHED"
-        status = mibu_status._parse_status(line)
+        line = "STATUS nonce=abc12345 captures=READY verification=TIMING_WINDOW_REACHED community=COMMUNITY_DEVICE_CONFIRMED lanes=1:WINDOW_REACHED,2:WINDOW_REACHED,3:WINDOW_REACHED,4:WINDOW_REACHED"
+        status = mibu_status._parse_status(line, expected_nonce="abc12345")
         self.assertIsNotNone(status)
         assert status is not None
         self.assertTrue(status.timing_complete)
