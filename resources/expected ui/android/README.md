@@ -19,10 +19,10 @@ The sheet was recovered from the exact approved conversation uploads rather than
 | Baseline state | Original approved upload | Original SHA-256 |
 |---|---|---|
 | Welcome / entry | `ChatGPT Image Jun 20, 2026, 11_42_25 PM (1).png` | `eddd106925e8305f2d5488d980c6934fffd6b29e7445d9741f4a90cc913c3e94` |
-| Dashboard / status | `ChatGPT Image Jun 20, 2026, 11_42_25 PM (2).png` | `64934683b4b6612811b04c5f6fa6551a1c122b88e402bc12cf750c432786845d` |
-| Dashboard / waiting | `ChatGPT Image Jun 21, 2026, 12_08_27 AM (4).png` | `11981b339f407b5767b9af10c58e101f999e79e77870326757280ace95187a04` |
-| Step-by-step guide | `neon_themed_step_by_step_mobile_guide.png` | `17db2c5734b5e5b5bd93531d35e0c72ba324c4af6b7230f1042b154dca67f75f` |
-| MIBU logo | `MIBU Logo(1).png` | `0ad11c85ee474412b41399ea4c62e7cc1acaa9b56a85bb88f0690f2ba093bfda` |
+| Dashboard / status | `ChatGPT Image Jun 20, 2026, 11_42_25 PM (2).png` | `53eba33bda7b491f098ebe1f7b99ca7d2701000b488ed3a8c1bed41badf1203c` |
+| Dashboard / waiting | `ChatGPT Image Jun 21, 2026, 12_08_27 AM (4).png` | `0375aec08e26d73bd9cc8d920a998c196fdd6ffe3ccec7f89015d9e7ef8028bf` |
+| Step-by-step guide | `neon_themed_step_by_step_mobile_guide.png` | `c7babc28a23ecbacbcd775752fd3eef465abfda9a85402613c4fc50445595528` |
+| MIBU logo | `MIBU Logo(1).png` | `ab22eb530c56edbb5525ba874bac95c1bddfd83f6d76c2ebf102bfac273364c3` |
 
 The embedded previews are deliberately lightweight repository references. Their purpose is to lock the approved composition, branding, hierarchy and screen states so future implementation work cannot silently drift or invent replacement artwork.
 
