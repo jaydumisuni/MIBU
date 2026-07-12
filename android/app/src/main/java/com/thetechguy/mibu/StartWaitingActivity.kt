@@ -21,6 +21,9 @@ class StartWaitingActivity : Activity() {
         val currentState = stateStore.reconcileTimingState(nowChina)
         if (currentState.blocksNewWaitingCycle()) {
             Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${currentState.name} nonce=$proofNonce")
+            if (currentState.isTimingComplete()) {
+                startCompletedProofService()
+            }
             Toast.makeText(this, completedMessage(currentState), Toast.LENGTH_LONG).show()
             returnToDashboard()
             return
@@ -53,8 +56,11 @@ class StartWaitingActivity : Activity() {
             MibuLane.defaultLanes()
         }
         if (remainingLanes.isEmpty()) {
-            stateStore.reconcileTimingState(nowChina)
-            Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${stateStore.verificationState().name} nonce=$proofNonce")
+            val reconciled = stateStore.reconcileTimingState(nowChina)
+            Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${reconciled.name} nonce=$proofNonce")
+            if (reconciled.isTimingComplete()) {
+                startCompletedProofService()
+            }
             returnToDashboard()
             return
         }
@@ -81,9 +87,7 @@ class StartWaitingActivity : Activity() {
         }
 
         try {
-            val serviceIntent = Intent(this, MibuForegroundService::class.java)
-                .putExtra(ProofNonce.EXTRA, proofNonce)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+            startWaitingService()
             val marker = if (resuming) "WAITING_ACTIVITY_RESUMED" else "WAITING_ACTIVITY_STARTED"
             Log.i(LOG_TAG, "$marker targetMidnight=${targetMidnight.toInstant().toEpochMilli()} nonce=$proofNonce")
             Toast.makeText(
@@ -102,6 +106,22 @@ class StartWaitingActivity : Activity() {
         }
 
         returnToDashboard()
+    }
+
+    private fun startCompletedProofService() {
+        if (proofNonce == "none") return
+        runCatching { startWaitingService() }
+            .onFailure { Log.e(LOG_TAG, "WAITING_COMPLETION_PROOF_START_FAILED nonce=$proofNonce", it) }
+    }
+
+    private fun startWaitingService() {
+        val serviceIntent = Intent(this, MibuForegroundService::class.java)
+            .putExtra(ProofNonce.EXTRA, proofNonce)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
     }
 
     private fun returnToDashboard() {
