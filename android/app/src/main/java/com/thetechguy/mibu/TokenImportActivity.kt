@@ -2,6 +2,7 @@ package com.thetechguy.mibu
 
 import android.app.Activity
 import android.os.Bundle
+import android.text.InputFilter
 import android.text.InputType
 import android.util.Base64
 import android.util.Log
@@ -20,29 +21,42 @@ class TokenImportActivity : Activity() {
         val pushedToken = decodeExtra("mibu_session_token_b64")
             .ifBlank { intent?.getStringExtra("mibu_session_token")?.trim().orEmpty() }
 
-        if (serviceToken.length >= MIN_TOKEN_LENGTH && popToken.length >= MIN_TOKEN_LENGTH) {
+        if (TokenStore.isAcceptableToken(serviceToken) && TokenStore.isAcceptableToken(popToken)) {
             tokenStore.saveCaptures(serviceToken, popToken)
             Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED")
             showImported("Two captures imported", "Firefox service token and Chrome pop token were received. MIBU populated slots 1/3 and 2/4 automatically.")
             return
         }
 
-        if (pushedToken.length >= MIN_TOKEN_LENGTH) {
+        if (TokenStore.isAcceptableToken(pushedToken)) {
             tokenStore.saveSession(pushedToken)
             Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED")
             showImported("Service token imported", "A single token/session was received and saved as the Firefox/service capture. Chrome pop token is still missing, so waiting cannot be armed yet.")
             return
         }
 
-        if (intent?.hasExtra("mibu_service_token_b64") == true || intent?.hasExtra("mibu_pop_token_b64") == true) {
-            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_CAPTURE_LENGTH")
+        if (hasAnyImportExtra()) {
+            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_CAPTURE")
         }
         showManualImport()
     }
 
+    private fun hasAnyImportExtra(): Boolean = listOf(
+        "mibu_service_token_b64",
+        "mibu_pop_token_b64",
+        "mibu_session_token_b64",
+        "mibu_service_token",
+        "mibu_pop_token",
+        "mibu_session_token",
+    ).any { intent?.hasExtra(it) == true }
+
     private fun decodeExtra(name: String): String {
         val encoded = intent?.getStringExtra(name)?.trim().orEmpty()
         if (encoded.isBlank()) return ""
+        if (encoded.length > MAX_ENCODED_EXTRA_LENGTH) {
+            Log.w(LOG_TAG, "IMPORT_REJECTED_OVERSIZE_BASE64 name=$name length=${encoded.length}")
+            return ""
+        }
         return runCatching {
             String(Base64.decode(encoded, Base64.URL_SAFE or Base64.NO_WRAP), Charsets.UTF_8).trim()
         }.onFailure {
@@ -76,29 +90,34 @@ class TokenImportActivity : Activity() {
                 val service = serviceInput.text.toString().trim()
                 val pop = popInput.text.toString().trim()
                 when {
-                    service.length < MIN_TOKEN_LENGTH -> serviceInput.error = "Firefox/service token looks too short"
-                    pop.length < MIN_TOKEN_LENGTH -> popInput.error = "Chrome/pop token looks too short"
+                    !TokenStore.isAcceptableToken(service) -> serviceInput.error = invalidTokenMessage("Firefox/service")
+                    !TokenStore.isAcceptableToken(pop) -> popInput.error = invalidTokenMessage("Chrome/pop")
                     else -> {
                         tokenStore.saveCaptures(service, pop)
+                        serviceInput.text?.clear()
+                        popInput.text?.clear()
                         Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED_MANUALLY")
+                        startActivity(android.content.Intent(this@TokenImportActivity, MainActivity::class.java))
                         finish()
                     }
                 }
             })
             addView(mibuButton("Save service token only") {
                 val service = serviceInput.text.toString().trim()
-                if (service.length < MIN_TOKEN_LENGTH) {
-                    serviceInput.error = "Firefox/service token looks too short"
+                if (!TokenStore.isAcceptableToken(service)) {
+                    serviceInput.error = invalidTokenMessage("Firefox/service")
                 } else {
                     tokenStore.saveServiceToken(service)
+                    serviceInput.text?.clear()
                     Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED_MANUALLY")
+                    startActivity(android.content.Intent(this@TokenImportActivity, MainActivity::class.java))
                     finish()
                 }
             })
             addView(mibuButton("Clear saved tokens") {
                 tokenStore.clear()
-                serviceInput.setText("")
-                popInput.setText("")
+                serviceInput.text?.clear()
+                popInput.text?.clear()
                 Log.i(LOG_TAG, "CAPTURES_CLEARED")
             })
             addView(mibuButton("Back") { finish() })
@@ -106,12 +125,16 @@ class TokenImportActivity : Activity() {
         }
     }
 
+    private fun invalidTokenMessage(label: String): String =
+        "$label token must be ${TokenStore.MIN_TOKEN_LENGTH}-${TokenStore.MAX_TOKEN_LENGTH} characters and contain no control characters"
+
     private fun tokenField(hintText: String): EditText {
         return EditText(this).apply {
             hint = hintText
             setTextColor(android.graphics.Color.WHITE)
             setHintTextColor(android.graphics.Color.rgb(145, 160, 190))
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            filters = arrayOf(InputFilter.LengthFilter(TokenStore.MAX_TOKEN_LENGTH))
             minLines = 3
             setPadding(dp(16), dp(14), dp(16), dp(14))
             background = rounded(android.graphics.Color.rgb(13, 20, 35), dp(16), android.graphics.Color.rgb(30, 40, 65))
@@ -119,7 +142,7 @@ class TokenImportActivity : Activity() {
     }
 
     companion object {
-        private const val MIN_TOKEN_LENGTH = 8
+        private const val MAX_ENCODED_EXTRA_LENGTH = 12_000
         private const val LOG_TAG = "MIBU_IMPORT"
     }
 }
