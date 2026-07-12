@@ -10,6 +10,7 @@ class StatusActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        stateStore.reconcileTimingState()
         val laneStates = stateStore.lanes().joinToString(",") { "${it.number}:${it.status.name}" }
         val message = buildString {
             append("STATUS ")
