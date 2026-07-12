@@ -15,6 +15,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Compile review validators
+        run: |
+          python -m py_compile tools/review_contracts.py
+          python -m py_compile tools/validate_android_ui_baseline.py
+      - name: Validate restored approved Android UI baseline
+        run: python tools/validate_android_ui_baseline.py
       - name: Validate implementation against agreed architecture
         run: python tools/review_contracts.py
 
@@ -67,14 +73,17 @@ jobs:
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v3.py
           python -m py_compile pc-helper/qt6/test_contracts.py
           python -m py_compile tools/review_contracts.py
+          python -m py_compile tools/validate_android_ui_baseline.py
       - name: Run PC helper unit tests
         working-directory: pc-helper/qt6
         run: python -m unittest -v test_contracts.py
+      - name: Validate restored Android expected UI
+        run: python tools/validate_android_ui_baseline.py
       - name: Validate hotspot artwork against shared click contract
         run: python pc-helper/qt6/validate_ui_contract.py
       - name: Render required hotspot and icon assets
         run: python pc-helper/qt6/render_svg_assets.py
-      - name: Verify all rendered assets
+      - name: Verify all rendered assets and approved Android baseline
         run: |
           test -s "resources/expected ui/pc/01_pc_main_four_button_workflow.png"
           test -s "resources/expected ui/pc/02_popup_device_check_guide.png"
@@ -83,6 +92,8 @@ jobs:
           test -s "resources/expected ui/pc/05_popup_phone_guide.png"
           test -s "resources/expected ui/pc/mibu_app_icon.png"
           test -s "resources/expected ui/pc/mibu_app_icon.ico"
+          test -s "resources/expected ui/android/approved_android_ui_baseline_sheet.svg"
+          test -s "resources/expected ui/android/README.md"
       - name: Qt v3 construction, geometry, icon and time math smoke test
         run: |
           python - <<'PY'
@@ -147,7 +158,9 @@ jobs:
             "$root\resources\expected ui\pc\04_popup_login_get_token.png",
             "$root\resources\expected ui\pc\05_popup_phone_guide.png",
             "$root\resources\expected ui\pc\mibu_app_icon.png",
-            "$root\resources\expected ui\pc\mibu_app_icon.ico"
+            "$root\resources\expected ui\pc\mibu_app_icon.ico",
+            "$root\resources\expected ui\android\approved_android_ui_baseline_sheet.svg",
+            "$root\resources\expected ui\android\README.md"
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path)) { throw "Release contract missing: $path" }
