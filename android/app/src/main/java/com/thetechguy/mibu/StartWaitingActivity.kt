@@ -13,15 +13,15 @@ class StartWaitingActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (!tokenStore.hasSession()) {
-            Toast.makeText(this, "No token imported yet. Import tokens first.", Toast.LENGTH_LONG).show()
-            startActivity(Intent(this, MainActivity::class.java))
+        if (!tokenStore.hasRequiredCaptures()) {
+            Toast.makeText(
+                this,
+                "Waiting was not armed. Import fresh Firefox and Chrome token captures first.",
+                Toast.LENGTH_LONG
+            ).show()
+            startActivity(Intent(this, TokenImportActivity::class.java))
             finish()
             return
-        }
-
-        if (!tokenStore.hasRequiredCaptures()) {
-            Toast.makeText(this, "Partial token setup. Full mode needs Firefox + Chrome captures.", Toast.LENGTH_LONG).show()
         }
 
         stateStore.armWaiting()
@@ -33,7 +33,11 @@ class StartWaitingActivity : Activity() {
             } else {
                 startService(serviceIntent)
             }
-            Toast.makeText(this, "MIBU waiting armed. Four lanes are tracked in the background.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "MIBU waiting armed. One countdown is visible; four lanes are tracked in the background.",
+                Toast.LENGTH_SHORT
+            ).show()
         } catch (exc: Exception) {
             Toast.makeText(this, "Could not start waiting service: ${exc.message}", Toast.LENGTH_LONG).show()
         }
