@@ -130,11 +130,14 @@ def main() -> int:
         "nonce_marker",
         '"WAITING_SERVICE_RECOVERED_COMPLETE"',
         '"WAITING_SERVICE_COMPLETE"',
+        '["install", "-r", path]',
+        "installed/reinstalled and version verified",
     )
     forbid(
         "pc-helper/qt6/mibu_actions.py",
         '["logcat", "-c"]',
         '_wait_for_log_marker("MIBU_WAIT", "WAITING_ACTIVITY_STARTED")',
+        "is already installed and verified",
     )
     require(
         "pc-helper/qt6/test_contracts.py",
@@ -143,6 +146,12 @@ def main() -> int:
         "test_old_protocol_parses_but_is_not_current",
         "test_old_app_version_parses_but_is_not_current",
     )
+    require(
+        "pc-helper/qt6/test_install_contracts.py",
+        "test_current_version_is_reinstalled_and_reverified",
+        "test_old_installed_version_is_updated_and_reverified",
+        "test_version_mismatch_after_install_is_failure",
+    )
 
     require(
         "pc-helper/build_windows.ps1",
@@ -150,6 +159,7 @@ def main() -> int:
         "rebuild from current Android source",
         ":android:app:clean",
         "Use -UseExistingApk only for an APK already produced by the current CI commit",
+        'tools\\review_proof_v2.py',
         "python -m unittest discover -v",
         "Get-FileHash -Algorithm SHA256",
         '"SHA256SUMS.txt"',
