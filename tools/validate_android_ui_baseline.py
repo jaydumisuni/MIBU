@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import re
 import xml.etree.ElementTree as ET
@@ -17,6 +18,7 @@ EXPECTED_LABELS = (
     "Step-by-step guide",
     "Approved MIBU logo",
 )
+EXPECTED_IMAGE_COUNT = 5
 EXPECTED_SOURCE_HASHES = (
     "eddd106925e8305f2d5488d980c6934fffd6b29e7445d9741f4a90cc913c3e94",
     "53eba33bda7b491f098ebe1f7b99ca7d2701000b488ed3a8c1bed41badf1203c",
@@ -32,6 +34,8 @@ def fail(message: str) -> None:
 
 
 def validate_sheet() -> str:
+    if len(EXPECTED_LABELS) != EXPECTED_IMAGE_COUNT:
+        fail("validator label contract does not contain exactly five approved states")
     if not SHEET.is_file() or SHEET.stat().st_size <= 0:
         fail(f"missing or empty sheet: {SHEET}")
     try:
@@ -48,16 +52,14 @@ def validate_sheet() -> str:
             fail(f"missing approved state label: {label}")
 
     images = [elem for elem in root.iter() if elem.tag.rsplit("}", 1)[-1] == "image"]
-    if len(images) != len(EXPECTED_LABELS):
-        fail(f"expected {len(EXPECTED_LABELS)} embedded approved images, found {len(images)}")
+    if len(images) != EXPECTED_IMAGE_COUNT:
+        fail(f"expected 5 embedded approved images, found {len(images)}")
 
     for index, image in enumerate(images, start=1):
         href = image.attrib.get("href") or image.attrib.get("{http://www.w3.org/1999/xlink}href") or ""
         match = re.fullmatch(r"data:image/(?:webp|png|jpeg);base64,([A-Za-z0-9+/=]+)", href)
         if not match:
             fail(f"embedded image {index} is not a self-contained image data URI")
-        import base64
-
         try:
             raw = base64.b64decode(match.group(1), validate=True)
         except Exception as exc:
