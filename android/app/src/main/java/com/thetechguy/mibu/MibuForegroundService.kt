@@ -32,6 +32,9 @@ class MibuForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         proofNonce = ProofNonce.from(intent)
         return try {
+            // startForegroundService() requires every branch—including rejected
+            // and already-complete branches—to enter foreground promptly.
+            startForeground(NOTIFICATION_ID, buildNotification("Checking saved waiting state…"))
             callbacks.forEach(handler::removeCallbacks)
             callbacks.clear()
 
@@ -41,7 +44,7 @@ class MibuForegroundService : Service() {
 
             when {
                 reconciled.isTimingComplete() -> {
-                    startForeground(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
+                    updateNotification("Timing window reached • continue with PC verification")
                     Log.i(LOG_TAG, "WAITING_SERVICE_RECOVERED_COMPLETE state=${reconciled.name} reached=$reachedCount nonce=$proofNonce")
                     handler.postDelayed({ stopSelf() }, 15_000L)
                     START_NOT_STICKY
@@ -78,7 +81,7 @@ class MibuForegroundService : Service() {
                         stopSelf(startId)
                         START_NOT_STICKY
                     } else {
-                        startForeground(NOTIFICATION_ID, buildNotification("Waiting armed • $reachedCount/4 timing windows reached"))
+                        updateNotification("Waiting armed • $reachedCount/4 timing windows reached")
                         acquireWakeLock(latestDelay + 60_000L)
                         armedLanes.forEach { lane ->
                             val callback = Runnable { markWindowReached(lane.number) }
@@ -107,16 +110,20 @@ class MibuForegroundService : Service() {
     private fun markWindowReached(laneNumber: Int) {
         stateStore.setLaneStatus(laneNumber, LaneStatus.WINDOW_REACHED)
         reachedCount = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
-        val manager = getSystemService(NotificationManager::class.java)
         if (reachedCount >= MibuLane.defaultLanes().size) {
             stateStore.setVerificationState(VerificationState.TIMING_WINDOW_REACHED)
-            manager.notify(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
+            updateNotification("Timing window reached • continue with PC verification")
             Log.i(LOG_TAG, "WAITING_SERVICE_COMPLETE reached=$reachedCount nonce=$proofNonce")
             handler.postDelayed({ stopSelf() }, 15_000L)
         } else {
-            manager.notify(NOTIFICATION_ID, buildNotification("Waiting armed • $reachedCount/4 timing windows reached"))
+            updateNotification("Waiting armed • $reachedCount/4 timing windows reached")
             Log.i(LOG_TAG, "WAITING_LANE_REACHED lane=$laneNumber reached=$reachedCount nonce=$proofNonce")
         }
+    }
+
+    private fun updateNotification(message: String) {
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, buildNotification(message))
     }
 
     override fun onDestroy() {
@@ -164,7 +171,7 @@ class MibuForegroundService : Service() {
             .setContentText(message)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pending)
-            .setOngoing(reachedCount < 4)
+            .setOngoing(reachedCount < MibuLane.defaultLanes().size)
             .build()
     }
 
