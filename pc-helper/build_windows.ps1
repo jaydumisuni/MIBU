@@ -31,12 +31,11 @@ function Remove-SafeDir([string]$Path) {
 function Resolve-Gradle {
     $command = Get-Command gradle -ErrorAction SilentlyContinue
     if ($command) { return $command.Source }
-    $candidates = @(
+    foreach ($candidate in @(
         "D:\mibu-build-tools\gradle\bin\gradle.bat",
         "D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat",
         (Join-Path $Root "gradlew.bat")
-    )
-    foreach ($candidate in $candidates) {
+    )) {
         if (Test-Path $candidate) { return $candidate }
     }
     return $null
@@ -52,9 +51,9 @@ function Resolve-AndroidSdk {
 python -m pip install --upgrade pip
 python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
 
+$AndroidSdk = Resolve-AndroidSdk
 if (-not (Test-Path $ResolvedApk)) {
     $GradlePath = Resolve-Gradle
-    $AndroidSdk = Resolve-AndroidSdk
     if (-not $GradlePath) {
         throw "Android APK is missing and Gradle was not found. Expected gradle in PATH, D:\mibu-build-tools\gradle\bin\gradle.bat, D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat, or gradlew.bat in the repo."
     }
@@ -77,6 +76,17 @@ if (-not (Test-Path $ResolvedApk)) {
 }
 if (-not (Test-Path $ResolvedApk)) {
     throw "Android APK is required for a complete MIBU release but was not created at $ResolvedApk."
+}
+
+if (-not $AndroidSdk) { $AndroidSdk = Resolve-AndroidSdk }
+if (-not $AndroidSdk) {
+    throw "Android SDK/platform-tools are required for a self-contained MIBU release. Set ANDROID_SDK_ROOT/ANDROID_HOME or install at D:\mibu-build-tools\android-sdk."
+}
+$PlatformTools = Join-Path $AndroidSdk "platform-tools"
+foreach ($requiredTool in @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")) {
+    $toolPath = Join-Path $PlatformTools $requiredTool
+    if (-not (Test-Path $toolPath)) { throw "Required platform-tool missing: $toolPath" }
+    if ((Get-Item $toolPath).Length -le 0) { throw "Required platform-tool is empty: $toolPath" }
 }
 
 Write-Host "Rendering deterministic hotspot UI assets..." -ForegroundColor Cyan
@@ -123,9 +133,14 @@ if (-not (Test-Path $BuiltHelper)) { throw "PyInstaller output folder missing: $
 Copy-Item $BuiltHelper $BundleDir -Recurse -Force
 $BundleApp = Join-Path $BundleDir "MIBU-PC-Helper"
 $BundleDist = Join-Path $BundleApp "dist"
+$BundlePlatformTools = Join-Path $BundleApp "platform-tools"
 New-Item -ItemType Directory -Path $BundleDist -Force | Out-Null
+New-Item -ItemType Directory -Path $BundlePlatformTools -Force | Out-Null
 Copy-Item $ResolvedApk (Join-Path $BundleDist "MIBU.apk") -Force
-Write-Host "Bundled APK: $ResolvedApk" -ForegroundColor Green
+foreach ($requiredTool in @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")) {
+    Copy-Item (Join-Path $PlatformTools $requiredTool) (Join-Path $BundlePlatformTools $requiredTool) -Force
+}
+Write-Host "Bundled APK and Android platform-tools." -ForegroundColor Green
 
 $ResourceRoot = Join-Path $Root "resources"
 if (-not (Test-Path $ResourceRoot)) { throw "resources folder not found. Hotspot UI cannot be bundled." }
@@ -143,7 +158,11 @@ $BundledApk = Join-Path $BundleDist "MIBU.apk"
 $BundledExe = Join-Path $BundleApp "MIBU-PC-Helper.exe"
 if (-not (Test-Path $BundledApk) -or (Get-Item $BundledApk).Length -le 0) { throw "MIBU.apk missing or empty in final release bundle." }
 if (-not (Test-Path $BundledExe) -or (Get-Item $BundledExe).Length -le 0) { throw "MIBU-PC-Helper.exe missing or empty in final release bundle." }
-Write-Host "Release APK and hotspot assets verified." -ForegroundColor Green
+foreach ($requiredTool in @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")) {
+    $bundledTool = Join-Path $BundlePlatformTools $requiredTool
+    if (-not (Test-Path $bundledTool) -or (Get-Item $bundledTool).Length -le 0) { throw "Bundled platform-tool missing or empty: $bundledTool" }
+}
+Write-Host "Release EXE, APK, platform-tools and hotspot assets verified." -ForegroundColor Green
 
 $AudioRoots = @(
     (Join-Path $Root "resources\expected ui"),
