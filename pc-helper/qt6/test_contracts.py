@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 import mibu_actions
 import mibu_pc_helper_v2
+import mibu_status
 from ui_geometry import SCREENS
 
 
@@ -22,12 +23,37 @@ class DeviceParsingTests(unittest.TestCase):
     def test_parse_empty_device_list(self) -> None:
         self.assertEqual(("", "none"), mibu_actions.parse_device_state("List of devices attached\n\n"))
 
+    def test_parse_multiple_devices_without_daemon_noise(self) -> None:
+        output = "* daemon started successfully *\nList of devices attached\nABC123\tdevice\nXYZ999\toffline\n"
+        self.assertEqual([("ABC123", "device"), ("XYZ999", "offline")], mibu_actions.parse_devices(output))
+
     def test_token_encoding_is_url_safe_and_reversible(self) -> None:
         original = "abc+/= token value\nwith symbols"
         encoded = mibu_actions._encode_token(original)
         self.assertNotIn("\n", encoded)
         decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
         self.assertEqual(original, decoded)
+
+
+class PhoneStatusTests(unittest.TestCase):
+    def test_status_parser_accepts_proof_line(self) -> None:
+        line = "I/MIBU_STATUS: STATUS captures=READY verification=WAITING_ARMED community=COMMUNITY_ROUTE_UNKNOWN lanes=1:ARMED,2:ARMED,3:ARMED,4:ARMED"
+        status = mibu_status._parse_status(line)
+        self.assertIsNotNone(status)
+        assert status is not None
+        self.assertTrue(status.captures_ready)
+        self.assertFalse(status.timing_complete)
+        self.assertEqual("WAITING_ARMED", status.verification)
+
+    def test_timing_complete_only_accepts_completion_states(self) -> None:
+        line = "STATUS captures=READY verification=TIMING_WINDOW_REACHED community=COMMUNITY_DEVICE_CONFIRMED lanes=1:WINDOW_REACHED,2:WINDOW_REACHED,3:WINDOW_REACHED,4:WINDOW_REACHED"
+        status = mibu_status._parse_status(line)
+        self.assertIsNotNone(status)
+        assert status is not None
+        self.assertTrue(status.timing_complete)
+
+    def test_status_parser_rejects_unrelated_log(self) -> None:
+        self.assertIsNone(mibu_status._parse_status("I/Other: hello"))
 
 
 class TimingTests(unittest.TestCase):
