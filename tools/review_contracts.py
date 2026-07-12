@@ -43,6 +43,7 @@ def main() -> int:
     require_text(
         "android/app/src/main/AndroidManifest.xml",
         "android.permission.WAKE_LOCK",
+        "android.permission.DUMP",
         ".CommunityCheckActivity",
         ".TokenImportActivity",
         ".StartWaitingActivity",
@@ -65,8 +66,10 @@ def main() -> int:
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MainActivity.kt",
         "uiHandler.postDelayed(this, 1000L)",
-        '"Armed • 4 lanes"',
+        '"Armed • $reached/4 windows reached"',
+        '"Timing Stage", "COMPLETE"',
         "Details stay in Logs",
+        "MIBU confirms timing state only",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/TokenStore.kt",
