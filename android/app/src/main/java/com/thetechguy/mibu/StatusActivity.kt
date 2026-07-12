@@ -10,11 +10,12 @@ class StatusActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val nonce = ProofNonce.from(intent)
         stateStore.reconcileTimingState()
         val laneStates = stateStore.lanes().joinToString(",") { "${it.number}:${it.status.name}" }
         val message = buildString {
-            append("STATUS ")
-            append("captures=").append(if (tokenStore.hasRequiredCaptures()) "READY" else "NOT_READY")
+            append("STATUS nonce=").append(nonce)
+            append(" captures=").append(if (tokenStore.hasRequiredCaptures()) "READY" else "NOT_READY")
             append(" verification=").append(stateStore.verificationState().name)
             append(" community=").append(stateStore.communityState().name)
             append(" lanes=").append(laneStates)
