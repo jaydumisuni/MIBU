@@ -22,6 +22,7 @@ class MibuForegroundService : Service() {
     private val callbacks = mutableListOf<Runnable>()
     private var wakeLock: PowerManager.WakeLock? = null
     private var reachedCount = 0
+    private var proofNonce = "none"
 
     override fun onCreate() {
         super.onCreate()
@@ -29,6 +30,7 @@ class MibuForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        proofNonce = ProofNonce.from(intent)
         return try {
             callbacks.forEach(handler::removeCallbacks)
             callbacks.clear()
@@ -41,19 +43,19 @@ class MibuForegroundService : Service() {
                 reconciled == VerificationState.TIMING_WINDOW_REACHED ||
                     reconciled == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> {
                     startForeground(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
-                    Log.i(LOG_TAG, "WAITING_SERVICE_RECOVERED_COMPLETE state=${reconciled.name} reached=$reachedCount")
+                    Log.i(LOG_TAG, "WAITING_SERVICE_RECOVERED_COMPLETE state=${reconciled.name} reached=$reachedCount nonce=$proofNonce")
                     handler.postDelayed({ stopSelf() }, 15_000L)
                     START_NOT_STICKY
                 }
 
                 isAuthoritativeResult(reconciled) -> {
-                    Log.i(LOG_TAG, "WAITING_SERVICE_NOT_NEEDED state=${reconciled.name}")
+                    Log.i(LOG_TAG, "WAITING_SERVICE_NOT_NEEDED state=${reconciled.name} nonce=$proofNonce")
                     stopSelf(startId)
                     START_NOT_STICKY
                 }
 
                 !tokenStore.hasRequiredCaptures() -> {
-                    Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_MISSING_CAPTURES")
+                    Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_MISSING_CAPTURES nonce=$proofNonce")
                     stateStore.setVerificationState(VerificationState.UNKNOWN)
                     stopSelf(startId)
                     START_NOT_STICKY
@@ -72,7 +74,7 @@ class MibuForegroundService : Service() {
                     }
                     val latestDelay = delays.values.maxOrNull() ?: 0L
                     if (latestDelay > tokenStore.millisRemaining()) {
-                        Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY latestDelayMs=$latestDelay")
+                        Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY latestDelayMs=$latestDelay nonce=$proofNonce")
                         stateStore.setVerificationState(VerificationState.UNKNOWN)
                         stopSelf(startId)
                         START_NOT_STICKY
@@ -86,14 +88,14 @@ class MibuForegroundService : Service() {
                         }
                         Log.i(
                             LOG_TAG,
-                            "WAITING_SERVICE_ARMED targetMidnight=${targetMidnight.toInstant().toEpochMilli()} lanes=${armedLanes.joinToString(",") { it.number.toString() }} latestDelayMs=$latestDelay"
+                            "WAITING_SERVICE_ARMED targetMidnight=${targetMidnight.toInstant().toEpochMilli()} lanes=${armedLanes.joinToString(",") { it.number.toString() }} latestDelayMs=$latestDelay nonce=$proofNonce"
                         )
                         START_NOT_STICKY
                     }
                 }
             }
         } catch (exc: Exception) {
-            Log.e(LOG_TAG, "WAITING_SERVICE_FAILED", exc)
+            Log.e(LOG_TAG, "WAITING_SERVICE_FAILED nonce=$proofNonce", exc)
             val current = stateStore.verificationState()
             if (current != VerificationState.TIMING_WINDOW_REACHED &&
                 current != VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION &&
@@ -121,11 +123,11 @@ class MibuForegroundService : Service() {
         if (reachedCount >= MibuLane.defaultLanes().size) {
             stateStore.setVerificationState(VerificationState.TIMING_WINDOW_REACHED)
             manager.notify(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
-            Log.i(LOG_TAG, "WAITING_SERVICE_COMPLETE reached=$reachedCount")
+            Log.i(LOG_TAG, "WAITING_SERVICE_COMPLETE reached=$reachedCount nonce=$proofNonce")
             handler.postDelayed({ stopSelf() }, 15_000L)
         } else {
             manager.notify(NOTIFICATION_ID, buildNotification("Waiting armed • $reachedCount/4 timing windows reached"))
-            Log.i(LOG_TAG, "WAITING_LANE_REACHED lane=$laneNumber reached=$reachedCount")
+            Log.i(LOG_TAG, "WAITING_LANE_REACHED lane=$laneNumber reached=$reachedCount nonce=$proofNonce")
         }
     }
 
