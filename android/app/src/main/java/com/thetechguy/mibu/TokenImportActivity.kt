@@ -10,6 +10,7 @@ import android.widget.EditText
 
 class TokenImportActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
+    private val proofNonce by lazy { ProofNonce.from(intent) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,20 +24,20 @@ class TokenImportActivity : Activity() {
 
         if (TokenStore.isAcceptableToken(serviceToken) && TokenStore.isAcceptableToken(popToken)) {
             tokenStore.saveCaptures(serviceToken, popToken)
-            Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED")
+            Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED nonce=$proofNonce")
             showImported("Two captures imported", "Firefox service token and Chrome pop token were received. MIBU populated slots 1/3 and 2/4 automatically.")
             return
         }
 
         if (TokenStore.isAcceptableToken(pushedToken)) {
             tokenStore.saveSession(pushedToken)
-            Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED")
+            Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED nonce=$proofNonce")
             showImported("Service token imported", "A single token/session was received and saved as the Firefox/service capture. Chrome pop token is still missing, so waiting cannot be armed yet.")
             return
         }
 
         if (hasAnyImportExtra()) {
-            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_CAPTURE")
+            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_CAPTURE nonce=$proofNonce")
         }
         showManualImport()
     }
@@ -54,13 +55,13 @@ class TokenImportActivity : Activity() {
         val encoded = intent?.getStringExtra(name)?.trim().orEmpty()
         if (encoded.isBlank()) return ""
         if (encoded.length > MAX_ENCODED_EXTRA_LENGTH) {
-            Log.w(LOG_TAG, "IMPORT_REJECTED_OVERSIZE_BASE64 name=$name length=${encoded.length}")
+            Log.w(LOG_TAG, "IMPORT_REJECTED_OVERSIZE_BASE64 name=$name length=${encoded.length} nonce=$proofNonce")
             return ""
         }
         return runCatching {
             String(Base64.decode(encoded, Base64.URL_SAFE or Base64.NO_WRAP), Charsets.UTF_8).trim()
         }.onFailure {
-            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_BASE64 name=$name")
+            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_BASE64 name=$name nonce=$proofNonce")
         }.getOrDefault("")
     }
 
@@ -96,7 +97,7 @@ class TokenImportActivity : Activity() {
                         tokenStore.saveCaptures(service, pop)
                         serviceInput.text?.clear()
                         popInput.text?.clear()
-                        Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED_MANUALLY")
+                        Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED_MANUALLY nonce=$proofNonce")
                         startActivity(android.content.Intent(this@TokenImportActivity, MainActivity::class.java))
                         finish()
                     }
@@ -109,7 +110,7 @@ class TokenImportActivity : Activity() {
                 } else {
                     tokenStore.saveServiceToken(service)
                     serviceInput.text?.clear()
-                    Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED_MANUALLY")
+                    Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED_MANUALLY nonce=$proofNonce")
                     startActivity(android.content.Intent(this@TokenImportActivity, MainActivity::class.java))
                     finish()
                 }
@@ -118,7 +119,7 @@ class TokenImportActivity : Activity() {
                 tokenStore.clear()
                 serviceInput.text?.clear()
                 popInput.text?.clear()
-                Log.i(LOG_TAG, "CAPTURES_CLEARED")
+                Log.i(LOG_TAG, "CAPTURES_CLEARED nonce=$proofNonce")
             })
             addView(mibuButton("Back") { finish() })
             addView(footer())
