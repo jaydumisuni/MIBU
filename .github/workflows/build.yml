@@ -25,7 +25,7 @@ jobs:
         run: python tools/review_contracts.py
 
   android:
-    name: Android compile and timing tests
+    name: Android lint, unit tests and APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,8 +36,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Run Android unit tests
-        run: gradle :android:app:testDebugUnitTest
+      - name: Run Android lint and unit tests
+        run: gradle :android:app:lintDebug :android:app:testDebugUnitTest
       - name: Assemble debug APK
         run: gradle :android:app:assembleDebug
       - name: Verify APK artifact exists
@@ -60,7 +60,7 @@ jobs:
           python-version: '3.12'
       - name: Install Qt requirements
         run: python -m pip install -r pc-helper/qt6/requirements.txt
-      - name: Compile active sources
+      - name: Compile active sources and tests
         run: |
           python -m py_compile pc-helper/mibu_pc_helper.py
           python -m py_compile pc-helper/qt6/mibu_actions.py
@@ -72,11 +72,12 @@ jobs:
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v2.py
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v3.py
           python -m py_compile pc-helper/qt6/test_contracts.py
+          python -m py_compile pc-helper/qt6/test_install_contracts.py
           python -m py_compile tools/review_contracts.py
           python -m py_compile tools/validate_android_ui_baseline.py
-      - name: Run PC helper unit tests
+      - name: Run all PC helper unit tests
         working-directory: pc-helper/qt6
-        run: python -m unittest -v test_contracts.py
+        run: python -m unittest discover -v
       - name: Validate restored Android expected UI
         run: python tools/validate_android_ui_baseline.py
       - name: Validate hotspot artwork against shared click contract
@@ -101,12 +102,14 @@ jobs:
           os.environ['QT_QPA_PLATFORM'] = 'offscreen'
           sys.path.insert(0, 'pc-helper/qt6')
           from PySide6.QtWidgets import QApplication
+          import mibu_actions
           import mibu_pc_helper_v2 as base
           import mibu_pc_helper_v3 as mibu
           from ui_geometry import SCREENS
           target = base.next_target()
           assert target.tzinfo is not None
           assert (target.hour, target.minute, target.second, target.microsecond) == (23, 59, 58, 600000)
+          assert mibu_actions.EXPECTED_APP_VERSION == '0.2.0-dev'
           app = QApplication([])
           window = mibu.Window()
           assert set(window.buttons) == set(SCREENS['main'].hotspots)
@@ -116,7 +119,7 @@ jobs:
           assert window.minimumHeight() >= 600
           window.close()
           app.quit()
-          print('Qt v3 construction, geometry, icon and timing proof passed')
+          print('Qt v3 construction, geometry, icon, version and timing proof passed')
           PY
       - name: CLI time smoke test
         run: python pc-helper/mibu_pc_helper.py time
@@ -160,7 +163,8 @@ jobs:
             "$root\resources\expected ui\pc\mibu_app_icon.png",
             "$root\resources\expected ui\pc\mibu_app_icon.ico",
             "$root\resources\expected ui\android\approved_android_ui_baseline_sheet.svg",
-            "$root\resources\expected ui\android\README.md"
+            "$root\resources\expected ui\android\README.md",
+            "$root\SHA256SUMS.txt"
           )
           foreach ($path in $required) {
             if (-not (Test-Path $path)) { throw "Release contract missing: $path" }
