@@ -27,6 +27,12 @@
             android:exported="true"
             android:permission="android.permission.DUMP"
             android:excludeFromRecents="true" />
+        <activity
+            android:name=".StatusActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
