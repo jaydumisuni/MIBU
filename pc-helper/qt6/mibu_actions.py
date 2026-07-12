@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import shutil
 import subprocess
@@ -144,6 +145,10 @@ def launch_phone_app() -> Result:
     return run_tool(['shell', 'monkey', '-p', APP_PACKAGE, '1'])
 
 
+def _encode_token(value: str) -> str:
+    return base64.urlsafe_b64encode(value.encode('utf-8')).decode('ascii').rstrip('=')
+
+
 def push_session_to_phone(token: str) -> Result:
     token = token.strip()
     if len(token) < 8:
@@ -151,7 +156,10 @@ def push_session_to_phone(token: str) -> Result:
     ready = check_device_ready()
     if not ready.ok:
         return ready
-    return run_tool(['shell', 'am', 'start', '-n', TOKEN_ENTRY, '--es', 'mibu_session_token', token], timeout=30)
+    return run_tool([
+        'shell', 'am', 'start', '-n', TOKEN_ENTRY,
+        '--es', 'mibu_session_token_b64', _encode_token(token),
+    ], timeout=30)
 
 
 def push_two_tokens_to_phone(service_token: str, pop_token: str) -> Result:
@@ -166,8 +174,8 @@ def push_two_tokens_to_phone(service_token: str, pop_token: str) -> Result:
         return ready
     return run_tool([
         'shell', 'am', 'start', '-n', TOKEN_ENTRY,
-        '--es', 'mibu_service_token', service_token,
-        '--es', 'mibu_pop_token', pop_token,
+        '--es', 'mibu_service_token_b64', _encode_token(service_token),
+        '--es', 'mibu_pop_token_b64', _encode_token(pop_token),
     ], timeout=30)
 
 
@@ -199,8 +207,7 @@ def fastboot_oem_info() -> Result:
     info = run_fastboot(['oem', 'device-info'], timeout=30)
     if info.ok and info.message:
         return info
-    unlocked = run_fastboot(['getvar', 'unlocked'], timeout=30)
-    return unlocked
+    return run_fastboot(['getvar', 'unlocked'], timeout=30)
 
 
 def package_exists() -> Result:
