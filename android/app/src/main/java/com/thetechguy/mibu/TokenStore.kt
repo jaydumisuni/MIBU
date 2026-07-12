@@ -27,16 +27,17 @@ class TokenStore(context: Context) {
     fun hasPopToken(): Boolean { expireIfStale(); return !prefs.getString(KEY_POP_TOKEN, null).isNullOrBlank() }
     fun hasRequiredCaptures(): Boolean = hasServiceToken() && hasPopToken()
 
-    fun isFresh(): Boolean {
-        val capturedAt = prefs.getLong(KEY_CAPTURED_AT, 0L)
-        return capturedAt > 0L && System.currentTimeMillis() - capturedAt <= MAX_TOKEN_AGE_MS
+    fun capturedAtMs(): Long = prefs.getLong(KEY_CAPTURED_AT, 0L)
+
+    fun millisRemaining(nowMs: Long = System.currentTimeMillis()): Long {
+        val capturedAt = capturedAtMs()
+        if (capturedAt <= 0L) return 0L
+        return (MAX_TOKEN_AGE_MS - (nowMs - capturedAt)).coerceAtLeast(0L)
     }
 
-    fun minutesRemaining(): Long {
-        val capturedAt = prefs.getLong(KEY_CAPTURED_AT, 0L)
-        if (capturedAt <= 0L) return 0L
-        return ((MAX_TOKEN_AGE_MS - (System.currentTimeMillis() - capturedAt)).coerceAtLeast(0L) + 59_999L) / 60_000L
-    }
+    fun isFresh(): Boolean = millisRemaining() > 0L
+
+    fun minutesRemaining(): Long = (millisRemaining() + 59_999L) / 60_000L
 
     fun getSessionPreview(): String {
         expireIfStale()
@@ -63,7 +64,7 @@ class TokenStore(context: Context) {
 
     private fun hasServiceTokenRaw(): Boolean = !prefs.getString(KEY_SERVICE_TOKEN, null).isNullOrBlank()
     private fun expireIfStale() {
-        val capturedAt = prefs.getLong(KEY_CAPTURED_AT, 0L)
+        val capturedAt = capturedAtMs()
         if (capturedAt > 0L && System.currentTimeMillis() - capturedAt > MAX_TOKEN_AGE_MS) clear()
     }
 
@@ -72,6 +73,6 @@ class TokenStore(context: Context) {
         private const val KEY_SERVICE_TOKEN = "service_token"
         private const val KEY_POP_TOKEN = "pop_token"
         private const val KEY_CAPTURED_AT = "captured_at"
-        private const val MAX_TOKEN_AGE_MS = 30L * 60L * 1000L
+        const val MAX_TOKEN_AGE_MS = 30L * 60L * 1000L
     }
 }
