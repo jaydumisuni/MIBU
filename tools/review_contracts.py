@@ -85,6 +85,7 @@ def main() -> int:
         "android/app/src/main/java/com/thetechguy/mibu/MibuStateStore.kt",
         "fun reconcileTimingState", "KEY_TARGET_MIDNIGHT_EPOCH_MS", "waitingTargetMidnight()",
         "VerificationState.TIMING_WINDOW_REACHED", "LaneStatus.WINDOW_REACHED",
+        "isAuthoritativeResult()", "completeVerification", "Unknown lane number",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuForegroundService.kt",
@@ -138,14 +139,15 @@ def main() -> int:
     )
     require_text(
         "pc-helper/qt6/ui_geometry.py",
+        "POPUP_CLOSE_RECT = (925, 30, 50, 50)", "POPUP_CLOSE_ART_BOUNDS = (930, 35, 40, 40)",
         '"Device Check": (300, 668, 205, 84)',
         '"Paste Two Tokens": (620, 585, 300, 56)',
         '"Verify Fastboot": (540, 560, 230, 56)',
     )
     require_text(
         "pc-helper/qt6/validate_ui_contract.py",
-        "from ui_geometry import SCREENS", "tolerance: int = 2", "visible close affordance",
-        "close affordances align and active glow is not baked in",
+        "POPUP_CLOSE_ART_BOUNDS, POPUP_CLOSE_RECT, SCREENS", "tolerance: int = 2",
+        "def contains", "visible close artwork is fully clickable",
     )
     require_text(
         "pc-helper/qt6/render_svg_assets.py",
@@ -157,6 +159,7 @@ def main() -> int:
     )
     require_text(
         "pc-helper/qt6/mibu_pc_helper_v3.py",
+        "class WorkflowDialog(V2WorkflowDialog)", "POPUP_CLOSE_RECT", "base_ui.WorkflowDialog = WorkflowDialog",
         "class Window(V2Window)", "query_phone_status", "captures_ready", "timing_complete",
         "mibu_app_icon.png", "Phone timing proof is not complete yet",
     )
