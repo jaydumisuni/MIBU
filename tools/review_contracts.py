@@ -63,6 +63,7 @@ def main() -> int:
         "android/app/src/main/java/com/thetechguy/mibu/MainActivity.kt",
         "uiHandler.postDelayed(this, 1000L)", '"Armed • $reached/4 windows reached"',
         '"Timing Stage", "COMPLETE"', "Details stay in Logs", "MIBU confirms timing state only",
+        "stateStore.reconcileTimingState(nowChina)", "stateStore.waitingTargetMidnight()",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/TokenStore.kt",
@@ -77,17 +78,28 @@ def main() -> int:
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/StartWaitingActivity.kt",
-        "if (!tokenStore.hasRequiredCaptures())", "waitMs > freshnessMs", "VerificationState.WAITING_ARMED",
+        "if (!tokenStore.hasRequiredCaptures())", "waitMs > freshnessMs", "stateStore.armWaiting(targetMidnight)",
         "WAITING_ACTIVITY_STARTED", "WAITING_REJECTED_TOKEN_EXPIRY",
+    )
+    require_text(
+        "android/app/src/main/java/com/thetechguy/mibu/MibuStateStore.kt",
+        "fun reconcileTimingState", "KEY_TARGET_MIDNIGHT_EPOCH_MS", "waitingTargetMidnight()",
+        "VerificationState.TIMING_WINDOW_REACHED", "LaneStatus.WINDOW_REACHED",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuForegroundService.kt",
         "handler.postDelayed(callback", "LaneStatus.WINDOW_REACHED", "VerificationState.TIMING_WINDOW_REACHED",
-        "PowerManager.PARTIAL_WAKE_LOCK", "START_NOT_STICKY",
+        "PowerManager.PARTIAL_WAKE_LOCK", "START_NOT_STICKY", "stateStore.reconcileTimingState(nowChina)",
+        "waitingTargetMidnight()", "remaining timing windows",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/StatusActivity.kt",
-        'append("captures=")', 'append(" verification=")', 'append(" lanes=")', '"MIBU_STATUS"',
+        "stateStore.reconcileTimingState()", 'append("captures=")', 'append(" verification=")',
+        'append(" lanes=")', '"MIBU_STATUS"',
+    )
+    require_text(
+        "android/app/src/main/java/com/thetechguy/mibu/LogsActivity.kt",
+        "stateStore.reconcileTimingState()", 'mibuCard("Persisted target"',
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuUiHelpers.kt",
@@ -132,11 +144,16 @@ def main() -> int:
     )
     require_text(
         "pc-helper/qt6/validate_ui_contract.py",
-        "from ui_geometry import SCREENS", "tolerance: int = 2", "no baked active glow",
+        "from ui_geometry import SCREENS", "tolerance: int = 2", "visible close affordance",
+        "close affordances align and active glow is not baked in",
     )
     require_text(
         "pc-helper/qt6/render_svg_assets.py",
         "from ui_geometry import SCREENS", "render_icon", "mibu_app_icon.ico", "Expected exactly five required UI screens",
+    )
+    require_text(
+        "pc-helper/qt6/test_contracts.py",
+        "class DeviceParsingTests", "class PhoneStatusTests", "class TimingTests", "class GeometryTests",
     )
     require_text(
         "pc-helper/qt6/mibu_pc_helper_v3.py",
