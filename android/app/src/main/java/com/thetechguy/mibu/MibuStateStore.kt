@@ -1,6 +1,8 @@
 package com.thetechguy.mibu
 
 import android.content.Context
+import java.time.Instant
+import java.time.ZonedDateTime
 
 class MibuStateStore(context: Context) {
     private val prefs = context.getSharedPreferences("mibu_state", Context.MODE_PRIVATE)
@@ -25,13 +27,25 @@ class MibuStateStore(context: Context) {
             .getOrDefault(VerificationState.NOT_STARTED)
     }
 
-    fun armWaiting() {
+    fun armWaiting(targetMidnight: ZonedDateTime) {
+        require(targetMidnight.zone == MibuLane.CHINA_ZONE) { "Waiting target must use Asia/Shanghai" }
         val edit = prefs.edit()
         MibuLane.defaultLanes().forEach { lane ->
             edit.putString(laneKey(lane.number), LaneStatus.ARMED.name)
         }
-        edit.putString(KEY_VERIFY, VerificationState.NOT_STARTED.name)
+        edit.putLong(KEY_TARGET_MIDNIGHT_EPOCH_MS, targetMidnight.toInstant().toEpochMilli())
+        edit.putString(KEY_VERIFY, VerificationState.WAITING_ARMED.name)
         edit.apply()
+    }
+
+    fun waitingTargetMidnight(): ZonedDateTime? {
+        val epochMs = prefs.getLong(KEY_TARGET_MIDNIGHT_EPOCH_MS, 0L)
+        if (epochMs <= 0L) return null
+        return Instant.ofEpochMilli(epochMs).atZone(MibuLane.CHINA_ZONE)
+    }
+
+    fun clearWaitingTarget() {
+        prefs.edit().remove(KEY_TARGET_MIDNIGHT_EPOCH_MS).apply()
     }
 
     fun setLaneStatus(laneNumber: Int, status: LaneStatus) {
@@ -43,9 +57,7 @@ class MibuStateStore(context: Context) {
         return runCatching { LaneStatus.valueOf(raw ?: LaneStatus.PENDING.name) }.getOrDefault(LaneStatus.PENDING)
     }
 
-    fun lanes(): List<MibuLane> {
-        return MibuLane.defaultLanes().map { it.copy(status = laneStatus(it.number)) }
-    }
+    fun lanes(): List<MibuLane> = MibuLane.defaultLanes().map { it.copy(status = laneStatus(it.number)) }
 
     fun laneSummary(): String = lanes().joinToString("\n") { it.summary() }
 
@@ -56,6 +68,7 @@ class MibuStateStore(context: Context) {
     companion object {
         private const val KEY_COMMUNITY = "community_state"
         private const val KEY_VERIFY = "verification_state"
+        private const val KEY_TARGET_MIDNIGHT_EPOCH_MS = "target_midnight_epoch_ms"
         private fun laneKey(number: Int): String = "lane_${number}_status"
     }
 }
