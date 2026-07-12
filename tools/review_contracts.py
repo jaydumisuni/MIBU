@@ -83,12 +83,17 @@ def main() -> int:
         "mibu_service_token_b64",
         "mibu_pop_token_b64",
         "Base64.URL_SAFE or Base64.NO_WRAP",
+        "TWO_CAPTURES_IMPORTED",
+        "SERVICE_CAPTURE_IMPORTED",
+        "TYPE_TEXT_VARIATION_PASSWORD",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/StartWaitingActivity.kt",
         "if (!tokenStore.hasRequiredCaptures())",
         "waitMs > freshnessMs",
         "VerificationState.WAITING_ARMED",
+        "WAITING_ACTIVITY_STARTED",
+        "WAITING_REJECTED_TOKEN_EXPIRY",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuForegroundService.kt",
@@ -129,6 +134,9 @@ def main() -> int:
         "def push_two_tokens_to_phone",
         "mibu_service_token_b64",
         "base64.urlsafe_b64encode",
+        "def _wait_for_log_marker",
+        "TWO_CAPTURES_IMPORTED",
+        "WAITING_ACTIVITY_STARTED",
         "def reboot_to_fastboot",
         "def check_fastboot_ready(wait_seconds: int = 30)",
         "time.monotonic()",
@@ -136,7 +144,7 @@ def main() -> int:
     require_text(
         "pc-helper/qt6/ui_geometry.py",
         '"Device Check": (300, 668, 205, 84)',
-        '"Paste Two Tokens": (620, 539, 300, 56)',
+        '"Paste Two Tokens": (620, 585, 300, 56)',
         '"Verify Fastboot": (540, 560, 230, 56)',
     )
     require_text(
