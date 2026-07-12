@@ -141,9 +141,9 @@ jobs:
         with:
           name: MIBU-debug-apk
           path: android/app/build/outputs/apk/debug
-      - name: Build complete release
+      - name: Build complete release from current CI artifact
         shell: powershell
-        run: .\pc-helper\build_windows.ps1
+        run: .\pc-helper\build_windows.ps1 -UseExistingApk
       - name: Verify release contract
         shell: powershell
         run: |
