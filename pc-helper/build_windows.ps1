@@ -63,12 +63,9 @@ if (-not (Test-Path $ResolvedApk)) {
     if (-not $AndroidSdk) {
         throw "Android APK is missing and Android SDK was not found. Set ANDROID_SDK_ROOT/ANDROID_HOME or install it at D:\mibu-build-tools\android-sdk."
     }
-
     $LocalProperties = Join-Path $Root "local.properties"
     $EscapedSdk = $AndroidSdk.Replace('\', '\\')
     Set-Content -Path $LocalProperties -Value "sdk.dir=$EscapedSdk" -Encoding ASCII
-    Write-Host "Android APK missing. Building with $GradlePath" -ForegroundColor Cyan
-    Write-Host "Android SDK: $AndroidSdk" -ForegroundColor Cyan
     Push-Location $Root
     try {
         & $GradlePath :android:app:testDebugUnitTest :android:app:assembleDebug --stacktrace
@@ -93,7 +90,7 @@ foreach ($requiredTool in $RequiredPlatformTools) {
     }
 }
 
-Write-Host "Validating and rendering deterministic hotspot UI assets..." -ForegroundColor Cyan
+Write-Host "Validating and rendering deterministic branded UI assets..." -ForegroundColor Cyan
 python (Join-Path $HelperDir "validate_ui_contract.py")
 if ($LASTEXITCODE -ne 0) { throw "UI contract validation failed with exit code $LASTEXITCODE" }
 python (Join-Path $HelperDir "render_svg_assets.py")
@@ -104,22 +101,25 @@ $RequiredUi = @(
     (Join-Path $Root "resources\expected ui\pc\02_popup_device_check_guide.png"),
     (Join-Path $Root "resources\expected ui\pc\03_popup_install_apk.png"),
     (Join-Path $Root "resources\expected ui\pc\04_popup_login_get_token.png"),
-    (Join-Path $Root "resources\expected ui\pc\05_popup_phone_guide.png")
+    (Join-Path $Root "resources\expected ui\pc\05_popup_phone_guide.png"),
+    (Join-Path $Root "resources\expected ui\pc\mibu_app_icon.png"),
+    (Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico")
 )
 foreach ($asset in $RequiredUi) {
     if (-not (Test-Path $asset) -or (Get-Item $asset).Length -le 0) {
-        throw "Required hotspot UI asset missing or empty: $asset"
+        throw "Required branded UI asset missing or empty: $asset"
     }
 }
-Write-Host "Hotspot UI assets verified." -ForegroundColor Green
+$IconPath = Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico"
+Write-Host "Hotspot UI and application icon verified." -ForegroundColor Green
 
 $env:QT_QPA_PLATFORM = "offscreen"
 Push-Location $HelperDir
 try {
     python -m unittest -v test_contracts.py
     if ($LASTEXITCODE -ne 0) { throw "PC helper unit tests failed with exit code $LASTEXITCODE" }
-    python -c "import mibu_pc_helper_v2; assert mibu_pc_helper_v2.next_target().tzinfo is not None; print('MIBU v2 import/math smoke check passed')"
-    if ($LASTEXITCODE -ne 0) { throw "MIBU v2 source smoke check failed" }
+    python -c "import mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; print('MIBU v3 import/proof-gate smoke check passed')"
+    if ($LASTEXITCODE -ne 0) { throw "MIBU v3 source smoke check failed" }
 } finally {
     Pop-Location
     Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
@@ -131,7 +131,7 @@ New-Item -ItemType Directory -Path $BundleDir | Out-Null
 
 Push-Location $HelperDir
 try {
-    python -m PyInstaller --noconfirm --windowed --name "MIBU-PC-Helper" --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v2.py"
+    python -m PyInstaller --noconfirm --windowed --name "MIBU-PC-Helper" --icon $IconPath --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v3.py"
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 } finally {
     Pop-Location
@@ -155,13 +155,12 @@ $ResourceRoot = Join-Path $Root "resources"
 if (-not (Test-Path $ResourceRoot)) { throw "resources folder not found. Hotspot UI cannot be bundled." }
 $BundleResources = Join-Path $BundleApp "resources"
 Copy-Item $ResourceRoot $BundleResources -Recurse -Force
-Write-Host "Bundled resources: $ResourceRoot" -ForegroundColor Green
 
 foreach ($asset in $RequiredUi) {
     $relative = $asset.Substring($ResourceRoot.Length).TrimStart('\')
     $bundled = Join-Path $BundleResources $relative
     if (-not (Test-Path $bundled) -or (Get-Item $bundled).Length -le 0) {
-        throw "Required hotspot UI asset missing or empty from release bundle: $bundled"
+        throw "Required branded asset missing or empty from release bundle: $bundled"
     }
 }
 $FinalRequired = @(
@@ -176,7 +175,7 @@ foreach ($path in $FinalRequired) {
         throw "Final release file missing or empty: $path"
     }
 }
-Write-Host "Release EXE, APK, platform-tools and hotspot assets verified." -ForegroundColor Green
+Write-Host "Release EXE, APK, icon, platform-tools and hotspot assets verified." -ForegroundColor Green
 
 $AudioRoots = @(
     (Join-Path $Root "resources\expected ui"),
@@ -189,7 +188,6 @@ foreach ($name in @("TTG_v4_clean_connected_success.wav", "TTG_v4_clean_speaker_
         $candidate = Join-Path $dir $name
         if (Test-Path $candidate) {
             Copy-Item $candidate (Join-Path $BundleDist $name) -Force
-            Write-Host "Bundled audio: $candidate" -ForegroundColor Green
             $found = $true
             break
         }
