@@ -1,6 +1,7 @@
 package com.thetechguy.mibu
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import java.time.ZonedDateTime
 
@@ -21,7 +22,10 @@ class LogsActivity : Activity() {
             addView(mibuCard("Verification state", stateStore.verificationState().name))
             addView(mibuCard("Timing", "Opened logs at ${ZonedDateTime.now()}"))
             addView(mibuCard("Reminder", "Logs show local stored state only. Final Mi Unlock result must be confirmed through the PC helper / official Mi Unlock Tool path."))
-            addView(mibuButton("Back", true) { finish() })
+            addView(mibuButton("Record Official Mi Unlock Result", true) {
+                startActivity(Intent(this@LogsActivity, VerificationResultActivity::class.java))
+            })
+            addView(mibuButton("Back") { finish() })
             addView(footer())
         }
     }
