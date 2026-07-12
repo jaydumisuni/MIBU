@@ -33,31 +33,46 @@ class MibuForegroundService : Service() {
             callbacks.forEach(handler::removeCallbacks)
             callbacks.clear()
 
-            if (!tokenStore.hasRequiredCaptures()) {
-                Log.w(LOG_TAG, "Fresh Firefox + Chrome captures are not available; waiting service stopping")
-                stateStore.setVerificationState(VerificationState.UNKNOWN)
-                stopSelf(startId)
-                START_NOT_STICKY
-            } else {
-                val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
-                val targetMidnight = stateStore.waitingTargetMidnight()
-                    ?: throw IllegalStateException("Waiting target midnight was not persisted")
+            val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
+            val reconciled = stateStore.reconcileTimingState(nowChina)
+            reachedCount = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
 
-                val reconciled = stateStore.reconcileTimingState(nowChina)
-                reachedCount = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
-                if (reconciled == VerificationState.TIMING_WINDOW_REACHED) {
+            when {
+                reconciled == VerificationState.TIMING_WINDOW_REACHED ||
+                    reconciled == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> {
                     startForeground(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
-                    Log.i(LOG_TAG, "Recovered completed timing-window state")
+                    Log.i(LOG_TAG, "WAITING_SERVICE_RECOVERED_COMPLETE state=${reconciled.name} reached=$reachedCount")
                     handler.postDelayed({ stopSelf() }, 15_000L)
                     START_NOT_STICKY
-                } else {
+                }
+
+                reconciled == VerificationState.UNLOCKED -> {
+                    Log.i(LOG_TAG, "WAITING_SERVICE_NOT_NEEDED state=UNLOCKED")
+                    stopSelf(startId)
+                    START_NOT_STICKY
+                }
+
+                !tokenStore.hasRequiredCaptures() -> {
+                    Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_MISSING_CAPTURES")
+                    stateStore.setVerificationState(VerificationState.UNKNOWN)
+                    stopSelf(startId)
+                    START_NOT_STICKY
+                }
+
+                else -> {
+                    val targetMidnight = stateStore.waitingTargetMidnight()
+                        ?: throw IllegalStateException("Waiting target midnight was not persisted")
                     val armedLanes = stateStore.lanes().filter { it.status == LaneStatus.ARMED }
+                    if (armedLanes.isEmpty()) {
+                        throw IllegalStateException("No armed timing lanes remain for an incomplete waiting state")
+                    }
+
                     val delays = armedLanes.associateWith { lane ->
                         Duration.between(nowChina, lane.targetTimeForMidnight(targetMidnight)).toMillis().coerceAtLeast(0L)
                     }
                     val latestDelay = delays.values.maxOrNull() ?: 0L
                     if (latestDelay > tokenStore.millisRemaining()) {
-                        Log.w(LOG_TAG, "Tokens expire before latest timing window; stopping")
+                        Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY latestDelayMs=$latestDelay")
                         stateStore.setVerificationState(VerificationState.UNKNOWN)
                         stopSelf(startId)
                         START_NOT_STICKY
@@ -69,14 +84,23 @@ class MibuForegroundService : Service() {
                             callbacks += callback
                             handler.postDelayed(callback, delays.getValue(lane))
                         }
-                        Log.i(LOG_TAG, "Waiting service scheduled ${armedLanes.size} remaining timing windows")
+                        Log.i(
+                            LOG_TAG,
+                            "WAITING_SERVICE_ARMED targetMidnight=${targetMidnight.toInstant().toEpochMilli()} lanes=${armedLanes.joinToString(",") { it.number.toString() }} latestDelayMs=$latestDelay"
+                        )
                         START_NOT_STICKY
                     }
                 }
             }
         } catch (exc: Exception) {
-            Log.e(LOG_TAG, "Waiting service failed", exc)
-            stateStore.setVerificationState(VerificationState.UNKNOWN)
+            Log.e(LOG_TAG, "WAITING_SERVICE_FAILED", exc)
+            val current = stateStore.verificationState()
+            if (current != VerificationState.TIMING_WINDOW_REACHED &&
+                current != VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION &&
+                current != VerificationState.UNLOCKED
+            ) {
+                stateStore.setVerificationState(VerificationState.UNKNOWN)
+            }
             stopSelf(startId)
             START_NOT_STICKY
         }
@@ -89,11 +113,11 @@ class MibuForegroundService : Service() {
         if (reachedCount >= MibuLane.defaultLanes().size) {
             stateStore.setVerificationState(VerificationState.TIMING_WINDOW_REACHED)
             manager.notify(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
-            Log.i(LOG_TAG, "All four timing windows reached")
+            Log.i(LOG_TAG, "WAITING_SERVICE_COMPLETE reached=$reachedCount")
             handler.postDelayed({ stopSelf() }, 15_000L)
         } else {
             manager.notify(NOTIFICATION_ID, buildNotification("Waiting armed • $reachedCount/4 timing windows reached"))
-            Log.i(LOG_TAG, "Timing window reached for lane $laneNumber")
+            Log.i(LOG_TAG, "WAITING_LANE_REACHED lane=$laneNumber reached=$reachedCount")
         }
     }
 
