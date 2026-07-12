@@ -117,7 +117,7 @@ def main() -> int:
         "pc-helper/qt6/dependency_check.py", "pc-helper/qt6/ui_geometry.py",
         "pc-helper/qt6/render_svg_assets.py", "pc-helper/qt6/validate_ui_contract.py",
         "pc-helper/qt6/mibu_pc_helper_v2.py", "pc-helper/qt6/mibu_pc_helper_v3.py",
-        "pc-helper/qt6/test_contracts.py",
+        "pc-helper/qt6/test_contracts.py", "tools/validate_android_ui_baseline.py",
     )
     for path in active_python:
         check_python(path)
@@ -163,11 +163,36 @@ def main() -> int:
         "class Window(V2Window)", "query_phone_status", "captures_ready", "timing_complete",
         "mibu_app_icon.png", "Phone timing proof is not complete yet",
     )
+
+    require_text(
+        "resources/expected ui/android/README.md",
+        "approved_android_ui_baseline_sheet.svg", "Recovered source identities",
+        "Welcome / entry", "Dashboard / status", "Dashboard / waiting",
+        "Step-by-step guide", "Approved MIBU logo", "redrawn from memory",
+    )
+    check_svg("resources/expected ui/android/approved_android_ui_baseline_sheet.svg", "720", "560")
+    require_text(
+        "tools/validate_android_ui_baseline.py",
+        "EXPECTED_LABELS", "EXPECTED_SOURCE_HASHES", "MIN_EMBEDDED_IMAGE_BYTES",
+        "expected 5 embedded approved images", "self-contained image data URI",
+        "Android expected-UI baseline validated",
+    )
+    require_text(
+        ".github/workflows/android-ui-baseline.yml",
+        "Validate recovered approved Android UI", "python tools/validate_android_ui_baseline.py",
+        'test -s "resources/expected ui/android/approved_android_ui_baseline_sheet.svg"',
+    )
+    require_text(
+        ".github/workflows/build.yml",
+        "Validate restored approved Android UI baseline", "python tools/validate_android_ui_baseline.py",
+        'resources/expected ui/android/approved_android_ui_baseline_sheet.svg',
+        'resources\\expected ui\\android\\approved_android_ui_baseline_sheet.svg',
+    )
     require_text(
         "pc-helper/build_windows.ps1",
         "Resolve-Gradle", "Resolve-AndroidSdk", "mibu_pc_helper_v3.py", "--icon $IconPath",
-        "validate_ui_contract.py", "python -m unittest -v test_contracts.py",
-        "mibu_app_icon.ico", "Release EXE, APK, icon, platform-tools and hotspot assets verified.",
+        "validate_ui_contract.py", "validate_android_ui_baseline.py", "python -m unittest -v test_contracts.py",
+        "mibu_app_icon.ico", "Android approved baseline", "approved_android_ui_baseline_sheet.svg",
         "Android APK is required for a complete MIBU release", "AdbWinUsbApi.dll",
     )
 
@@ -179,7 +204,7 @@ def main() -> int:
     ):
         check_svg(f"resources/expected ui/pc/{name}", "1000", "700")
 
-    print("MIBU source-contract review passed for proof-gated v3 architecture.")
+    print("MIBU source-contract review passed for proof-gated v3 architecture and restored Android UI baseline.")
     return 0
 
 
