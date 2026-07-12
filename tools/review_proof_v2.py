@@ -28,6 +28,11 @@ def forbid(path: str, *needles: str) -> None:
             raise AssertionError(f"{path} contains forbidden proof-v2 contract: {needle}")
 
 
+def forbid_path(path: str) -> None:
+    if (ROOT / path).exists():
+        raise AssertionError(f"Forbidden duplicate/legacy path exists: {path}")
+
+
 def compile_python(path: str) -> None:
     ast.parse(text(path), filename=path)
 
@@ -38,7 +43,16 @@ def main() -> int:
         'versionName = "0.2.0-dev"',
         "versionCode = 2",
         "JavaVersion.VERSION_17",
+        "buildConfig = true",
     )
+    require(
+        "android/app/src/main/java/com/thetechguy/mibu/MibuUiHelpers.kt",
+        "fun Activity.mibuPage",
+        "fun Activity.mibuCard",
+        "fun Activity.mibuButton",
+        "fun Activity.footer",
+    )
+    forbid_path("android/app/src/main/java/com/thetechguy/mibu/Ui.kt")
     require(
         "android/app/src/main/java/com/thetechguy/mibu/ProofContract.kt",
         "const val VERSION = 2",
@@ -87,11 +101,18 @@ def main() -> int:
     for path in (
         "pc-helper/qt6/mibu_actions.py",
         "pc-helper/qt6/mibu_status.py",
+        "pc-helper/qt6/render_svg_assets.py",
         "pc-helper/qt6/test_contracts.py",
         "pc-helper/qt6/test_install_contracts.py",
     ):
         compile_python(path)
 
+    require(
+        "pc-helper/qt6/render_svg_assets.py",
+        "QGuiApplication",
+        "existing_app = QGuiApplication.instance()",
+        "app = existing_app or QGuiApplication",
+    )
     require(
         "pc-helper/qt6/mibu_status.py",
         "EXPECTED_PROOF_PROTOCOL = 2",
@@ -138,6 +159,7 @@ def main() -> int:
         "python tools/review_proof_v2.py",
         ":android:app:lintDebug",
         "python -m unittest discover -v",
+        "Install Qt runtime libraries",
         ".\\pc-helper\\build_windows.ps1 -UseExistingApk",
         '"$root\\SHA256SUMS.txt"',
     )
