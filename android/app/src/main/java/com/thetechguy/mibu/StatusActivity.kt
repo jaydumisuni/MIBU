@@ -15,6 +15,8 @@ class StatusActivity : Activity() {
         val laneStates = stateStore.lanes().joinToString(",") { "${it.number}:${it.status.name}" }
         val message = buildString {
             append("STATUS nonce=").append(nonce)
+            append(" protocol=").append(ProofContract.VERSION)
+            append(" app=").append(BuildConfig.VERSION_NAME)
             append(" captures=").append(if (tokenStore.hasRequiredCaptures()) "READY" else "NOT_READY")
             append(" verification=").append(stateStore.verificationState().name)
             append(" community=").append(stateStore.communityState().name)
