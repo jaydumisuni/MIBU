@@ -78,8 +78,9 @@ def main() -> int:
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/StartWaitingActivity.kt",
-        "if (!tokenStore.hasRequiredCaptures())", "waitMs > freshnessMs", "stateStore.armWaiting(targetMidnight)",
-        "WAITING_ACTIVITY_STARTED", "WAITING_REJECTED_TOKEN_EXPIRY",
+        "stateStore.reconcileTimingState()", "WAITING_ALREADY_COMPLETE", "if (!tokenStore.hasRequiredCaptures())",
+        "waitMs > freshnessMs", "stateStore.armWaiting(targetMidnight)", "WAITING_ACTIVITY_STARTED",
+        "WAITING_REJECTED_TOKEN_EXPIRY", "PC helper confirms when the service is actually armed",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuStateStore.kt",
@@ -91,7 +92,9 @@ def main() -> int:
         "android/app/src/main/java/com/thetechguy/mibu/MibuForegroundService.kt",
         "handler.postDelayed(callback", "LaneStatus.WINDOW_REACHED", "VerificationState.TIMING_WINDOW_REACHED",
         "PowerManager.PARTIAL_WAKE_LOCK", "START_NOT_STICKY", "stateStore.reconcileTimingState(nowChina)",
-        "waitingTargetMidnight()", "remaining timing windows",
+        "waitingTargetMidnight()", "WAITING_SERVICE_ARMED", "WAITING_SERVICE_REJECTED_MISSING_CAPTURES",
+        "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY", "WAITING_SERVICE_RECOVERED_COMPLETE", "WAITING_SERVICE_COMPLETE",
+        "current != VerificationState.TIMING_WINDOW_REACHED",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/StatusActivity.kt",
@@ -126,9 +129,12 @@ def main() -> int:
         "pc-helper/qt6/mibu_actions.py",
         "def parse_devices", "Multiple ADB devices are connected", "def _open_system_installer",
         "system installer", "def push_two_tokens_to_phone", "mibu_service_token_b64",
-        "def _wait_for_log_marker", "TWO_CAPTURES_IMPORTED", "WAITING_ACTIVITY_STARTED",
-        "def check_fastboot_ready(wait_seconds: int = 30)", "Multiple fastboot devices are connected",
+        "def _wait_for_log_outcome", "def _wait_for_log_marker", "TWO_CAPTURES_IMPORTED",
+        '"MIBU_SERVICE"', '"WAITING_SERVICE_ARMED"', '"WAITING_SERVICE_FAILED"',
+        "foreground service was not proven armed", "def check_fastboot_ready(wait_seconds: int = 30)",
+        "Multiple fastboot devices are connected",
     )
+    forbid_text("pc-helper/qt6/mibu_actions.py", '_wait_for_log_marker("MIBU_WAIT", "WAITING_ACTIVITY_STARTED")')
     require_text(
         "pc-helper/qt6/mibu_status.py",
         "class PhoneStatus", "def query_phone_status", "captures_ready", "timing_complete", "MIBU_STATUS",
@@ -155,13 +161,15 @@ def main() -> int:
     )
     require_text(
         "pc-helper/qt6/test_contracts.py",
-        "class DeviceParsingTests", "class PhoneStatusTests", "class TimingTests", "class GeometryTests",
+        "class DeviceParsingTests", "class ServiceProofTests", "class PhoneStatusTests",
+        "class TimingTests", "class GeometryTests", "test_activity_started_marker_is_not_service_proof",
     )
     require_text(
         "pc-helper/qt6/mibu_pc_helper_v3.py",
         "class WorkflowDialog(V2WorkflowDialog)", "POPUP_CLOSE_RECT", "base_ui.WorkflowDialog = WorkflowDialog",
         "class Window(V2Window)", "query_phone_status", "captures_ready", "timing_complete",
-        "mibu_app_icon.png", "Phone timing proof is not complete yet",
+        "mibu_app_icon.png", "Phone timing stage is already complete", "Foreground service proof succeeded",
+        "Phone timing proof is not complete yet",
     )
 
     require_text(
@@ -173,7 +181,7 @@ def main() -> int:
     check_svg("resources/expected ui/android/approved_android_ui_baseline_sheet.svg", "720", "560")
     require_text(
         "tools/validate_android_ui_baseline.py",
-        "EXPECTED_LABELS", "EXPECTED_SOURCE_HASHES", "MIN_EMBEDDED_IMAGE_BYTES",
+        "EXPECTED_LABELS", "EXPECTED_IMAGE_COUNT = 5", "EXPECTED_SOURCE_HASHES", "MIN_EMBEDDED_IMAGE_BYTES",
         "expected 5 embedded approved images", "self-contained image data URI",
         "Android expected-UI baseline validated",
     )
