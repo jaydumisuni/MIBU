@@ -85,3 +85,72 @@ jobs:
         shell: bash
         working-directory: pc-helper/qt6
         run: test "$(cat pc-tests.exit)" = "0"
+
+  render-diagnostics:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PC requirements
+        run: python -m pip install -r pc-helper/qt6/requirements.txt
+      - name: Capture deterministic-render output
+        shell: bash
+        run: |
+          set +e
+          python pc-helper/qt6/render_svg_assets.py > render-diagnostics.log 2>&1
+          code=$?
+          cat render-diagnostics.log
+          echo "$code" > render-diagnostics.exit
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-diagnostics
+          path: |
+            render-diagnostics.log
+            render-diagnostics.exit
+          if-no-files-found: error
+      - name: Fail if render failed
+        shell: bash
+        run: test "$(cat render-diagnostics.exit)" = "0"
+
+  android-diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Capture Android lint and unit-test output
+        shell: bash
+        run: |
+          set +e
+          gradle :android:app:lintDebug :android:app:testDebugUnitTest --stacktrace > android-diagnostics.log 2>&1
+          code=$?
+          cat android-diagnostics.log
+          echo "$code" > android-diagnostics.exit
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-diagnostics
+          path: |
+            android-diagnostics.log
+            android-diagnostics.exit
+            android/app/build/reports/
+          if-no-files-found: warn
+      - name: Fail if Android checks failed
+        shell: bash
+        run: test "$(cat android-diagnostics.exit)" = "0"
