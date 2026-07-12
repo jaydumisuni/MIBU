@@ -191,7 +191,7 @@ def _open_system_installer(path: str) -> Result:
         "--grant-read-uri-permission",
     ], timeout=30)
     if opened.ok:
-        return Result(False, "Android/MIUI blocked silent ADB install, so MIBU opened the phone's system installer. Complete installation on the phone, then press Install APK again. MIBU will verify the installed version before reporting success.")
+        return Result(False, "Android/MIUI blocked silent ADB install, so MIBU opened the phone's system installer. Complete installation on the phone, then press Install APK again. MIBU will reinstall the bundled APK and verify its version before reporting success.")
     return Result(False, f"Direct install failed. APK was copied to {REMOTE_APK}, but the system installer could not be opened automatically. Open Downloads on the phone and install MIBU.apk manually.\n{opened.message}")
 
 
@@ -203,21 +203,19 @@ def install_package(path: str) -> Result:
         return ready
 
     installed_before = installed_package_version()
-    if installed_before.ok and installed_before.message == EXPECTED_APP_VERSION:
-        return Result(True, f"Required MIBU version {EXPECTED_APP_VERSION} is already installed and verified.")
-
     result = run_tool(["install", "-r", path], timeout=120)
     if not (result.ok and "Success" in result.message):
         fallback = _open_system_installer(path)
         previous = f" Installed version before attempt: {installed_before.message}." if installed_before.ok else ""
-        return Result(False, f"Direct ADB install/update did not complete.{previous}\n{result.message or 'No install output.'}\n\n{fallback.message}")
+        return Result(False, f"Direct ADB install/reinstall did not complete.{previous}\n{result.message or 'No install output.'}\n\n{fallback.message}")
 
     verified = installed_package_version()
     if not verified.ok:
         return Result(False, f"ADB reported install success, but installed-version verification failed: {verified.message}")
     if verified.message != EXPECTED_APP_VERSION:
         return Result(False, f"ADB installed a MIBU package, but version verification returned {verified.message}; expected {EXPECTED_APP_VERSION}.")
-    return Result(True, f"MIBU {EXPECTED_APP_VERSION} installed/updated and version verified.")
+    previous = installed_before.message if installed_before.ok else "not installed"
+    return Result(True, f"Bundled MIBU {EXPECTED_APP_VERSION} installed/reinstalled and version verified. Previous state: {previous}.")
 
 
 def launch_phone_app() -> Result:
