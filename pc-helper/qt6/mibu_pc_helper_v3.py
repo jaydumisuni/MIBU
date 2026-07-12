@@ -60,19 +60,27 @@ class Window(V2Window):
             if not status_result.ok or status is None:
                 report(status_result)
                 return
+            if status.timing_complete:
+                report(Result(True, f"Phone timing stage is already complete. No new waiting cycle was started.\n{status.raw}"))
+                return
             if not status.captures_ready:
                 report(Result(False, "Phone proof says both fresh captures are not ready. Import Firefox + Chrome tokens first."))
                 return
+
             result = start_phone_waiting()
             report(result)
             if not result.ok:
                 return
+
             proof_result, proof = query_phone_status()
             if not proof_result.ok or proof is None:
                 report(proof_result)
                 return
+            if proof.timing_complete:
+                report(Result(True, f"Timing completed while the waiting service was starting.\n{proof.raw}"))
+                return
             armed = proof.verification == "WAITING_ARMED"
-            report(Result(armed, proof.raw if armed else f"Waiting did not enter WAITING_ARMED. {proof.raw}"))
+            report(Result(armed, proof.raw if armed else f"Foreground service proof succeeded, but phone state did not remain WAITING_ARMED. {proof.raw}"))
 
         def verify_fastboot() -> None:
             status_result, status = query_phone_status()
