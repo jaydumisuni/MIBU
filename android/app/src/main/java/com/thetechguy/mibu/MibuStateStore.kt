@@ -44,6 +44,27 @@ class MibuStateStore(context: Context) {
         return Instant.ofEpochMilli(epochMs).atZone(MibuLane.CHINA_ZONE)
     }
 
+    fun reconcileTimingState(nowChina: ZonedDateTime = ZonedDateTime.now(MibuLane.CHINA_ZONE)): VerificationState {
+        val targetMidnight = waitingTargetMidnight() ?: return verificationState()
+        val normalizedNow = nowChina.withZoneSameInstant(MibuLane.CHINA_ZONE)
+        val edit = prefs.edit()
+        var reached = 0
+        MibuLane.defaultLanes().forEach { lane ->
+            val current = laneStatus(lane.number)
+            val target = lane.targetTimeForMidnight(targetMidnight)
+            val next = if (current == LaneStatus.ARMED && !normalizedNow.isBefore(target)) LaneStatus.WINDOW_REACHED else current
+            if (next == LaneStatus.WINDOW_REACHED) reached += 1
+            if (next != current) edit.putString(laneKey(lane.number), next.name)
+        }
+        val verification = if (reached == MibuLane.defaultLanes().size) {
+            VerificationState.TIMING_WINDOW_REACHED
+        } else {
+            VerificationState.WAITING_ARMED
+        }
+        edit.putString(KEY_VERIFY, verification.name).apply()
+        return verification
+    }
+
     fun clearWaitingTarget() {
         prefs.edit().remove(KEY_TARGET_MIDNIGHT_EPOCH_MS).apply()
     }
