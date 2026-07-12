@@ -10,9 +10,12 @@ class LogsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        stateStore.reconcileTimingState()
+        val target = stateStore.waitingTargetMidnight()
         mibuPage("MIBU", "Logs / THETECHGUY TOOL") {
             addView(mibuCard("Token setup", tokenStore.getSessionPreview()))
             addView(mibuCard("Four internal slots", tokenStore.getSlotPreview()))
+            addView(mibuCard("Persisted target", target?.toString() ?: "No waiting target armed"))
             addView(mibuCard("Lane state", stateStore.laneSummary()))
             addView(mibuCard("Community state", stateStore.communityState().name))
             addView(mibuCard("Verification state", stateStore.verificationState().name))
