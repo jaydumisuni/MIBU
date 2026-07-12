@@ -43,7 +43,8 @@ def main() -> int:
     require_text(
         "android/app/src/main/AndroidManifest.xml",
         "android.permission.WAKE_LOCK", "android.permission.DUMP",
-        ".CommunityCheckActivity", ".TokenImportActivity", ".StartWaitingActivity", ".MibuForegroundService",
+        ".CommunityCheckActivity", ".TokenImportActivity", ".StartWaitingActivity",
+        ".StatusActivity", ".MibuForegroundService",
     )
     require("android/app/src/main/res/drawable/ic_mibu.xml")
     require("android/app/src/main/res/drawable/mibu_hero_art.xml")
@@ -85,6 +86,10 @@ def main() -> int:
         "PowerManager.PARTIAL_WAKE_LOCK", "START_NOT_STICKY",
     )
     require_text(
+        "android/app/src/main/java/com/thetechguy/mibu/StatusActivity.kt",
+        'append("captures=")', 'append(" verification=")', 'append(" lanes=")', '"MIBU_STATUS"',
+    )
+    require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuUiHelpers.kt",
         "fun Activity.mibuPage", "fun Activity.mibuCard", "fun Activity.mibuButton",
     )
@@ -94,19 +99,30 @@ def main() -> int:
     )
     forbid_text("android/app/src/main/java/com/thetechguy/mibu/InstructionsActivity.kt", "After the request stage")
 
-    for path in (
-        "pc-helper/mibu_pc_helper.py", "pc-helper/qt6/mibu_actions.py", "pc-helper/qt6/dependency_check.py",
-        "pc-helper/qt6/ui_geometry.py", "pc-helper/qt6/render_svg_assets.py",
-        "pc-helper/qt6/validate_ui_contract.py", "pc-helper/qt6/mibu_pc_helper_v2.py",
+    active_python = (
+        "pc-helper/mibu_pc_helper.py", "pc-helper/qt6/mibu_actions.py", "pc-helper/qt6/mibu_status.py",
+        "pc-helper/qt6/dependency_check.py", "pc-helper/qt6/ui_geometry.py",
+        "pc-helper/qt6/render_svg_assets.py", "pc-helper/qt6/validate_ui_contract.py",
+        "pc-helper/qt6/mibu_pc_helper_v2.py", "pc-helper/qt6/mibu_pc_helper_v3.py",
         "pc-helper/qt6/test_contracts.py",
-    ):
+    )
+    for path in active_python:
         check_python(path)
 
     require_text(
         "pc-helper/qt6/mibu_actions.py",
-        "def push_two_tokens_to_phone", "mibu_service_token_b64", "base64.urlsafe_b64encode",
+        "def parse_devices", "Multiple ADB devices are connected", "def _open_system_installer",
+        "system installer", "def push_two_tokens_to_phone", "mibu_service_token_b64",
         "def _wait_for_log_marker", "TWO_CAPTURES_IMPORTED", "WAITING_ACTIVITY_STARTED",
-        "def reboot_to_fastboot", "def check_fastboot_ready(wait_seconds: int = 30)", "time.monotonic()",
+        "def check_fastboot_ready(wait_seconds: int = 30)", "Multiple fastboot devices are connected",
+    )
+    require_text(
+        "pc-helper/qt6/mibu_status.py",
+        "class PhoneStatus", "def query_phone_status", "captures_ready", "timing_complete", "MIBU_STATUS",
+    )
+    require_text(
+        "pc-helper/qt6/dependency_check.py",
+        "from mibu_actions import adb_path, fastboot_path", "Fastboot platform-tools",
     )
     require_text(
         "pc-helper/qt6/ui_geometry.py",
@@ -120,33 +136,30 @@ def main() -> int:
     )
     require_text(
         "pc-helper/qt6/render_svg_assets.py",
-        "from ui_geometry import SCREENS", "Expected exactly five required UI screens",
+        "from ui_geometry import SCREENS", "render_icon", "mibu_app_icon.ico", "Expected exactly five required UI screens",
     )
     require_text(
-        "pc-helper/qt6/test_contracts.py",
-        "class DeviceParsingTests", "class TimingTests", "class GeometryTests",
-    )
-    require_text(
-        "pc-helper/qt6/mibu_pc_helper_v2.py",
-        "from ui_geometry import SCREENS, ScreenGeometry", "required_asset", "Paste Two Tokens",
-        "Verify Fastboot", "QTimer", 'self.main_screen = SCREENS["main"]', "self.screen.normalized(label)",
+        "pc-helper/qt6/mibu_pc_helper_v3.py",
+        "class Window(V2Window)", "query_phone_status", "captures_ready", "timing_complete",
+        "mibu_app_icon.png", "Phone timing proof is not complete yet",
     )
     require_text(
         "pc-helper/build_windows.ps1",
-        "Resolve-Gradle", "Resolve-AndroidSdk", "mibu_pc_helper_v2.py", "validate_ui_contract.py",
-        "python -m unittest -v test_contracts.py", "Hotspot UI assets verified.",
-        "Release EXE, APK, platform-tools and hotspot assets verified.",
+        "Resolve-Gradle", "Resolve-AndroidSdk", "mibu_pc_helper_v3.py", "--icon $IconPath",
+        "validate_ui_contract.py", "python -m unittest -v test_contracts.py",
+        "mibu_app_icon.ico", "Release EXE, APK, icon, platform-tools and hotspot assets verified.",
         "Android APK is required for a complete MIBU release", "AdbWinUsbApi.dll",
     )
 
     check_svg("resources/expected ui/pc/01_pc_main_four_button_workflow.svg", "1200", "800")
+    check_svg("resources/expected ui/pc/mibu_app_icon.svg", "512", "512")
     for name in (
         "02_popup_device_check_guide.svg", "03_popup_install_apk.svg",
         "04_popup_login_get_token.svg", "05_popup_phone_guide.svg",
     ):
         check_svg(f"resources/expected ui/pc/{name}", "1000", "700")
 
-    print("MIBU source-contract review passed for active v2 architecture.")
+    print("MIBU source-contract review passed for proof-gated v3 architecture.")
     return 0
 
 
