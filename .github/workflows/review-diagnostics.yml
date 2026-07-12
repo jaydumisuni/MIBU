@@ -1,0 +1,83 @@
+name: Review Diagnostics
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  source-diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run source diagnostics
+        shell: bash
+        run: |
+          set +e
+          {
+            echo '=== Android UI baseline validator ==='
+            python tools/validate_android_ui_baseline.py
+            baseline_code=$?
+            echo "baseline_exit=$baseline_code"
+            echo
+            echo '=== Architecture review ==='
+            python tools/review_contracts.py
+            architecture_code=$?
+            echo "architecture_exit=$architecture_code"
+            echo
+            echo '=== Proof-v2 review ==='
+            python tools/review_proof_v2.py
+            proof_code=$?
+            echo "proof_exit=$proof_code"
+          } 2>&1 | tee source-diagnostics.log
+          echo "${PIPESTATUS[0]}" > source-diagnostics.exit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-diagnostics
+          path: |
+            source-diagnostics.log
+            source-diagnostics.exit
+          if-no-files-found: error
+      - name: Fail if a diagnostic failed
+        shell: bash
+        run: |
+          grep -q 'baseline_exit=0' source-diagnostics.log
+          grep -q 'architecture_exit=0' source-diagnostics.log
+          grep -q 'proof_exit=0' source-diagnostics.log
+
+  pc-diagnostics:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PC requirements
+        run: python -m pip install -r pc-helper/qt6/requirements.txt
+      - name: Run PC tests with complete captured output
+        shell: bash
+        working-directory: pc-helper/qt6
+        run: |
+          set +e
+          python -m unittest discover -v > pc-tests.log 2>&1
+          code=$?
+          cat pc-tests.log
+          echo "$code" > pc-tests.exit
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-diagnostics
+          path: |
+            pc-helper/qt6/pc-tests.log
+            pc-helper/qt6/pc-tests.exit
+          if-no-files-found: error
+      - name: Fail if tests failed
+        shell: bash
+        working-directory: pc-helper/qt6
+        run: test "$(cat pc-tests.exit)" = "0"
