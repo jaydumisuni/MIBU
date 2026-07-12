@@ -19,19 +19,31 @@ def element_rect(elem: ET.Element) -> tuple[int, int, int, int] | None:
     return None
 
 
-def rects_and_text(svg_path: Path) -> tuple[list[tuple[tuple[int, int, int, int], dict[str, str]]], str]:
+def inspect_svg(svg_path: Path) -> tuple[list[tuple[tuple[int, int, int, int], dict[str, str]]], str, bool]:
     root = ET.parse(svg_path).getroot()
     rects: list[tuple[tuple[int, int, int, int], dict[str, str]]] = []
     text_parts: list[str] = []
+    close_circle = False
+    close_cross = False
     for elem in root.iter():
         tag = elem.tag.rsplit("}", 1)[-1]
         if tag == "rect":
             rect = element_rect(elem)
             if rect is not None:
                 rects.append((rect, dict(elem.attrib)))
-        if tag == "text" and elem.text:
+        elif tag == "text" and elem.text:
             text_parts.append(elem.text)
-    return rects, norm(" ".join(text_parts))
+        elif tag == "circle":
+            close_circle = (
+                abs(float(elem.attrib.get("cx", 0)) - 950.0) <= 3
+                and abs(float(elem.attrib.get("cy", 0)) - 55.0) <= 3
+                and float(elem.attrib.get("r", 0)) >= 16
+            ) or close_circle
+        elif tag == "path":
+            path_data = elem.attrib.get("d", "")
+            if "M942 47" in path_data and "L958 63" in path_data and "M958 47" in path_data:
+                close_cross = True
+    return rects, norm(" ".join(text_parts)), close_circle and close_cross
 
 
 def close_enough(actual: tuple[int, int, int, int], expected: tuple[int, int, int, int], tolerance: int = 2) -> bool:
@@ -61,7 +73,10 @@ def validate(asset_dir: Path) -> None:
         if int(float(root.attrib.get("width", 0))) != screen.width or int(float(root.attrib.get("height", 0))) != screen.height:
             errors.append(f"Wrong canvas size for {screen.svg}")
 
-        rects, all_text = rects_and_text(svg_path)
+        rects, all_text, visible_close = inspect_svg(svg_path)
+        if screen_name != "main" and not visible_close:
+            errors.append(f"Popup {screen.svg} has no visible close affordance aligned with the Qt close hotspot")
+
         for label, expected in screen.hotspots.items():
             artwork_label = "LOGIN & GET TOKENS" if label == "Login & Get Token" else label.upper()
             if norm(artwork_label) not in all_text:
@@ -92,7 +107,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[2]
     asset_dir = repo_root / "resources" / "expected ui" / "pc"
     validate(asset_dir)
-    print(f"UI contract valid for {len(SCREENS)} screens from one geometry source; no baked active glow.")
+    print(f"UI contract valid for {len(SCREENS)} screens; close affordances align and active glow is not baked in.")
     return 0
 
 
