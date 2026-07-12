@@ -7,6 +7,17 @@ on:
     branches: [ main ]
 
 jobs:
+  source-review:
+    name: THETECHGUY source contract review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate implementation against agreed architecture
+        run: python tools/review_contracts.py
+
   android:
     name: Android compile and timing tests
     runs-on: ubuntu-latest
@@ -51,17 +62,18 @@ jobs:
           python -m py_compile pc-helper/qt6/dependency_check.py
           python -m py_compile pc-helper/qt6/render_svg_assets.py
           python -m py_compile pc-helper/qt6/validate_ui_contract.py
+          python -m py_compile tools/review_contracts.py
       - name: Validate hotspot artwork against click contract
         run: python pc-helper/qt6/validate_ui_contract.py
       - name: Render required hotspot PNGs
         run: python pc-helper/qt6/render_svg_assets.py
       - name: Verify all rendered images
         run: |
-          test -f "resources/expected ui/pc/01_pc_main_four_button_workflow.png"
-          test -f "resources/expected ui/pc/02_popup_device_check_guide.png"
-          test -f "resources/expected ui/pc/03_popup_install_apk.png"
-          test -f "resources/expected ui/pc/04_popup_login_get_token.png"
-          test -f "resources/expected ui/pc/05_popup_phone_guide.png"
+          test -s "resources/expected ui/pc/01_pc_main_four_button_workflow.png"
+          test -s "resources/expected ui/pc/02_popup_device_check_guide.png"
+          test -s "resources/expected ui/pc/03_popup_install_apk.png"
+          test -s "resources/expected ui/pc/04_popup_login_get_token.png"
+          test -s "resources/expected ui/pc/05_popup_phone_guide.png"
       - name: Qt offscreen construction smoke test
         run: |
           python - <<'PY'
