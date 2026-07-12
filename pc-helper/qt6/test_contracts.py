@@ -4,6 +4,7 @@ import base64
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import mibu_actions
@@ -40,6 +41,55 @@ class DeviceParsingTests(unittest.TestCase):
         self.assertNotIn("\n", encoded)
         decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
         self.assertEqual(original, decoded)
+
+
+class ServiceProofTests(unittest.TestCase):
+    def test_service_armed_marker_is_success(self) -> None:
+        with patch.object(
+            mibu_actions,
+            "run_tool",
+            return_value=mibu_actions.Result(True, "I/MIBU_SERVICE: WAITING_SERVICE_ARMED targetMidnight=123 lanes=1,2,3,4"),
+        ):
+            result = mibu_actions._wait_for_log_outcome(
+                "MIBU_SERVICE",
+                "WAITING_SERVICE_ARMED",
+                failure_markers=("WAITING_SERVICE_FAILED",),
+                wait_seconds=1,
+            )
+        self.assertTrue(result.ok)
+        self.assertIn("WAITING_SERVICE_ARMED", result.message)
+
+    def test_service_failure_marker_rejects_immediately(self) -> None:
+        with patch.object(
+            mibu_actions,
+            "run_tool",
+            return_value=mibu_actions.Result(True, "E/MIBU_SERVICE: WAITING_SERVICE_FAILED IllegalStateException"),
+        ):
+            result = mibu_actions._wait_for_log_outcome(
+                "MIBU_SERVICE",
+                "WAITING_SERVICE_ARMED",
+                failure_markers=("WAITING_SERVICE_FAILED",),
+                wait_seconds=1,
+            )
+        self.assertFalse(result.ok)
+        self.assertIn("WAITING_SERVICE_FAILED", result.message)
+
+    def test_activity_started_marker_is_not_service_proof(self) -> None:
+        with patch.object(
+            mibu_actions,
+            "run_tool",
+            return_value=mibu_actions.Result(True, "I/MIBU_WAIT: WAITING_ACTIVITY_STARTED targetMidnight=123"),
+        ), patch.object(mibu_actions.time, "sleep", return_value=None), patch.object(
+            mibu_actions.time,
+            "monotonic",
+            side_effect=[0.0, 2.0],
+        ):
+            result = mibu_actions._wait_for_log_outcome(
+                "MIBU_SERVICE",
+                "WAITING_SERVICE_ARMED",
+                wait_seconds=1,
+            )
+        self.assertFalse(result.ok)
 
 
 class PhoneStatusTests(unittest.TestCase):
