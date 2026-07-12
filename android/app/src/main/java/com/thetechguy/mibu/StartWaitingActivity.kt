@@ -25,7 +25,8 @@ class StartWaitingActivity : Activity() {
         }
 
         val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
-        val latestTarget = MibuLane.defaultLanes().maxOf { it.targetTime(nowChina) }
+        val targetMidnight = MibuLane.nextTargetMidnight(nowChina)
+        val latestTarget = MibuLane.defaultLanes().maxOf { it.targetTimeForMidnight(targetMidnight) }
         val waitMs = Duration.between(nowChina, latestTarget).toMillis().coerceAtLeast(0L)
         val freshnessMs = tokenStore.millisRemaining()
         if (waitMs > freshnessMs) {
@@ -42,16 +43,16 @@ class StartWaitingActivity : Activity() {
             return
         }
 
-        stateStore.armWaiting()
-        stateStore.setVerificationState(VerificationState.WAITING_ARMED)
+        stateStore.armWaiting(targetMidnight)
 
         try {
             val serviceIntent = Intent(this, MibuForegroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
-            Log.i(LOG_TAG, "WAITING_ACTIVITY_STARTED")
+            Log.i(LOG_TAG, "WAITING_ACTIVITY_STARTED targetMidnight=${targetMidnight.toInstant().toEpochMilli()}")
             Toast.makeText(this, "MIBU waiting armed. One countdown is visible; four timing windows are tracked in the background.", Toast.LENGTH_SHORT).show()
         } catch (exc: Exception) {
             stateStore.setVerificationState(VerificationState.UNKNOWN)
+            stateStore.clearWaitingTarget()
             Log.e(LOG_TAG, "WAITING_START_FAILED", exc)
             Toast.makeText(this, "Could not start waiting service: ${exc.message}", Toast.LENGTH_LONG).show()
         }
