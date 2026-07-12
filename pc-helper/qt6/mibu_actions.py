@@ -13,6 +13,7 @@ APP_PACKAGE = "com.thetechguy.mibu"
 APP_ENTRY = "com.thetechguy.mibu/.MainActivity"
 TOKEN_ENTRY = "com.thetechguy.mibu/.TokenImportActivity"
 WAIT_ENTRY = "com.thetechguy.mibu/.StartWaitingActivity"
+REMOTE_APK = "/sdcard/Download/MIBU.apk"
 
 
 @dataclass
@@ -91,33 +92,45 @@ def list_devices() -> Result:
     return run_tool(["devices"])
 
 
-def parse_device_state(devices_output: str) -> tuple[str, str]:
+def parse_devices(devices_output: str) -> list[tuple[str, str]]:
+    parsed: list[tuple[str, str]] = []
     for line in devices_output.splitlines():
         line = line.strip()
-        if not line or line.lower().startswith("list of devices"):
+        if not line or line.lower().startswith("list of devices") or line.startswith("*"):
             continue
         parts = line.split()
         if len(parts) >= 2:
-            return parts[0], parts[1]
-    return "", "none"
+            parsed.append((parts[0], parts[1]))
+    return parsed
+
+
+def parse_device_state(devices_output: str) -> tuple[str, str]:
+    devices = parse_devices(devices_output)
+    return devices[0] if devices else ("", "none")
 
 
 def check_device_ready() -> Result:
-    devices = list_devices()
-    if not devices.ok:
-        return devices
-    serial, state = parse_device_state(devices.message)
-    if not serial:
+    devices_result = list_devices()
+    if not devices_result.ok:
+        return devices_result
+    devices = parse_devices(devices_result.message)
+    if not devices:
         return Result(False, "No device detected. Connect USB cable, enable USB debugging, then accept the RSA prompt.")
+    if len(devices) > 1:
+        summary = ", ".join(f"{serial}:{state}" for serial, state in devices)
+        return Result(False, f"Multiple ADB devices are connected ({summary}). Leave only the phone being serviced connected, then retry.")
+    serial, state = devices[0]
     if state == "unauthorized":
         return Result(False, f"Device {serial} is unauthorized. On the phone, tick ‘Always allow from this computer’ and tap OK.")
     if state == "offline":
         return Result(False, f"Device {serial} is offline. Reconnect cable or toggle USB debugging, then retry.")
     if state != "device":
         return Result(False, f"Device {serial} state is {state}. Wait for it to become online/device.")
-    adb_state = run_tool(["shell", "settings", "get", "global", "adb_enabled"])
+    adb_state = run_tool(["-s", serial, "shell", "settings", "get", "global", "adb_enabled"])
     adb_value = adb_state.message.strip() if adb_state.ok else "unknown"
-    return Result(True, f"Device online: {serial}\nADB state: {adb_value}\n{devices.message}")
+    if adb_value != "1":
+        return Result(False, f"Device {serial} is visible but Android reports adb_enabled={adb_value}. Re-enable USB debugging and retry.")
+    return Result(True, f"Device online: {serial}\nADB state: {adb_value}")
 
 
 def package_exists() -> Result:
@@ -130,15 +143,35 @@ def package_exists() -> Result:
     return Result(False, "MIBU app is not installed on the connected phone.")
 
 
+def _open_system_installer(path: str) -> Result:
+    pushed = run_tool(["push", path, REMOTE_APK], timeout=120)
+    if not pushed.ok:
+        return Result(False, f"Direct install failed and APK push also failed.\n{pushed.message}")
+    opened = run_tool([
+        "shell", "am", "start", "-W",
+        "-a", "android.intent.action.VIEW",
+        "-d", f"file://{REMOTE_APK}",
+        "-t", "application/vnd.android.package-archive",
+        "--grant-read-uri-permission",
+    ], timeout=30)
+    if opened.ok:
+        return Result(False, "Android/MIUI blocked silent ADB install, so MIBU opened the phone's system installer. Complete installation on the phone, then press Install APK again to verify the package.")
+    return Result(False, f"Direct install failed. APK was copied to {REMOTE_APK}, but the system installer could not be opened automatically. Open Downloads on the phone and install MIBU.apk manually.\n{opened.message}")
+
+
 def install_package(path: str) -> Result:
     if not os.path.isfile(path):
         return Result(False, f"APK not found: {path}")
     ready = check_device_ready()
     if not ready.ok:
         return ready
+    already = package_exists()
+    if already.ok:
+        return Result(True, f"MIBU is already installed and package verification passed.\n{already.message}")
     result = run_tool(["install", "-r", path], timeout=120)
     if not (result.ok and "Success" in result.message):
-        return Result(False, result.message or "ADB install did not report Success.")
+        fallback = _open_system_installer(path)
+        return Result(False, f"Direct ADB install did not complete.\n{result.message or 'No install output.'}\n\n{fallback.message}")
     verified = package_exists()
     if not verified.ok:
         return Result(False, f"ADB reported install success, but package verification failed: {verified.message}")
@@ -245,8 +278,10 @@ def check_fastboot_ready(wait_seconds: int = 30) -> Result:
         result = run_fastboot(["devices"], timeout=10)
         last_message = result.message
         lines = [line.strip() for line in result.message.splitlines() if line.strip()] if result.ok else []
-        if lines:
-            return Result(True, "Fastboot device detected:\n" + result.message)
+        if len(lines) == 1:
+            return Result(True, "Fastboot device detected:\n" + lines[0])
+        if len(lines) > 1:
+            return Result(False, "Multiple fastboot devices are connected. Leave only the phone being serviced connected, then retry.\n" + result.message)
         if time.monotonic() >= deadline:
             break
         time.sleep(1)
