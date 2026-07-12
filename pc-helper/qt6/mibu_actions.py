@@ -199,16 +199,29 @@ def _clear_logcat() -> None:
     run_tool(["logcat", "-c"], timeout=10)
 
 
-def _wait_for_log_marker(tag: str, marker: str, wait_seconds: int = 6) -> Result:
+def _wait_for_log_outcome(
+    tag: str,
+    success_marker: str,
+    failure_markers: tuple[str, ...] = (),
+    wait_seconds: int = 6,
+) -> Result:
     deadline = time.monotonic() + max(1, wait_seconds)
     last = ""
     while time.monotonic() < deadline:
         logs = run_tool(["logcat", "-d", "-s", f"{tag}:I", "*:S"], timeout=10)
         last = logs.message
-        if logs.ok and marker in logs.message:
-            return Result(True, f"Android proof marker confirmed: {marker}")
+        if logs.ok:
+            for failure_marker in failure_markers:
+                if failure_marker in logs.message:
+                    return Result(False, f"Android reported failure marker: {failure_marker}\n{logs.message}")
+            if success_marker in logs.message:
+                return Result(True, f"Android proof marker confirmed: {success_marker}")
         time.sleep(0.35)
-    return Result(False, f"Android did not emit proof marker {marker}. Last filtered log: {last or 'none'}")
+    return Result(False, f"Android did not emit proof marker {success_marker}. Last filtered log: {last or 'none'}")
+
+
+def _wait_for_log_marker(tag: str, marker: str, wait_seconds: int = 6) -> Result:
+    return _wait_for_log_outcome(tag, marker, wait_seconds=wait_seconds)
 
 
 def push_session_to_phone(token: str) -> Result:
@@ -259,8 +272,17 @@ def start_phone_waiting() -> Result:
     started = run_tool(["shell", "am", "start", "-W", "-n", WAIT_ENTRY], timeout=30)
     if not started.ok:
         return started
-    marker = _wait_for_log_marker("MIBU_WAIT", "WAITING_ACTIVITY_STARTED")
-    return marker if marker.ok else Result(False, f"Waiting activity opened, but waiting was not proven armed.\n{marker.message}")
+    proof = _wait_for_log_outcome(
+        "MIBU_SERVICE",
+        "WAITING_SERVICE_ARMED",
+        failure_markers=(
+            "WAITING_SERVICE_REJECTED_MISSING_CAPTURES",
+            "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY",
+            "WAITING_SERVICE_FAILED",
+        ),
+        wait_seconds=10,
+    )
+    return proof if proof.ok else Result(False, f"Waiting activity opened, but the foreground service was not proven armed.\n{proof.message}")
 
 
 def reboot_to_fastboot() -> Result:
