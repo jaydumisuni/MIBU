@@ -42,7 +42,12 @@ class VerificationResultActivity : Activity() {
         }
     }
 
+    private fun stopTimingService() {
+        stopService(Intent(this, MibuForegroundService::class.java))
+    }
+
     private fun record(state: VerificationState) {
+        stopTimingService()
         stateStore.completeVerification(state)
         Log.i(LOG_TAG, "OFFICIAL_RESULT_RECORDED state=${state.name}")
         startActivity(Intent(this, MainActivity::class.java))
@@ -55,6 +60,7 @@ class VerificationResultActivity : Activity() {
             .setMessage("This clears token captures, the active timing target, lane progress and the recorded verification result. Community-device evidence is kept.")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Reset") { _, _ ->
+                stopTimingService()
                 tokenStore.clear()
                 stateStore.resetWorkflow()
                 Log.i(LOG_TAG, "WORKFLOW_RESET")
