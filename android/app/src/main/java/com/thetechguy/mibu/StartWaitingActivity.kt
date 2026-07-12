@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import java.time.Duration
+import java.time.ZonedDateTime
 
 class StartWaitingActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
@@ -14,9 +16,22 @@ class StartWaitingActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         if (!tokenStore.hasRequiredCaptures()) {
+            Toast.makeText(this, "Waiting was not armed. Import fresh Firefox and Chrome token captures first.", Toast.LENGTH_LONG).show()
+            startActivity(Intent(this, TokenImportActivity::class.java))
+            finish()
+            return
+        }
+
+        val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
+        val latestTarget = MibuLane.defaultLanes().maxOf { it.targetTime(nowChina) }
+        val waitMs = Duration.between(nowChina, latestTarget).toMillis().coerceAtLeast(0L)
+        val freshnessMs = tokenStore.millisRemaining()
+        if (waitMs > freshnessMs) {
+            val waitMinutes = (waitMs + 59_999L) / 60_000L
+            val freshMinutes = tokenStore.minutesRemaining()
             Toast.makeText(
                 this,
-                "Waiting was not armed. Import fresh Firefox and Chrome token captures first.",
+                "Tokens will expire before the timing window. Window is about $waitMinutes min away; tokens have about $freshMinutes min left. Capture fresh tokens closer to Beijing midnight.",
                 Toast.LENGTH_LONG
             ).show()
             startActivity(Intent(this, TokenImportActivity::class.java))
@@ -25,20 +40,14 @@ class StartWaitingActivity : Activity() {
         }
 
         stateStore.armWaiting()
+        stateStore.setVerificationState(VerificationState.WAITING_ARMED)
 
         try {
             val serviceIntent = Intent(this, MibuForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-            Toast.makeText(
-                this,
-                "MIBU waiting armed. One countdown is visible; four lanes are tracked in the background.",
-                Toast.LENGTH_SHORT
-            ).show()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+            Toast.makeText(this, "MIBU waiting armed. One countdown is visible; four timing windows are tracked in the background.", Toast.LENGTH_SHORT).show()
         } catch (exc: Exception) {
+            stateStore.setVerificationState(VerificationState.UNKNOWN)
             Toast.makeText(this, "Could not start waiting service: ${exc.message}", Toast.LENGTH_LONG).show()
         }
 
