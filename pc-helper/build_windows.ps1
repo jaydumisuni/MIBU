@@ -8,6 +8,7 @@ $HelperDir = Join-Path $Root "pc-helper\qt6"
 $DistDir = Join-Path $HelperDir "dist"
 $BundleDir = Join-Path $Root "pc-helper\release"
 $ResolvedApk = Join-Path $Root $ApkPath
+$RequiredPlatformTools = @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")
 
 Write-Host "MIBU PC Helper build" -ForegroundColor Cyan
 Write-Host "Root: $Root"
@@ -49,7 +50,9 @@ function Resolve-AndroidSdk {
 }
 
 python -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed with exit code $LASTEXITCODE" }
 python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
+if ($LASTEXITCODE -ne 0) { throw "Python dependency installation failed with exit code $LASTEXITCODE" }
 
 $AndroidSdk = Resolve-AndroidSdk
 if (-not (Test-Path $ResolvedApk)) {
@@ -74,7 +77,7 @@ if (-not (Test-Path $ResolvedApk)) {
         Pop-Location
     }
 }
-if (-not (Test-Path $ResolvedApk)) {
+if (-not (Test-Path $ResolvedApk) -or (Get-Item $ResolvedApk).Length -le 0) {
     throw "Android APK is required for a complete MIBU release but was not created at $ResolvedApk."
 }
 
@@ -83,15 +86,18 @@ if (-not $AndroidSdk) {
     throw "Android SDK/platform-tools are required for a self-contained MIBU release. Set ANDROID_SDK_ROOT/ANDROID_HOME or install at D:\mibu-build-tools\android-sdk."
 }
 $PlatformTools = Join-Path $AndroidSdk "platform-tools"
-foreach ($requiredTool in @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")) {
+foreach ($requiredTool in $RequiredPlatformTools) {
     $toolPath = Join-Path $PlatformTools $requiredTool
-    if (-not (Test-Path $toolPath)) { throw "Required platform-tool missing: $toolPath" }
-    if ((Get-Item $toolPath).Length -le 0) { throw "Required platform-tool is empty: $toolPath" }
+    if (-not (Test-Path $toolPath) -or (Get-Item $toolPath).Length -le 0) {
+        throw "Required platform-tool missing or empty: $toolPath"
+    }
 }
 
-Write-Host "Rendering deterministic hotspot UI assets..." -ForegroundColor Cyan
+Write-Host "Validating and rendering deterministic hotspot UI assets..." -ForegroundColor Cyan
 python (Join-Path $HelperDir "validate_ui_contract.py")
+if ($LASTEXITCODE -ne 0) { throw "UI contract validation failed with exit code $LASTEXITCODE" }
 python (Join-Path $HelperDir "render_svg_assets.py")
+if ($LASTEXITCODE -ne 0) { throw "UI asset rendering failed with exit code $LASTEXITCODE" }
 
 $RequiredUi = @(
     (Join-Path $Root "resources\expected ui\pc\01_pc_main_four_button_workflow.png"),
@@ -101,14 +107,17 @@ $RequiredUi = @(
     (Join-Path $Root "resources\expected ui\pc\05_popup_phone_guide.png")
 )
 foreach ($asset in $RequiredUi) {
-    if (-not (Test-Path $asset)) { throw "Required hotspot UI asset was not rendered: $asset" }
-    if ((Get-Item $asset).Length -le 0) { throw "Required hotspot UI asset is empty: $asset" }
+    if (-not (Test-Path $asset) -or (Get-Item $asset).Length -le 0) {
+        throw "Required hotspot UI asset missing or empty: $asset"
+    }
 }
 Write-Host "Hotspot UI assets verified." -ForegroundColor Green
 
 $env:QT_QPA_PLATFORM = "offscreen"
 Push-Location $HelperDir
 try {
+    python -m unittest -v test_contracts.py
+    if ($LASTEXITCODE -ne 0) { throw "PC helper unit tests failed with exit code $LASTEXITCODE" }
     python -c "import mibu_pc_helper_v2; assert mibu_pc_helper_v2.next_target().tzinfo is not None; print('MIBU v2 import/math smoke check passed')"
     if ($LASTEXITCODE -ne 0) { throw "MIBU v2 source smoke check failed" }
 } finally {
@@ -137,7 +146,7 @@ $BundlePlatformTools = Join-Path $BundleApp "platform-tools"
 New-Item -ItemType Directory -Path $BundleDist -Force | Out-Null
 New-Item -ItemType Directory -Path $BundlePlatformTools -Force | Out-Null
 Copy-Item $ResolvedApk (Join-Path $BundleDist "MIBU.apk") -Force
-foreach ($requiredTool in @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")) {
+foreach ($requiredTool in $RequiredPlatformTools) {
     Copy-Item (Join-Path $PlatformTools $requiredTool) (Join-Path $BundlePlatformTools $requiredTool) -Force
 }
 Write-Host "Bundled APK and Android platform-tools." -ForegroundColor Green
@@ -151,16 +160,21 @@ Write-Host "Bundled resources: $ResourceRoot" -ForegroundColor Green
 foreach ($asset in $RequiredUi) {
     $relative = $asset.Substring($ResourceRoot.Length).TrimStart('\')
     $bundled = Join-Path $BundleResources $relative
-    if (-not (Test-Path $bundled)) { throw "Required hotspot UI asset missing from release bundle: $bundled" }
-    if ((Get-Item $bundled).Length -le 0) { throw "Bundled hotspot UI asset is empty: $bundled" }
+    if (-not (Test-Path $bundled) -or (Get-Item $bundled).Length -le 0) {
+        throw "Required hotspot UI asset missing or empty from release bundle: $bundled"
+    }
 }
-$BundledApk = Join-Path $BundleDist "MIBU.apk"
-$BundledExe = Join-Path $BundleApp "MIBU-PC-Helper.exe"
-if (-not (Test-Path $BundledApk) -or (Get-Item $BundledApk).Length -le 0) { throw "MIBU.apk missing or empty in final release bundle." }
-if (-not (Test-Path $BundledExe) -or (Get-Item $BundledExe).Length -le 0) { throw "MIBU-PC-Helper.exe missing or empty in final release bundle." }
-foreach ($requiredTool in @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")) {
-    $bundledTool = Join-Path $BundlePlatformTools $requiredTool
-    if (-not (Test-Path $bundledTool) -or (Get-Item $bundledTool).Length -le 0) { throw "Bundled platform-tool missing or empty: $bundledTool" }
+$FinalRequired = @(
+    (Join-Path $BundleApp "MIBU-PC-Helper.exe"),
+    (Join-Path $BundleDist "MIBU.apk")
+)
+foreach ($requiredTool in $RequiredPlatformTools) {
+    $FinalRequired += (Join-Path $BundlePlatformTools $requiredTool)
+}
+foreach ($path in $FinalRequired) {
+    if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
+        throw "Final release file missing or empty: $path"
+    }
 }
 Write-Host "Release EXE, APK, platform-tools and hotspot assets verified." -ForegroundColor Green
 
