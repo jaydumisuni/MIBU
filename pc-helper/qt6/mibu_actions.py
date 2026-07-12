@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -120,7 +121,6 @@ def check_device_ready() -> Result:
         return Result(False, f'Device {serial} is offline. Reconnect cable or toggle USB debugging, then retry.')
     if state != 'device':
         return Result(False, f'Device {serial} state is {state}. Wait for it to become online/device.')
-
     adb_state = run_tool(['shell', 'settings', 'get', 'global', 'adb_enabled'])
     adb_value = adb_state.message.strip() if adb_state.ok else 'unknown'
     return Result(True, f'Device online: {serial}\nADB state: {adb_value}\n{devices.message}')
@@ -146,7 +146,7 @@ def launch_phone_app() -> Result:
 
 
 def _encode_token(value: str) -> str:
-    return base64.urlsafe_b64encode(value.encode('utf-8')).decode('ascii').rstrip('=')
+    return base64.urlsafe_b64encode(value.encode('utf-8')).decode('ascii')
 
 
 def push_session_to_phone(token: str) -> Result:
@@ -156,10 +156,7 @@ def push_session_to_phone(token: str) -> Result:
     ready = check_device_ready()
     if not ready.ok:
         return ready
-    return run_tool([
-        'shell', 'am', 'start', '-n', TOKEN_ENTRY,
-        '--es', 'mibu_session_token_b64', _encode_token(token),
-    ], timeout=30)
+    return run_tool(['shell', 'am', 'start', '-n', TOKEN_ENTRY, '--es', 'mibu_session_token_b64', _encode_token(token)], timeout=30)
 
 
 def push_two_tokens_to_phone(service_token: str, pop_token: str) -> Result:
@@ -193,14 +190,20 @@ def reboot_to_fastboot() -> Result:
     return run_tool(['reboot', 'bootloader'], timeout=30)
 
 
-def check_fastboot_ready() -> Result:
-    result = run_fastboot(['devices'], timeout=30)
-    if not result.ok:
-        return result
-    lines = [line.strip() for line in result.message.splitlines() if line.strip()]
-    if not lines:
-        return Result(False, 'No fastboot device detected yet. Wait for the phone to enter fastboot, reconnect USB if needed, then retry.')
-    return Result(True, 'Fastboot device detected:\n' + result.message)
+def check_fastboot_ready(wait_seconds: int = 30) -> Result:
+    deadline = time.monotonic() + max(0, wait_seconds)
+    last_message = ''
+    while True:
+        result = run_fastboot(['devices'], timeout=10)
+        last_message = result.message
+        lines = [line.strip() for line in result.message.splitlines() if line.strip()] if result.ok else []
+        if lines:
+            return Result(True, 'Fastboot device detected:\n' + result.message)
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(1)
+    suffix = f' Last fastboot output: {last_message}' if last_message else ''
+    return Result(False, 'No fastboot device detected within the wait window. Check cable/driver and retry.' + suffix)
 
 
 def fastboot_oem_info() -> Result:
