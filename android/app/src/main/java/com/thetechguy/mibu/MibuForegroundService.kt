@@ -46,8 +46,8 @@ class MibuForegroundService : Service() {
                     START_NOT_STICKY
                 }
 
-                reconciled == VerificationState.UNLOCKED -> {
-                    Log.i(LOG_TAG, "WAITING_SERVICE_NOT_NEEDED state=UNLOCKED")
+                isAuthoritativeResult(reconciled) -> {
+                    Log.i(LOG_TAG, "WAITING_SERVICE_NOT_NEEDED state=${reconciled.name}")
                     stopSelf(startId)
                     START_NOT_STICKY
                 }
@@ -97,13 +97,21 @@ class MibuForegroundService : Service() {
             val current = stateStore.verificationState()
             if (current != VerificationState.TIMING_WINDOW_REACHED &&
                 current != VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION &&
-                current != VerificationState.UNLOCKED
+                !isAuthoritativeResult(current)
             ) {
                 stateStore.setVerificationState(VerificationState.UNKNOWN)
             }
             stopSelf(startId)
             START_NOT_STICKY
         }
+    }
+
+    private fun isAuthoritativeResult(state: VerificationState): Boolean = when (state) {
+        VerificationState.WAIT_TIME_SHOWN,
+        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
+        VerificationState.COMMUNITY_AUTH_REQUIRED,
+        VerificationState.UNLOCKED -> true
+        else -> false
     }
 
     private fun markWindowReached(laneNumber: Int) {
