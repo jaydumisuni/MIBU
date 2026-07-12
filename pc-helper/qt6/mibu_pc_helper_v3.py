@@ -6,7 +6,9 @@ import sys
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication
 
+import mibu_pc_helper_v2 as base_ui
 from mibu_actions import (
+    Result,
     check_fastboot_ready,
     fastboot_oem_info,
     launch_phone_app,
@@ -14,13 +16,29 @@ from mibu_actions import (
     start_phone_waiting,
 )
 from mibu_pc_helper_v2 import Window as V2Window
-from mibu_pc_helper_v2 import WorkflowDialog, required_asset
+from mibu_pc_helper_v2 import WorkflowDialog as V2WorkflowDialog
+from mibu_pc_helper_v2 import required_asset
 from mibu_status import query_phone_status
-from ui_geometry import SCREENS
+from ui_geometry import POPUP_CLOSE_RECT, SCREENS
+
+
+class WorkflowDialog(V2WorkflowDialog):
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        x, y, width, height = self.screen.normalized_rect(POPUP_CLOSE_RECT)
+        self.close_button.setGeometry(
+            int(self.width() * x),
+            int(self.height() * y),
+            int(self.width() * width),
+            int(self.height() * height),
+        )
 
 
 class Window(V2Window):
     def __init__(self) -> None:
+        # Inherited Device/Install/Login methods resolve WorkflowDialog from the
+        # base module, so replace that one class with the reviewed v3 geometry.
+        base_ui.WorkflowDialog = WorkflowDialog
         super().__init__()
         self.setWindowIcon(QIcon(required_asset("mibu_app_icon.png")))
 
@@ -29,7 +47,7 @@ class Window(V2Window):
         dialog = WorkflowDialog(self, "Continue on Phone", SCREENS["phone"])
         dialog.setWindowIcon(self.windowIcon())
 
-        def report(result) -> None:
+        def report(result: Result) -> None:
             self._log(result.message)
             dialog.set_status(result.message)
             self._play(result.ok)
@@ -43,7 +61,7 @@ class Window(V2Window):
                 report(status_result)
                 return
             if not status.captures_ready:
-                report(type(status_result)(False, "Phone proof says both fresh captures are not ready. Import Firefox + Chrome tokens first."))
+                report(Result(False, "Phone proof says both fresh captures are not ready. Import Firefox + Chrome tokens first."))
                 return
             result = start_phone_waiting()
             report(result)
@@ -54,7 +72,7 @@ class Window(V2Window):
                 report(proof_result)
                 return
             armed = proof.verification == "WAITING_ARMED"
-            report(type(proof_result)(armed, proof.raw if armed else f"Waiting did not enter WAITING_ARMED. {proof.raw}"))
+            report(Result(armed, proof.raw if armed else f"Waiting did not enter WAITING_ARMED. {proof.raw}"))
 
         def verify_fastboot() -> None:
             status_result, status = query_phone_status()
@@ -62,7 +80,7 @@ class Window(V2Window):
                 report(status_result)
                 return
             if not status.timing_complete:
-                report(type(status_result)(False, f"Phone timing proof is not complete yet. Current state: {status.verification}"))
+                report(Result(False, f"Phone timing proof is not complete yet. Current state: {status.verification}"))
                 return
             reboot = reboot_to_fastboot()
             report(reboot)
