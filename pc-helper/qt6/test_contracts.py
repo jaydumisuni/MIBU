@@ -3,12 +3,19 @@ from __future__ import annotations
 import base64
 import unittest
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import mibu_actions
 import mibu_pc_helper_v2
 import mibu_status
-from ui_geometry import SCREENS
+from ui_geometry import POPUP_CLOSE_ART_BOUNDS, POPUP_CLOSE_RECT, SCREENS
+
+
+def rect_contains(outer: tuple[int, int, int, int], inner: tuple[int, int, int, int]) -> bool:
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ox <= ix and oy <= iy and ox + ow >= ix + iw and oy + oh >= iy + ih
 
 
 class DeviceParsingTests(unittest.TestCase):
@@ -88,6 +95,31 @@ class GeometryTests(unittest.TestCase):
                 self.assertGreater(height, 0.0)
                 self.assertLessEqual(x + width, 1.0)
                 self.assertLessEqual(y + height, 1.0)
+
+    def test_close_hotspot_fully_contains_visible_close_art(self) -> None:
+        self.assertTrue(rect_contains(POPUP_CLOSE_RECT, POPUP_CLOSE_ART_BOUNDS))
+        for screen_name, screen in SCREENS.items():
+            if screen_name == "main":
+                continue
+            x, y, width, height = screen.normalized_rect(POPUP_CLOSE_RECT)
+            self.assertGreaterEqual(x, 0.0)
+            self.assertGreaterEqual(y, 0.0)
+            self.assertLessEqual(x + width, 1.0)
+            self.assertLessEqual(y + height, 1.0)
+
+    def test_windows_icon_uses_android_icon_geometry(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        android_icon = (repo_root / "android/app/src/main/res/drawable/ic_mibu.xml").read_text(encoding="utf-8")
+        pc_icon = (repo_root / "resources/expected ui/pc/mibu_app_icon.svg").read_text(encoding="utf-8")
+        for path_fragment in (
+            "M54,8 C28,8 8,28 8,54",
+            "M31,43 C37,26 58,20 70,35",
+            "M36,49 L50,49 L50,56 L36,56",
+            "M20,76 L38,76 L38,92 L20,92",
+            "M48,77 L62,77 L62,91 L48,91",
+        ):
+            self.assertIn(path_fragment, android_icon)
+            self.assertIn(path_fragment, pc_icon)
 
 
 if __name__ == "__main__":
