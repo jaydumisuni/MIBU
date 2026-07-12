@@ -16,6 +16,22 @@ class StartWaitingActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val currentState = stateStore.reconcileTimingState()
+        if (currentState == VerificationState.TIMING_WINDOW_REACHED ||
+            currentState == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ||
+            currentState == VerificationState.UNLOCKED
+        ) {
+            Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${currentState.name}")
+            Toast.makeText(
+                this,
+                "The timing stage is already complete. Continue with PC verification instead of starting a new wait.",
+                Toast.LENGTH_LONG
+            ).show()
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+            return
+        }
+
         if (!tokenStore.hasRequiredCaptures()) {
             Log.w(LOG_TAG, "WAITING_REJECTED_MISSING_CAPTURES")
             Toast.makeText(this, "Waiting was not armed. Import fresh Firefox and Chrome token captures first.", Toast.LENGTH_LONG).show()
@@ -49,7 +65,7 @@ class StartWaitingActivity : Activity() {
             val serviceIntent = Intent(this, MibuForegroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
             Log.i(LOG_TAG, "WAITING_ACTIVITY_STARTED targetMidnight=${targetMidnight.toInstant().toEpochMilli()}")
-            Toast.makeText(this, "MIBU waiting armed. One countdown is visible; four timing windows are tracked in the background.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "MIBU is starting the waiting service. The PC helper confirms when the service is actually armed.", Toast.LENGTH_SHORT).show()
         } catch (exc: Exception) {
             stateStore.setVerificationState(VerificationState.UNKNOWN)
             stateStore.clearWaitingTarget()
