@@ -12,13 +12,14 @@ import java.time.ZonedDateTime
 class StartWaitingActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
     private val stateStore by lazy { MibuStateStore(this) }
+    private val proofNonce by lazy { ProofNonce.from(intent) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val currentState = stateStore.reconcileTimingState()
         if (currentState.blocksNewWaitingCycle()) {
-            Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${currentState.name}")
+            Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${currentState.name} nonce=$proofNonce")
             val message = when (currentState) {
                 VerificationState.TIMING_WINDOW_REACHED,
                 VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ->
@@ -40,7 +41,7 @@ class StartWaitingActivity : Activity() {
         }
 
         if (!tokenStore.hasRequiredCaptures()) {
-            Log.w(LOG_TAG, "WAITING_REJECTED_MISSING_CAPTURES")
+            Log.w(LOG_TAG, "WAITING_REJECTED_MISSING_CAPTURES nonce=$proofNonce")
             Toast.makeText(this, "Waiting was not armed. Import fresh Firefox and Chrome token captures first.", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, TokenImportActivity::class.java))
             finish()
@@ -55,7 +56,7 @@ class StartWaitingActivity : Activity() {
         if (waitMs > freshnessMs) {
             val waitMinutes = (waitMs + 59_999L) / 60_000L
             val freshMinutes = tokenStore.minutesRemaining()
-            Log.w(LOG_TAG, "WAITING_REJECTED_TOKEN_EXPIRY waitMs=$waitMs freshnessMs=$freshnessMs")
+            Log.w(LOG_TAG, "WAITING_REJECTED_TOKEN_EXPIRY waitMs=$waitMs freshnessMs=$freshnessMs nonce=$proofNonce")
             Toast.makeText(
                 this,
                 "Tokens will expire before the timing window. Window is about $waitMinutes min away; tokens have about $freshMinutes min left. Capture fresh tokens closer to Beijing midnight.",
@@ -70,13 +71,14 @@ class StartWaitingActivity : Activity() {
 
         try {
             val serviceIntent = Intent(this, MibuForegroundService::class.java)
+                .putExtra(ProofNonce.EXTRA, proofNonce)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
-            Log.i(LOG_TAG, "WAITING_ACTIVITY_STARTED targetMidnight=${targetMidnight.toInstant().toEpochMilli()}")
+            Log.i(LOG_TAG, "WAITING_ACTIVITY_STARTED targetMidnight=${targetMidnight.toInstant().toEpochMilli()} nonce=$proofNonce")
             Toast.makeText(this, "MIBU is starting the waiting service. The PC helper confirms when the service is actually armed.", Toast.LENGTH_SHORT).show()
         } catch (exc: Exception) {
             stateStore.setVerificationState(VerificationState.UNKNOWN)
             stateStore.clearWaitingTarget()
-            Log.e(LOG_TAG, "WAITING_START_FAILED", exc)
+            Log.e(LOG_TAG, "WAITING_START_FAILED nonce=$proofNonce", exc)
             Toast.makeText(this, "Could not start waiting service: ${exc.message}", Toast.LENGTH_LONG).show()
         }
 
