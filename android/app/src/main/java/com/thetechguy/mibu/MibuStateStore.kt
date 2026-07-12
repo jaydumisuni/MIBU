@@ -45,21 +45,30 @@ class MibuStateStore(context: Context) {
     }
 
     fun reconcileTimingState(nowChina: ZonedDateTime = ZonedDateTime.now(MibuLane.CHINA_ZONE)): VerificationState {
-        val targetMidnight = waitingTargetMidnight() ?: return verificationState()
+        val currentVerification = verificationState()
+        if (currentVerification.isAuthoritativeResult()) return currentVerification
+
+        val targetMidnight = waitingTargetMidnight() ?: return currentVerification
         val normalizedNow = nowChina.withZoneSameInstant(MibuLane.CHINA_ZONE)
         val edit = prefs.edit()
         var reached = 0
         MibuLane.defaultLanes().forEach { lane ->
             val current = laneStatus(lane.number)
             val target = lane.targetTimeForMidnight(targetMidnight)
-            val next = if (current == LaneStatus.ARMED && !normalizedNow.isBefore(target)) LaneStatus.WINDOW_REACHED else current
+            val next = if (current == LaneStatus.ARMED && !normalizedNow.isBefore(target)) {
+                LaneStatus.WINDOW_REACHED
+            } else {
+                current
+            }
             if (next == LaneStatus.WINDOW_REACHED) reached += 1
             if (next != current) edit.putString(laneKey(lane.number), next.name)
         }
-        val verification = if (reached == MibuLane.defaultLanes().size) {
-            VerificationState.TIMING_WINDOW_REACHED
-        } else {
-            VerificationState.WAITING_ARMED
+
+        val verification = when {
+            reached == MibuLane.defaultLanes().size -> VerificationState.TIMING_WINDOW_REACHED
+            currentVerification == VerificationState.TIMING_WINDOW_REACHED ||
+                currentVerification == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> currentVerification
+            else -> VerificationState.WAITING_ARMED
         }
         edit.putString(KEY_VERIFY, verification.name).apply()
         return verification
@@ -69,7 +78,16 @@ class MibuStateStore(context: Context) {
         prefs.edit().remove(KEY_TARGET_MIDNIGHT_EPOCH_MS).apply()
     }
 
+    fun completeVerification(state: VerificationState) {
+        require(state.isAuthoritativeResult()) { "State $state is not an authoritative verification result" }
+        prefs.edit()
+            .putString(KEY_VERIFY, state.name)
+            .remove(KEY_TARGET_MIDNIGHT_EPOCH_MS)
+            .apply()
+    }
+
     fun setLaneStatus(laneNumber: Int, status: LaneStatus) {
+        require(laneNumber in 1..MibuLane.defaultLanes().size) { "Unknown lane number: $laneNumber" }
         prefs.edit().putString(laneKey(laneNumber), status.name).apply()
     }
 
@@ -84,6 +102,14 @@ class MibuStateStore(context: Context) {
 
     fun clear() {
         prefs.edit().clear().apply()
+    }
+
+    private fun VerificationState.isAuthoritativeResult(): Boolean = when (this) {
+        VerificationState.WAIT_TIME_SHOWN,
+        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
+        VerificationState.COMMUNITY_AUTH_REQUIRED,
+        VerificationState.UNLOCKED -> true
+        else -> false
     }
 
     companion object {
