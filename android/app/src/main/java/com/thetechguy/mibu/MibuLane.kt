@@ -6,7 +6,7 @@ import java.time.ZonedDateTime
 enum class LaneStatus {
     PENDING,
     ARMED,
-    FIRED,
+    WINDOW_REACHED,
     APPROVED,
     MAYBE_APPROVED_RECHECK,
     LIMIT_REACHED,
@@ -26,7 +26,8 @@ enum class CommunityDeviceState {
 
 enum class VerificationState {
     NOT_STARTED,
-    REQUEST_STAGE_COMPLETE,
+    WAITING_ARMED,
+    TIMING_WINDOW_REACHED,
     READY_FOR_MI_UNLOCK_VERIFICATION,
     WAIT_TIME_SHOWN,
     ACCOUNT_DEVICE_NOT_ADDED,
@@ -44,11 +45,7 @@ data class MibuLane(
     fun targetTime(nowChina: ZonedDateTime = ZonedDateTime.now(CHINA_ZONE)): ZonedDateTime {
         val midnightToday = nowChina.toLocalDate().atStartOfDay(CHINA_ZONE)
         val targetToday = midnightToday.minusNanos(offsetMs * 1_000_000L)
-        return if (targetToday.isAfter(nowChina)) {
-            targetToday
-        } else {
-            midnightToday.plusDays(1).minusNanos(offsetMs * 1_000_000L)
-        }
+        return if (targetToday.isAfter(nowChina)) targetToday else midnightToday.plusDays(1).minusNanos(offsetMs * 1_000_000L)
     }
 
     fun summary(): String = "Lane $number • $sourceLabel • ${offsetMs}ms • $status"
