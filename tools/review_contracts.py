@@ -117,6 +117,7 @@ def main() -> int:
         "pc-helper/mibu_pc_helper.py",
         "pc-helper/qt6/mibu_actions.py",
         "pc-helper/qt6/dependency_check.py",
+        "pc-helper/qt6/ui_geometry.py",
         "pc-helper/qt6/render_svg_assets.py",
         "pc-helper/qt6/validate_ui_contract.py",
         "pc-helper/qt6/mibu_pc_helper_v2.py",
@@ -133,18 +134,32 @@ def main() -> int:
         "time.monotonic()",
     )
     require_text(
+        "pc-helper/qt6/ui_geometry.py",
+        '"Device Check": (300, 668, 205, 84)',
+        '"Paste Two Tokens": (620, 539, 300, 56)',
+        '"Verify Fastboot": (540, 560, 230, 56)',
+    )
+    require_text(
+        "pc-helper/qt6/validate_ui_contract.py",
+        "from ui_geometry import SCREENS",
+        "tolerance: int = 2",
+    )
+    require_text(
         "pc-helper/qt6/mibu_pc_helper_v2.py",
+        "from ui_geometry import SCREENS, ScreenGeometry",
         "required_asset",
         "Paste Two Tokens",
         "Verify Fastboot",
         "QTimer",
-        "01_pc_main_four_button_workflow.png",
-        "05_popup_phone_guide.png",
+        "self.main_screen = SCREENS[\"main\"]",
+        "self.screen.normalized(label)",
     )
     require_text(
         "pc-helper/build_windows.ps1",
+        "Resolve-Gradle",
+        "Resolve-AndroidSdk",
         "mibu_pc_helper_v2.py",
-        "render_svg_assets.py",
+        "validate_ui_contract.py",
         "Hotspot UI assets verified.",
         "Release APK and hotspot assets verified.",
         "Android APK is required for a complete MIBU release",
