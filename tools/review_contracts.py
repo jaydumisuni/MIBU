@@ -59,7 +59,9 @@ def main() -> int:
         'MibuLane(2, "Chrome pop token", 900)',
         'MibuLane(3, "Firefox service token", 400)',
         'MibuLane(4, "Chrome pop token", 100)',
-        "midnightToday.plusDays(1).minusNanos",
+        "fun nextTargetMidnight",
+        "EARLIEST_OFFSET_MS = 1400L",
+        "targetTimeForMidnight(nextTargetMidnight(nowChina))",
         "WINDOW_REACHED",
         "TIMING_WINDOW_REACHED",
     )
@@ -74,8 +76,12 @@ def main() -> int:
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/TokenStore.kt",
         "MAX_TOKEN_AGE_MS = 30L * 60L * 1000L",
-        "millisRemaining",
-        "expireIfStale()",
+        "serviceMillisRemaining",
+        "popMillisRemaining",
+        "minOf(serviceMillisRemaining(nowMs), popMillisRemaining(nowMs))",
+        "expireStaleCaptures",
+        "KEY_SERVICE_CAPTURED_AT",
+        "KEY_POP_CAPTURED_AT",
         "hasRequiredCaptures()",
     )
     require_text(
