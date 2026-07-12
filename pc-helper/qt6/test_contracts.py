@@ -74,6 +74,21 @@ class ServiceProofTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertIn("WAITING_SERVICE_ARMED", result.message)
 
+    def test_completed_race_marker_is_accepted_from_success_tuple(self) -> None:
+        with patch.object(
+            mibu_actions,
+            "run_tool",
+            return_value=mibu_actions.Result(True, "I/MIBU_SERVICE: WAITING_SERVICE_RECOVERED_COMPLETE nonce=abc12345"),
+        ):
+            result = mibu_actions._wait_for_log_outcome(
+                "MIBU_SERVICE",
+                ("WAITING_SERVICE_ARMED", "WAITING_SERVICE_RECOVERED_COMPLETE"),
+                wait_seconds=1,
+                nonce="abc12345",
+            )
+        self.assertTrue(result.ok)
+        self.assertIn("WAITING_SERVICE_RECOVERED_COMPLETE", result.message)
+
     def test_stale_success_marker_with_wrong_nonce_is_rejected(self) -> None:
         with patch.object(
             mibu_actions,
@@ -128,23 +143,52 @@ class ServiceProofTests(unittest.TestCase):
 
 
 class PhoneStatusTests(unittest.TestCase):
-    def test_status_parser_accepts_matching_proof_line(self) -> None:
-        line = "I/MIBU_STATUS: STATUS nonce=abc12345 captures=READY verification=WAITING_ARMED community=COMMUNITY_ROUTE_UNKNOWN lanes=1:ARMED,2:ARMED,3:ARMED,4:ARMED"
-        status = mibu_status._parse_status(line, expected_nonce="abc12345")
+    def proof_line(
+        self,
+        *,
+        nonce: str = "abc12345",
+        protocol: int = mibu_status.EXPECTED_PROOF_PROTOCOL,
+        app: str = mibu_actions.EXPECTED_APP_VERSION,
+        verification: str = "WAITING_ARMED",
+    ) -> str:
+        return (
+            f"I/MIBU_STATUS: STATUS nonce={nonce} protocol={protocol} app={app} "
+            f"captures=READY verification={verification} community=COMMUNITY_ROUTE_UNKNOWN "
+            "lanes=1:ARMED,2:ARMED,3:ARMED,4:ARMED"
+        )
+
+    def test_status_parser_accepts_matching_current_contract(self) -> None:
+        status = mibu_status._parse_status(self.proof_line(), expected_nonce="abc12345")
         self.assertIsNotNone(status)
         assert status is not None
         self.assertEqual("abc12345", status.nonce)
+        self.assertEqual(mibu_status.EXPECTED_PROOF_PROTOCOL, status.protocol)
+        self.assertEqual(mibu_actions.EXPECTED_APP_VERSION, status.app_version)
+        self.assertTrue(status.contract_current)
         self.assertTrue(status.captures_ready)
         self.assertFalse(status.timing_complete)
         self.assertEqual("WAITING_ARMED", status.verification)
 
     def test_status_parser_rejects_wrong_nonce(self) -> None:
-        line = "STATUS nonce=stale123 captures=READY verification=WAITING_ARMED community=COMMUNITY_ROUTE_UNKNOWN lanes=1:ARMED"
-        self.assertIsNone(mibu_status._parse_status(line, expected_nonce="fresh123"))
+        self.assertIsNone(mibu_status._parse_status(self.proof_line(nonce="stale123"), expected_nonce="fresh123"))
+
+    def test_old_protocol_parses_but_is_not_current(self) -> None:
+        status = mibu_status._parse_status(self.proof_line(protocol=1), expected_nonce="abc12345")
+        self.assertIsNotNone(status)
+        assert status is not None
+        self.assertFalse(status.contract_current)
+
+    def test_old_app_version_parses_but_is_not_current(self) -> None:
+        status = mibu_status._parse_status(self.proof_line(app="0.1.0-dev"), expected_nonce="abc12345")
+        self.assertIsNotNone(status)
+        assert status is not None
+        self.assertFalse(status.contract_current)
 
     def test_timing_complete_only_accepts_completion_states(self) -> None:
-        line = "STATUS nonce=abc12345 captures=READY verification=TIMING_WINDOW_REACHED community=COMMUNITY_DEVICE_CONFIRMED lanes=1:WINDOW_REACHED,2:WINDOW_REACHED,3:WINDOW_REACHED,4:WINDOW_REACHED"
-        status = mibu_status._parse_status(line, expected_nonce="abc12345")
+        status = mibu_status._parse_status(
+            self.proof_line(verification="TIMING_WINDOW_REACHED"),
+            expected_nonce="abc12345",
+        )
         self.assertIsNotNone(status)
         assert status is not None
         self.assertTrue(status.timing_complete)
