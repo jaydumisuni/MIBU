@@ -66,8 +66,7 @@ class MibuStateStore(context: Context) {
 
         val verification = when {
             reached == MibuLane.defaultLanes().size -> VerificationState.TIMING_WINDOW_REACHED
-            currentVerification == VerificationState.TIMING_WINDOW_REACHED ||
-                currentVerification == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> currentVerification
+            currentVerification.isTimingComplete() -> currentVerification
             else -> VerificationState.WAITING_ARMED
         }
         edit.putString(KEY_VERIFY, verification.name).apply()
@@ -86,6 +85,16 @@ class MibuStateStore(context: Context) {
             .apply()
     }
 
+    fun resetWorkflow() {
+        val edit = prefs.edit()
+            .putString(KEY_VERIFY, VerificationState.NOT_STARTED.name)
+            .remove(KEY_TARGET_MIDNIGHT_EPOCH_MS)
+        MibuLane.defaultLanes().forEach { lane ->
+            edit.putString(laneKey(lane.number), LaneStatus.PENDING.name)
+        }
+        edit.apply()
+    }
+
     fun setLaneStatus(laneNumber: Int, status: LaneStatus) {
         require(laneNumber in 1..MibuLane.defaultLanes().size) { "Unknown lane number: $laneNumber" }
         prefs.edit().putString(laneKey(laneNumber), status.name).apply()
@@ -102,14 +111,6 @@ class MibuStateStore(context: Context) {
 
     fun clear() {
         prefs.edit().clear().apply()
-    }
-
-    private fun VerificationState.isAuthoritativeResult(): Boolean = when (this) {
-        VerificationState.WAIT_TIME_SHOWN,
-        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
-        VerificationState.COMMUNITY_AUTH_REQUIRED,
-        VerificationState.UNLOCKED -> true
-        else -> false
     }
 
     companion object {
