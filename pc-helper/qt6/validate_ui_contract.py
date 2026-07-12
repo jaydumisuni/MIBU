@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,58 +23,37 @@ class ScreenContract:
 
 SCREENS = (
     ScreenContract(
-        "01_pc_main_four_button_workflow.svg",
-        "01_pc_main_four_button_workflow.png",
-        1200,
-        800,
+        "01_pc_main_four_button_workflow.svg", "01_pc_main_four_button_workflow.png", 1200, 800,
         (
-            ButtonContract("DEVICE CHECK", (300, 668, 216, 84)),
-            ButtonContract("INSTALL APK", (522, 668, 216, 84)),
-            ButtonContract("LOGIN & GET TOKENS", (744, 668, 240, 84)),
-            ButtonContract("PHONE GUIDE", (990, 668, 186, 84)),
+            ButtonContract("DEVICE CHECK", (300, 668, 205, 84)),
+            ButtonContract("INSTALL APK", (522, 668, 205, 84)),
+            ButtonContract("LOGIN & GET TOKENS", (744, 668, 235, 84)),
+            ButtonContract("PHONE GUIDE", (996, 668, 170, 84)),
         ),
     ),
     ScreenContract(
-        "02_popup_device_check_guide.svg",
-        "02_popup_device_check_guide.png",
-        1000,
-        700,
+        "02_popup_device_check_guide.svg", "02_popup_device_check_guide.png", 1000, 700,
+        (ButtonContract("OPEN ADB HELP", (420, 585, 210, 55)), ButtonContract("RECHECK DEVICE", (650, 585, 250, 55))),
+    ),
+    ScreenContract(
+        "03_popup_install_apk.svg", "03_popup_install_apk.png", 1000, 700,
+        (ButtonContract("BROWSE APK", (430, 558, 210, 60)), ButtonContract("INSTALL APK", (660, 558, 230, 60))),
+    ),
+    ScreenContract(
+        "04_popup_login_get_token.svg", "04_popup_login_get_token.png", 1000, 700,
         (
-            ButtonContract("OPEN ADB HELP", (420, 584, 210, 53)),
-            ButtonContract("RECHECK DEVICE", (650, 584, 250, 53)),
+            ButtonContract("OPEN BROWSER", (180, 575, 200, 58)),
+            ButtonContract("PASTE ONE", (405, 575, 190, 58)),
+            ButtonContract("PASTE TWO TOKENS", (620, 575, 260, 58)),
         ),
     ),
     ScreenContract(
-        "03_popup_install_apk.svg",
-        "03_popup_install_apk.png",
-        1000,
-        700,
+        "05_popup_phone_guide.svg", "05_popup_phone_guide.png", 1000, 700,
         (
-            ButtonContract("BROWSE APK", (430, 556, 210, 53)),
-            ButtonContract("INSTALL APK", (660, 556, 230, 53)),
-        ),
-    ),
-    ScreenContract(
-        "04_popup_login_get_token.svg",
-        "04_popup_login_get_token.png",
-        1000,
-        700,
-        (
-            ButtonContract("OPEN BROWSER", (180, 539, 200, 56)),
-            ButtonContract("PASTE ONE", (405, 539, 190, 56)),
-            ButtonContract("PASTE TWO TOKENS", (620, 539, 300, 56)),
-        ),
-    ),
-    ScreenContract(
-        "05_popup_phone_guide.svg",
-        "05_popup_phone_guide.png",
-        1000,
-        700,
-        (
-            ButtonContract("OPEN MIBU", (80, 560, 200, 56)),
-            ButtonContract("START WAITING", (300, 560, 220, 56)),
-            ButtonContract("VERIFY FASTBOOT", (540, 560, 230, 56)),
-            ButtonContract("DONE", (790, 560, 120, 56)),
+            ButtonContract("OPEN MIBU", (80, 565, 200, 58)),
+            ButtonContract("START WAITING", (310, 565, 220, 58)),
+            ButtonContract("VERIFY FASTBOOT", (560, 565, 230, 58)),
+            ButtonContract("DONE", (820, 565, 110, 58)),
         ),
     ),
 )
@@ -98,7 +76,7 @@ def rects_and_text(svg_path: Path) -> tuple[list[tuple[int, int, int, int]], str
     return rects, norm(" ".join(text_parts))
 
 
-def close_enough(actual: tuple[int, int, int, int], expected: tuple[int, int, int, int], tolerance: int = 12) -> bool:
+def close_enough(actual: tuple[int, int, int, int], expected: tuple[int, int, int, int], tolerance: int = 6) -> bool:
     return all(abs(a - b) <= tolerance for a, b in zip(actual, expected))
 
 
