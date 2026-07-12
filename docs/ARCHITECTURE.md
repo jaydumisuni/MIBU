@@ -4,82 +4,103 @@
 
 MIBU is a two-part **timing, state-proof and official-tool handoff assistant** for a Xiaomi device the user owns or is authorised to service.
 
-It does not claim that reaching a timing window means Xiaomi approved a request. It does not replace the official Mi Unlock Tool, bypass account/device restrictions, or infer success from a toast alone.
+It does not claim that reaching a timing window means Xiaomi approved a request. It does not replace the official Mi Unlock Tool, bypass account/device restrictions, infer success from a toast, or currently submit/replay Xiaomi network requests.
 
-## Components
+## Android component
 
-### MIBU Android app
+The Android app owns phone-side workflow state.
 
-The Android app is installed on the phone and owns the phone-side state.
+It accepts two explicit captures:
 
-It:
+- Firefox `new_bbs_serviceToken` → lanes 1 and 3;
+- Chrome `popRunToken` → lanes 2 and 4.
 
-- accepts two explicit user-provided captures:
-  - Firefox `new_bbs_serviceToken`
-  - Chrome `popRunToken`
-- maps those two captures to the four internal timing lanes:
-  - lane 1: Firefox, 1400 ms before Beijing midnight
-  - lane 2: Chrome, 900 ms before Beijing midnight
-  - lane 3: Firefox, 400 ms before Beijing midnight
-  - lane 4: Chrome, 100 ms before Beijing midnight
-- stores the two capture timestamps independently;
-- expires stale captures after 30 minutes;
-- refuses to arm when the captures cannot remain fresh until the selected timing window;
-- persists one Beijing-midnight target shared by the dashboard, foreground service, Logs and PC status bridge;
-- shows one user-facing countdown while keeping lane details in Logs;
-- reconciles lane state from persisted wall-clock targets after process recreation;
-- runs a foreground service and partial wake lock only for the remaining bounded waiting interval;
-- records Community-check and verification state;
-- exposes restricted ADB activities protected by `android.permission.DUMP` for:
-  - explicit token import;
-  - starting the waiting flow;
-  - returning state-only proof without exposing token values.
+The four local timing targets are:
 
-The Android app does **not** currently submit or replay Xiaomi network requests. Its proven responsibility is local timing, freshness enforcement, state persistence and handoff proof.
+| Lane | Source | Offset from Beijing midnight |
+|---|---|---:|
+| 1 | Firefox | 1400 ms before |
+| 2 | Chrome | 900 ms before |
+| 3 | Firefox | 400 ms before |
+| 4 | Chrome | 100 ms before |
 
-### MIBU PC Helper v3
+The app:
 
-The active PC entrypoint is:
+- validates capture shape and bounds each value to 8192 characters;
+- stores capture timestamps independently;
+- expires captures after 30 minutes;
+- fails closed when wall-clock rollback would otherwise extend freshness;
+- refuses a wait that outlives the least-fresh capture;
+- persists one Beijing-midnight instant as the source for all four lanes;
+- reconciles lane state from persisted targets after process recreation;
+- resumes an armed workflow without resetting reached lanes;
+- starts foreground immediately on every service path, including rejection and completed-state recovery;
+- uses a bounded partial wake lock for only the remaining waiting interval;
+- requests visible-notification permission on Android 13+;
+- keeps one clean dashboard countdown while Logs retain lane detail;
+- records Community evidence separately from timing and official-result state;
+- permits explicit recording of only an official result actually observed by the user;
+- offers a confirmed workflow reset that clears tokens, target, lanes and verification result while retaining Community evidence.
+
+The app exposes three `android.permission.DUMP`-protected activities for ADB:
+
+1. token import;
+2. waiting start/resume;
+3. state-only proof.
+
+Those activities never return token values in logs or status output.
+
+## PC Helper v3
+
+The active entrypoint is:
 
 ```text
 pc-helper/qt6/mibu_pc_helper_v3.py
 ```
 
-The Windows release is a guided four-button workflow:
+The image-hotspot workflow remains:
 
 1. Device Check
 2. Install APK
 3. Login & Get Tokens
 4. Phone Guide / Fastboot Verification
 
-It:
+The PC helper:
 
-- uses the Android platform-tools bundled inside the release before unrelated system copies;
-- requires exactly one authorised online ADB device;
-- distinguishes missing, unauthorised, offline and online states;
-- verifies Android reports `adb_enabled=1`;
-- installs and verifies the bundled APK;
-- falls back to the Android/MIUI system installer when silent ADB installation is blocked;
-- transfers only the explicit token values entered by the user;
-- verifies token import through Android proof markers;
-- starts the phone flow, then waits for `WAITING_SERVICE_ARMED` from the foreground service;
-- does not treat `WAITING_ACTIVITY_STARTED` as proof that waiting actually armed;
-- queries the state-only Android proof bridge before and after waiting;
-- refuses fastboot handoff until Android reports the timing stage complete;
-- reboots to bootloader, requires exactly one fastboot device and reads available device/unlocked information;
-- hands the user to the official Mi Unlock Tool for the authoritative external result.
+- prioritises bundled Android platform-tools;
+- requires exactly one normal online ADB device;
+- verifies `adb_enabled=1`;
+- requires Android app version `0.2.0-dev`;
+- updates an older installed package and verifies the resulting `versionName`;
+- falls back to the phone's package installer if silent ADB installation is blocked;
+- validates capture size and control characters before transfer;
+- uses URL-safe Base64 for transfer extras;
+- generates a random correlation nonce for every import, status and waiting proof;
+- filters Android proof by nonce rather than clearing the device's complete logcat;
+- rejects stale markers from previous operations;
+- treats activity launch as launch evidence only;
+- accepts waiting only after a correlated service marker proves armed or already complete;
+- parses only valid fastboot-device rows and rejects multiple-device ambiguity;
+- refuses fastboot handoff until Android's state-only proof reports timing completion;
+- hands the authoritative decision to the official Mi Unlock Tool.
 
 ## State authority
 
-The following state types are intentionally separate:
+The following state domains remain separate:
 
-- **Capture state** — whether both explicit captures are present and fresh.
-- **Lane state** — `PENDING`, `ARMED`, `WINDOW_REACHED`, and diagnostic outcomes.
-- **Timing verification state** — not started, armed, timing reached, or ready for official verification.
+- **Capture state** — whether both captures are present and fresh.
+- **Lane state** — `PENDING`, `ARMED`, `WINDOW_REACHED`, plus diagnostic outcomes.
+- **Timing state** — not started, armed, timing reached, or ready for official verification.
 - **Community state** — confirmed, not found, not required, or unknown.
-- **Authoritative external result state** — wait time shown, account/device not added, Community authorisation required, or unlocked.
+- **Official-result state** — wait time shown, account/device not added, Community authorisation required, or unlocked.
 
-Timing reconciliation must never overwrite an authoritative external result. Starting or restarting the foreground service must also preserve completed and authoritative states.
+`VerificationStateRules.kt` is the shared authority for:
+
+- what counts as timing complete;
+- what counts as an authoritative official result;
+- what blocks a new waiting cycle.
+
+Timing reconciliation and service failure handling must never overwrite a completed timing state or official result.
 
 ## Time model
 
@@ -89,37 +110,51 @@ The reference zone is always:
 Asia/Shanghai
 ```
 
-The canonical first visible target is:
+The first visible lane targets:
 
 ```text
 23:59:58.600 Beijing time
 ```
 
-The app persists the target Beijing midnight as an instant. All four lane targets are derived from that same persisted midnight. The UI may display Beijing and device-local forms, but scheduling never relies on manually entered local offsets.
+All four targets derive from one persisted Beijing-midnight instant. Local display conversion never changes scheduling math.
+
+## Proof correlation
+
+ADB log proof is non-destructive and operation-specific:
+
+```text
+PC generates nonce
+  -> passes nonce to DUMP-protected activity
+  -> Android includes nonce in marker
+  -> PC accepts only matching marker
+```
+
+This prevents an old successful log line from proving a new operation and avoids deleting unrelated device logs.
 
 ## Visual architecture
 
 ### PC UI
 
-The PC helper uses source-controlled SVG artwork rendered deterministically to PNG. Button hitboxes and artwork rectangles share `ui_geometry.py` as their source of truth. Popup close artwork must be fully contained by the shared close hotspot.
+Source-controlled SVG artwork is rendered deterministically to PNG. `ui_geometry.py` is the shared source of truth for artwork and click rectangles. The visible popup close artwork must be fully contained by its hotspot.
 
 ### Android UI baseline
 
-The approved Android reference is restored at:
+The restored approved reference is:
 
 ```text
 resources/expected ui/android/approved_android_ui_baseline_sheet.svg
 ```
 
-Its provenance manifest records the exact recovered uploads and SHA-256 values. Both the dedicated baseline workflow and the main build validate this baseline. Complete Windows releases bundle it as review evidence.
+Its manifest records the recovered source uploads and SHA-256 values. The dedicated baseline workflow, main build and Windows release all enforce its presence.
 
-## Release composition
+## Release composition and integrity
 
 A complete Windows release contains:
 
 ```text
 MIBU-PC-Helper.exe
-MIBU.apk
+SHA256SUMS.txt
+dist/MIBU.apk
 platform-tools/adb.exe
 platform-tools/fastboot.exe
 platform-tools/AdbWinApi.dll
@@ -129,27 +164,30 @@ resources/expected ui/android/approved_android_ui_baseline_sheet.svg
 resources/expected ui/android/README.md
 ```
 
-The build fails rather than producing an incomplete release when required executable, APK, platform-tool, icon, PC hotspot artwork or Android baseline evidence is absent.
+The build performs source review, Android-baseline validation, hotspot validation, all discovered PC tests and a clean PyInstaller build. It then hashes the protected release files. A missing APK, tool, UI asset or checksum manifest is a build failure.
+
+Approved audio remains optional; absent audio is reported rather than fabricated.
 
 ## Proof boundary
 
-Static review and CI prove:
+Static review and CI are designed to prove:
 
-- source contracts;
-- compilation;
-- Android timing calculations;
-- token-freshness rules;
-- state reconciliation contracts;
-- PC parsing and proof-marker handling;
-- UI geometry and deterministic rendering;
-- release contents.
+- source and documentation contracts;
+- Android lint, compilation and unit tests;
+- timing and freshness math;
+- state authority and idempotent resume rules;
+- nonce-correlated proof handling;
+- version-aware installation;
+- ADB/fastboot parsing;
+- image-hotspot geometry and deterministic rendering;
+- release composition and SHA-256 manifest generation.
 
 A physical-device run remains necessary to prove external facts:
 
 - USB authorisation and local driver behaviour;
 - MIUI package-installer behaviour;
-- foreground-service behaviour on the target phone;
+- foreground-service behaviour on the target ROM;
 - fastboot detection on the servicing PC;
-- the official Mi Unlock Tool result.
+- Xiaomi server behaviour and the official Mi Unlock Tool result.
 
-Tests confirm the reviewed implementation. They are not a substitute for understanding the architecture first.
+Tests confirm reviewed engineering. They do not replace understanding the implementation first.
