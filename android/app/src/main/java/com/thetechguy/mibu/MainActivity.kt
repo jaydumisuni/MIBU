@@ -199,9 +199,14 @@ class MainActivity : Activity() {
 
     private fun refreshStatus() {
         val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
-        val targetChina = MibuLane.defaultLanes().first().targetTime(nowChina)
+        val verification = stateStore.reconcileTimingState(nowChina)
+        val persistedMidnight = stateStore.waitingTargetMidnight()
+        val targetChina = if (persistedMidnight != null && verification == VerificationState.WAITING_ARMED) {
+            MibuLane.defaultLanes().first().targetTimeForMidnight(persistedMidnight)
+        } else {
+            MibuLane.defaultLanes().first().targetTime(nowChina)
+        }
         val localTarget = targetChina.withZoneSameInstant(ZoneId.systemDefault())
-        val verification = stateStore.verificationState()
         val duration = Duration.between(nowChina, targetChina).let { if (it.isNegative) Duration.ZERO else it }
         val totalSeconds = duration.seconds.coerceAtLeast(0L)
         val hours = totalSeconds / 3600L
