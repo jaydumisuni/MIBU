@@ -1,0 +1,34 @@
+name: Android UI Baseline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'resources/expected ui/android/**'
+      - 'tools/validate_android_ui_baseline.py'
+      - '.github/workflows/android-ui-baseline.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'resources/expected ui/android/**'
+      - 'tools/validate_android_ui_baseline.py'
+      - '.github/workflows/android-ui-baseline.yml'
+
+jobs:
+  validate-approved-baseline:
+    name: Validate recovered approved Android UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile validator
+        run: python -m py_compile tools/validate_android_ui_baseline.py
+      - name: Validate canonical baseline and provenance manifest
+        run: python tools/validate_android_ui_baseline.py
+      - name: Verify baseline remains source-controlled
+        run: |
+          test -s "resources/expected ui/android/approved_android_ui_baseline_sheet.svg"
+          test -s "resources/expected ui/android/README.md"
+          git diff --exit-code -- "resources/expected ui/android"
