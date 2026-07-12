@@ -34,7 +34,7 @@ The app:
 - persists one Beijing-midnight instant as the source for all four lanes;
 - reconciles lane state from persisted targets after process recreation;
 - resumes an armed workflow without resetting reached lanes;
-- starts foreground immediately on every service path, including rejection and completed-state recovery;
+- must start foreground immediately on every service path, including rejection and completed-state recovery;
 - uses a bounded partial wake lock for only the remaining waiting interval;
 - requests visible-notification permission on Android 13+;
 - keeps one clean dashboard countdown while Logs retain lane detail;
