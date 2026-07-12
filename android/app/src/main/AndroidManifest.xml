@@ -17,8 +17,16 @@
         <activity android:name=".CommunityCheckActivity" android:exported="false" />
         <activity android:name=".InstructionsActivity" android:exported="false" />
         <activity android:name=".LogsActivity" android:exported="false" />
-        <activity android:name=".TokenImportActivity" android:exported="true" />
-        <activity android:name=".StartWaitingActivity" android:exported="true" />
+        <activity
+            android:name=".TokenImportActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:excludeFromRecents="true" />
+        <activity
+            android:name=".StartWaitingActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:excludeFromRecents="true" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
