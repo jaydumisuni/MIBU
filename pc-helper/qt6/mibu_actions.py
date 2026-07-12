@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -16,6 +17,7 @@ TOKEN_ENTRY = "com.thetechguy.mibu/.TokenImportActivity"
 WAIT_ENTRY = "com.thetechguy.mibu/.StartWaitingActivity"
 REMOTE_APK = "/sdcard/Download/MIBU.apk"
 PROOF_NONCE_EXTRA = "mibu_proof_nonce"
+EXPECTED_APP_VERSION = "0.2.0-dev"
 MIN_TOKEN_LENGTH = 8
 MAX_TOKEN_LENGTH = 8_192
 
@@ -125,6 +127,11 @@ def parse_device_state(devices_output: str) -> tuple[str, str]:
     return devices[0] if devices else ("", "none")
 
 
+def parse_package_version(dumpsys_output: str) -> str | None:
+    match = re.search(r"^\s*versionName=([^\s]+)\s*$", dumpsys_output, flags=re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
 def check_device_ready() -> Result:
     devices_result = list_devices()
     if not devices_result.ok:
@@ -159,6 +166,19 @@ def package_exists() -> Result:
     return Result(False, "MIBU app is not installed on the connected phone.")
 
 
+def installed_package_version() -> Result:
+    ready = check_device_ready()
+    if not ready.ok:
+        return ready
+    result = run_tool(["shell", "dumpsys", "package", APP_PACKAGE], timeout=30)
+    if not result.ok:
+        return Result(False, result.message or "Could not read the installed MIBU package version.")
+    version = parse_package_version(result.message)
+    if not version:
+        return Result(False, "MIBU package is not installed or Android did not return versionName.")
+    return Result(True, version)
+
+
 def _open_system_installer(path: str) -> Result:
     pushed = run_tool(["push", path, REMOTE_APK], timeout=120)
     if not pushed.ok:
@@ -171,7 +191,7 @@ def _open_system_installer(path: str) -> Result:
         "--grant-read-uri-permission",
     ], timeout=30)
     if opened.ok:
-        return Result(False, "Android/MIUI blocked silent ADB install, so MIBU opened the phone's system installer. Complete installation on the phone, then press Install APK again to verify the package.")
+        return Result(False, "Android/MIUI blocked silent ADB install, so MIBU opened the phone's system installer. Complete installation on the phone, then press Install APK again. MIBU will verify the installed version before reporting success.")
     return Result(False, f"Direct install failed. APK was copied to {REMOTE_APK}, but the system installer could not be opened automatically. Open Downloads on the phone and install MIBU.apk manually.\n{opened.message}")
 
 
@@ -181,17 +201,23 @@ def install_package(path: str) -> Result:
     ready = check_device_ready()
     if not ready.ok:
         return ready
-    already = package_exists()
-    if already.ok:
-        return Result(True, f"MIBU is already installed and package verification passed.\n{already.message}")
+
+    installed_before = installed_package_version()
+    if installed_before.ok and installed_before.message == EXPECTED_APP_VERSION:
+        return Result(True, f"Required MIBU version {EXPECTED_APP_VERSION} is already installed and verified.")
+
     result = run_tool(["install", "-r", path], timeout=120)
     if not (result.ok and "Success" in result.message):
         fallback = _open_system_installer(path)
-        return Result(False, f"Direct ADB install did not complete.\n{result.message or 'No install output.'}\n\n{fallback.message}")
-    verified = package_exists()
+        previous = f" Installed version before attempt: {installed_before.message}." if installed_before.ok else ""
+        return Result(False, f"Direct ADB install/update did not complete.{previous}\n{result.message or 'No install output.'}\n\n{fallback.message}")
+
+    verified = installed_package_version()
     if not verified.ok:
-        return Result(False, f"ADB reported install success, but package verification failed: {verified.message}")
-    return Result(True, f"APK installed and package verified.\n{verified.message}")
+        return Result(False, f"ADB reported install success, but installed-version verification failed: {verified.message}")
+    if verified.message != EXPECTED_APP_VERSION:
+        return Result(False, f"ADB installed a MIBU package, but version verification returned {verified.message}; expected {EXPECTED_APP_VERSION}.")
+    return Result(True, f"MIBU {EXPECTED_APP_VERSION} installed/updated and version verified.")
 
 
 def launch_phone_app() -> Result:
@@ -222,11 +248,12 @@ def _proof_nonce() -> str:
 
 def _wait_for_log_outcome(
     tag: str,
-    success_marker: str,
+    success_marker: str | tuple[str, ...],
     failure_markers: tuple[str, ...] = (),
     wait_seconds: int = 6,
     nonce: str | None = None,
 ) -> Result:
+    success_markers = (success_marker,) if isinstance(success_marker, str) else success_marker
     deadline = time.monotonic() + max(1, wait_seconds)
     last = ""
     nonce_marker = f"nonce={nonce}" if nonce else None
@@ -242,12 +269,14 @@ def _wait_for_log_outcome(
             for failure_marker in failure_markers:
                 if failure_marker in matching_text:
                     return Result(False, f"Android reported failure marker: {failure_marker}\n{matching_text}")
-            if success_marker in matching_text:
-                detail = f" with nonce {nonce}" if nonce else ""
-                return Result(True, f"Android proof marker confirmed: {success_marker}{detail}")
+            for marker in success_markers:
+                if marker in matching_text:
+                    detail = f" with nonce {nonce}" if nonce else ""
+                    return Result(True, f"Android proof marker confirmed: {marker}{detail}")
         time.sleep(0.35)
+    expected = " or ".join(success_markers)
     nonce_detail = f" for nonce {nonce}" if nonce else ""
-    return Result(False, f"Android did not emit proof marker {success_marker}{nonce_detail}. Last filtered log: {last or 'none'}")
+    return Result(False, f"Android did not emit proof marker {expected}{nonce_detail}. Last filtered log: {last or 'none'}")
 
 
 def _wait_for_log_marker(tag: str, marker: str, wait_seconds: int = 6, nonce: str | None = None) -> Result:
@@ -309,7 +338,11 @@ def start_phone_waiting() -> Result:
         return started
     proof = _wait_for_log_outcome(
         "MIBU_SERVICE",
-        "WAITING_SERVICE_ARMED",
+        (
+            "WAITING_SERVICE_ARMED",
+            "WAITING_SERVICE_RECOVERED_COMPLETE",
+            "WAITING_SERVICE_COMPLETE",
+        ),
         failure_markers=(
             "WAITING_SERVICE_REJECTED_MISSING_CAPTURES",
             "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY",
@@ -319,7 +352,7 @@ def start_phone_waiting() -> Result:
         wait_seconds=10,
         nonce=nonce,
     )
-    return proof if proof.ok else Result(False, f"Waiting activity opened, but the foreground service was not proven armed.\n{proof.message}")
+    return proof if proof.ok else Result(False, f"Waiting activity opened, but the foreground service was not proven armed or complete.\n{proof.message}")
 
 
 def reboot_to_fastboot() -> Result:
