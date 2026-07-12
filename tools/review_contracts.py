@@ -94,7 +94,7 @@ def main() -> int:
         "PowerManager.PARTIAL_WAKE_LOCK", "START_NOT_STICKY", "stateStore.reconcileTimingState(nowChina)",
         "waitingTargetMidnight()", "WAITING_SERVICE_ARMED", "WAITING_SERVICE_REJECTED_MISSING_CAPTURES",
         "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY", "WAITING_SERVICE_RECOVERED_COMPLETE", "WAITING_SERVICE_COMPLETE",
-        "current != VerificationState.TIMING_WINDOW_REACHED",
+        "private fun isAuthoritativeResult", "current != VerificationState.TIMING_WINDOW_REACHED",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/StatusActivity.kt",
@@ -170,6 +170,17 @@ def main() -> int:
         "class Window(V2Window)", "query_phone_status", "captures_ready", "timing_complete",
         "mibu_app_icon.png", "Phone timing stage is already complete", "Foreground service proof succeeded",
         "Phone timing proof is not complete yet",
+    )
+
+    require_text(
+        "docs/ARCHITECTURE.md",
+        "MIBU PC Helper v3", "WAITING_SERVICE_ARMED", "does **not** currently submit or replay Xiaomi network requests",
+        "Timing reconciliation must never overwrite an authoritative external result",
+        "A physical-device run remains necessary to prove external facts",
+    )
+    forbid_text(
+        "docs/ARCHITECTURE.md",
+        "Missing pieces to implement later", "Later: prepares a secure handoff package",
     )
 
     require_text(
