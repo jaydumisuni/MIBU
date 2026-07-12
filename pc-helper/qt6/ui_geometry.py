@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+POPUP_CLOSE_RECT = (925, 30, 50, 50)
+POPUP_CLOSE_ART_BOUNDS = (930, 35, 40, 40)
+
+
 @dataclass(frozen=True)
 class ScreenGeometry:
     svg: str
@@ -13,6 +17,10 @@ class ScreenGeometry:
 
     def normalized(self, label: str) -> tuple[float, float, float, float]:
         x, y, w, h = self.hotspots[label]
+        return x / self.width, y / self.height, w / self.width, h / self.height
+
+    def normalized_rect(self, rect: tuple[int, int, int, int]) -> tuple[float, float, float, float]:
+        x, y, w, h = rect
         return x / self.width, y / self.height, w / self.width, h / self.height
 
 
