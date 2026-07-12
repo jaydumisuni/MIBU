@@ -36,23 +36,33 @@ class MibuForegroundService : Service() {
 
             if (!tokenStore.hasRequiredCaptures()) {
                 Log.w("MIBU", "Fresh Firefox + Chrome captures are not available; waiting service stopping")
+                stateStore.setVerificationState(VerificationState.UNKNOWN)
+                stateStore.clearWaitingTarget()
                 stopSelf(startId)
                 START_NOT_STICKY
             } else {
                 val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
+                val targetMidnight = stateStore.waitingTargetMidnight()
+                    ?: throw IllegalStateException("Waiting target midnight was not persisted")
                 val lanes = MibuLane.defaultLanes()
                 val delays = lanes.associateWith {
-                    Duration.between(nowChina, it.targetTime(nowChina)).toMillis().coerceAtLeast(0L)
+                    Duration.between(nowChina, it.targetTimeForMidnight(targetMidnight)).toMillis()
                 }
-                val latestDelay = delays.values.maxOrNull() ?: 0L
-                if (latestDelay > tokenStore.millisRemaining()) {
+                val earliestDelay = delays.values.minOrNull() ?: -1L
+                val latestDelay = delays.values.maxOrNull() ?: -1L
+                if (earliestDelay < 0L || latestDelay < 0L) {
+                    Log.w("MIBU", "Persisted timing session is already past; stopping")
+                    stateStore.setVerificationState(VerificationState.UNKNOWN)
+                    stateStore.clearWaitingTarget()
+                    stopSelf(startId)
+                    START_NOT_STICKY
+                } else if (latestDelay > tokenStore.millisRemaining()) {
                     Log.w("MIBU", "Tokens expire before latest timing window; stopping")
                     stateStore.setVerificationState(VerificationState.UNKNOWN)
+                    stateStore.clearWaitingTarget()
                     stopSelf(startId)
                     START_NOT_STICKY
                 } else {
-                    stateStore.armWaiting()
-                    stateStore.setVerificationState(VerificationState.WAITING_ARMED)
                     startForeground(NOTIFICATION_ID, buildNotification("Waiting armed • 0/4 timing windows reached"))
                     acquireWakeLock(latestDelay + 60_000L)
 
@@ -61,13 +71,14 @@ class MibuForegroundService : Service() {
                         callbacks += callback
                         handler.postDelayed(callback, delays.getValue(lane))
                     }
-                    Log.i("MIBU", "Waiting service scheduled four timing windows")
+                    Log.i("MIBU", "Waiting service scheduled four timing windows for ${targetMidnight.toInstant().toEpochMilli()}")
                     START_NOT_STICKY
                 }
             }
         } catch (exc: Exception) {
             Log.e("MIBU", "Waiting service failed", exc)
             stateStore.setVerificationState(VerificationState.UNKNOWN)
+            stateStore.clearWaitingTarget()
             stopSelf(startId)
             START_NOT_STICKY
         }
