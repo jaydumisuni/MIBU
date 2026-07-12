@@ -17,16 +17,23 @@ class StartWaitingActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val currentState = stateStore.reconcileTimingState()
-        if (currentState == VerificationState.TIMING_WINDOW_REACHED ||
-            currentState == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ||
-            currentState == VerificationState.UNLOCKED
-        ) {
+        if (currentState.blocksNewWaitingCycle()) {
             Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${currentState.name}")
-            Toast.makeText(
-                this,
-                "The timing stage is already complete. Continue with PC verification instead of starting a new wait.",
-                Toast.LENGTH_LONG
-            ).show()
+            val message = when (currentState) {
+                VerificationState.TIMING_WINDOW_REACHED,
+                VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ->
+                    "The timing stage is already complete. Continue with PC verification instead of starting a new wait."
+                VerificationState.WAIT_TIME_SHOWN ->
+                    "Mi Unlock already returned a waiting period. Keep that result; do not start another timing cycle."
+                VerificationState.ACCOUNT_DEVICE_NOT_ADDED ->
+                    "The account/device result must be resolved before another timing cycle can be started."
+                VerificationState.COMMUNITY_AUTH_REQUIRED ->
+                    "Xiaomi Community authorisation is still required. Resolve that result before starting another timing cycle."
+                VerificationState.UNLOCKED ->
+                    "This device is already recorded as unlocked. No waiting cycle is required."
+                else -> "A completed verification result is already recorded."
+            }
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             startActivity(Intent(this, MainActivity::class.java))
             finish()
             return
@@ -75,6 +82,16 @@ class StartWaitingActivity : Activity() {
 
         startActivity(Intent(this, MainActivity::class.java))
         finish()
+    }
+
+    private fun VerificationState.blocksNewWaitingCycle(): Boolean = when (this) {
+        VerificationState.TIMING_WINDOW_REACHED,
+        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION,
+        VerificationState.WAIT_TIME_SHOWN,
+        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
+        VerificationState.COMMUNITY_AUTH_REQUIRED,
+        VerificationState.UNLOCKED -> true
+        else -> false
     }
 
     companion object {
