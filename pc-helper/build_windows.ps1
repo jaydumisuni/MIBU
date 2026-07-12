@@ -28,23 +28,59 @@ function Remove-SafeDir([string]$Path) {
     }
 }
 
+function Resolve-Gradle {
+    $command = Get-Command gradle -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    $candidates = @(
+        "D:\mibu-build-tools\gradle\bin\gradle.bat",
+        "D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat",
+        (Join-Path $Root "gradlew.bat")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Resolve-AndroidSdk {
+    foreach ($candidate in @($env:ANDROID_SDK_ROOT, $env:ANDROID_HOME, "D:\mibu-build-tools\android-sdk")) {
+        if ($candidate -and (Test-Path $candidate)) { return (Resolve-Path $candidate).Path }
+    }
+    return $null
+}
+
 python -m pip install --upgrade pip
 python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
 
 if (-not (Test-Path $ResolvedApk)) {
-    $Gradle = Get-Command gradle -ErrorAction SilentlyContinue
-    if ($Gradle) {
-        Write-Host "Android APK missing. Building it first..." -ForegroundColor Cyan
-        Push-Location $Root
-        gradle :android:app:assembleDebug
+    $GradlePath = Resolve-Gradle
+    $AndroidSdk = Resolve-AndroidSdk
+    if (-not $GradlePath) {
+        throw "Android APK is missing and Gradle was not found. Expected gradle in PATH, D:\mibu-build-tools\gradle\bin\gradle.bat, D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat, or gradlew.bat in the repo."
+    }
+    if (-not $AndroidSdk) {
+        throw "Android APK is missing and Android SDK was not found. Set ANDROID_SDK_ROOT/ANDROID_HOME or install it at D:\mibu-build-tools\android-sdk."
+    }
+
+    $LocalProperties = Join-Path $Root "local.properties"
+    $EscapedSdk = $AndroidSdk.Replace('\', '\\')
+    Set-Content -Path $LocalProperties -Value "sdk.dir=$EscapedSdk" -Encoding ASCII
+    Write-Host "Android APK missing. Building with $GradlePath" -ForegroundColor Cyan
+    Write-Host "Android SDK: $AndroidSdk" -ForegroundColor Cyan
+    Push-Location $Root
+    try {
+        & $GradlePath :android:app:testDebugUnitTest :android:app:assembleDebug --stacktrace
+        if ($LASTEXITCODE -ne 0) { throw "Android Gradle build failed with exit code $LASTEXITCODE" }
+    } finally {
         Pop-Location
     }
 }
 if (-not (Test-Path $ResolvedApk)) {
-    throw "Android APK is required for a complete MIBU release but was not found at $ResolvedApk. Build Android first with Gradle or pass -ApkPath."
+    throw "Android APK is required for a complete MIBU release but was not created at $ResolvedApk."
 }
 
 Write-Host "Rendering deterministic hotspot UI assets..." -ForegroundColor Cyan
+python (Join-Path $HelperDir "validate_ui_contract.py")
 python (Join-Path $HelperDir "render_svg_assets.py")
 
 $RequiredUi = @(
@@ -56,24 +92,35 @@ $RequiredUi = @(
 )
 foreach ($asset in $RequiredUi) {
     if (-not (Test-Path $asset)) { throw "Required hotspot UI asset was not rendered: $asset" }
+    if ((Get-Item $asset).Length -le 0) { throw "Required hotspot UI asset is empty: $asset" }
 }
 Write-Host "Hotspot UI assets verified." -ForegroundColor Green
 
 $env:QT_QPA_PLATFORM = "offscreen"
 Push-Location $HelperDir
-python -c "import mibu_pc_helper_v2; assert mibu_pc_helper_v2.next_target().tzinfo is not None; print('MIBU v2 import/math smoke check passed')"
-Pop-Location
-Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+try {
+    python -c "import mibu_pc_helper_v2; assert mibu_pc_helper_v2.next_target().tzinfo is not None; print('MIBU v2 import/math smoke check passed')"
+    if ($LASTEXITCODE -ne 0) { throw "MIBU v2 source smoke check failed" }
+} finally {
+    Pop-Location
+    Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+}
 
 Remove-SafeDir $DistDir
 Remove-SafeDir $BundleDir
 New-Item -ItemType Directory -Path $BundleDir | Out-Null
 
 Push-Location $HelperDir
-python -m PyInstaller --noconfirm --windowed --name "MIBU-PC-Helper" --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v2.py"
-Pop-Location
+try {
+    python -m PyInstaller --noconfirm --windowed --name "MIBU-PC-Helper" --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v2.py"
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
+} finally {
+    Pop-Location
+}
 
-Copy-Item (Join-Path $HelperDir "dist\MIBU-PC-Helper") $BundleDir -Recurse -Force
+$BuiltHelper = Join-Path $HelperDir "dist\MIBU-PC-Helper"
+if (-not (Test-Path $BuiltHelper)) { throw "PyInstaller output folder missing: $BuiltHelper" }
+Copy-Item $BuiltHelper $BundleDir -Recurse -Force
 $BundleApp = Join-Path $BundleDir "MIBU-PC-Helper"
 $BundleDist = Join-Path $BundleApp "dist"
 New-Item -ItemType Directory -Path $BundleDist -Force | Out-Null
@@ -90,8 +137,12 @@ foreach ($asset in $RequiredUi) {
     $relative = $asset.Substring($ResourceRoot.Length).TrimStart('\')
     $bundled = Join-Path $BundleResources $relative
     if (-not (Test-Path $bundled)) { throw "Required hotspot UI asset missing from release bundle: $bundled" }
+    if ((Get-Item $bundled).Length -le 0) { throw "Bundled hotspot UI asset is empty: $bundled" }
 }
-if (-not (Test-Path (Join-Path $BundleDist "MIBU.apk"))) { throw "MIBU.apk missing from final release bundle." }
+$BundledApk = Join-Path $BundleDist "MIBU.apk"
+$BundledExe = Join-Path $BundleApp "MIBU-PC-Helper.exe"
+if (-not (Test-Path $BundledApk) -or (Get-Item $BundledApk).Length -le 0) { throw "MIBU.apk missing or empty in final release bundle." }
+if (-not (Test-Path $BundledExe) -or (Get-Item $BundledExe).Length -le 0) { throw "MIBU-PC-Helper.exe missing or empty in final release bundle." }
 Write-Host "Release APK and hotspot assets verified." -ForegroundColor Green
 
 $AudioRoots = @(
