@@ -108,6 +108,18 @@ class MibuForegroundService : Service() {
     }
 
     private fun markWindowReached(laneNumber: Int) {
+        val before = stateStore.verificationState()
+        if (before.isAuthoritativeResult()) {
+            Log.i(LOG_TAG, "WAITING_LANE_IGNORED_AUTHORITATIVE lane=$laneNumber state=${before.name} nonce=$proofNonce")
+            stopSelf()
+            return
+        }
+        if (before.isTimingComplete()) {
+            Log.i(LOG_TAG, "WAITING_LANE_IGNORED_COMPLETE lane=$laneNumber state=${before.name} nonce=$proofNonce")
+            stopSelf()
+            return
+        }
+
         stateStore.setLaneStatus(laneNumber, LaneStatus.WINDOW_REACHED)
         reachedCount = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
         if (reachedCount >= MibuLane.defaultLanes().size) {
