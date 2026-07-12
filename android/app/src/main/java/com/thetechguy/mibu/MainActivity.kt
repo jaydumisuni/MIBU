@@ -255,13 +255,12 @@ class MainActivity : Activity() {
             beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8"
             localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${localTarget.zone.id}"
         } else {
-            beijingCard.text = "Target Time (Beijing)\nNo active target\nResult recorded"
-            localCard.text = "Target Time (Local)\nNo active target\n${ZoneId.systemDefault().id}"
+            beijingCard.text = "Target Time (Beijing)\n$NO_ACTIVE_TARGET\nResult recorded"
+            localCard.text = "Target Time (Local)\n$NO_ACTIVE_TARGET\n${ZoneId.systemDefault().id}"
         }
 
         countdownCard.text = when {
-            verification == VerificationState.TIMING_WINDOW_REACHED ||
-                verification == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ->
+            verification.isTimingComplete() ->
                 formatBlock("Timing Stage", "COMPLETE", "Continue with PC verification")
             verification.isAuthoritativeResult() ->
                 formatBlock("Verification Result", friendlyVerification(verification), "No new countdown is active")
@@ -307,19 +306,6 @@ class MainActivity : Activity() {
         else -> "MIBU confirms timing state only. PC Helper and the official Mi Unlock Tool provide device verification."
     }
 
-    private fun VerificationState.isAuthoritativeResult(): Boolean = when (this) {
-        VerificationState.WAIT_TIME_SHOWN,
-        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
-        VerificationState.COMMUNITY_AUTH_REQUIRED,
-        VerificationState.UNLOCKED -> true
-        else -> false
-    }
-
-    private fun VerificationState.blocksNewWaitingCycle(): Boolean =
-        this == VerificationState.TIMING_WINDOW_REACHED ||
-            this == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ||
-            isAuthoritativeResult()
-
     private fun formatBlock(title: String, main: String, small: String) = if (small.isBlank()) "$title\n$main" else "$title\n$main\n$small"
     private fun rounded(color: Int, radius: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); setStroke(dp(1), stroke) }
     private fun rootParams(view: View, bottom: Int = 0) {
@@ -329,5 +315,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST = 49
+        private const val NO_ACTIVE_TARGET = "No active target"
     }
 }
