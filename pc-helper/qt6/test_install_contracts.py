@@ -21,18 +21,26 @@ class PackageVersionTests(unittest.TestCase):
     def test_missing_version_returns_none(self) -> None:
         self.assertIsNone(mibu_actions.parse_package_version("Package not found"))
 
-    def test_current_version_is_verified_without_reinstall(self) -> None:
+    def test_current_version_is_reinstalled_and_reverified(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             apk = Path(tmp) / "MIBU.apk"
             apk.write_bytes(b"apk")
             with patch.object(mibu_actions, "check_device_ready", return_value=mibu_actions.Result(True, "ready")), patch.object(
                 mibu_actions,
                 "installed_package_version",
-                return_value=mibu_actions.Result(True, mibu_actions.EXPECTED_APP_VERSION),
-            ), patch.object(mibu_actions, "run_tool") as run_tool:
+                side_effect=[
+                    mibu_actions.Result(True, mibu_actions.EXPECTED_APP_VERSION),
+                    mibu_actions.Result(True, mibu_actions.EXPECTED_APP_VERSION),
+                ],
+            ), patch.object(
+                mibu_actions,
+                "run_tool",
+                return_value=mibu_actions.Result(True, "Success"),
+            ) as run_tool:
                 result = mibu_actions.install_package(str(apk))
             self.assertTrue(result.ok)
-            run_tool.assert_not_called()
+            self.assertIn("installed/reinstalled", result.message)
+            run_tool.assert_called_once_with(["install", "-r", str(apk)], timeout=120)
 
     def test_old_installed_version_is_updated_and_reverified(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -52,6 +60,7 @@ class PackageVersionTests(unittest.TestCase):
             ) as run_tool:
                 result = mibu_actions.install_package(str(apk))
             self.assertTrue(result.ok)
+            self.assertIn("Previous state: 0.1.0-dev", result.message)
             run_tool.assert_called_once_with(["install", "-r", str(apk)], timeout=120)
 
     def test_version_mismatch_after_install_is_failure(self) -> None:
