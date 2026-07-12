@@ -112,14 +112,8 @@ class TokenStore(context: Context) {
     private fun hasServiceTokenRaw(): Boolean = !prefs.getString(KEY_SERVICE_TOKEN, null).isNullOrBlank()
     private fun hasPopTokenRaw(): Boolean = !prefs.getString(KEY_POP_TOKEN, null).isNullOrBlank()
 
-    private fun remainingFor(timestampKey: String, nowMs: Long): Long {
-        val capturedAt = prefs.getLong(timestampKey, 0L)
-        if (capturedAt <= 0L) return 0L
-        val ageMs = nowMs - capturedAt
-        // A wall-clock rollback must never extend a sensitive capture's lifetime.
-        if (ageMs < 0L) return 0L
-        return (MAX_TOKEN_AGE_MS - ageMs).coerceIn(0L, MAX_TOKEN_AGE_MS)
-    }
+    private fun remainingFor(timestampKey: String, nowMs: Long): Long =
+        remainingMillis(prefs.getLong(timestampKey, 0L), nowMs)
 
     private fun expireStaleCaptures(nowMs: Long = System.currentTimeMillis()) {
         val edit = prefs.edit()
@@ -159,6 +153,7 @@ class TokenStore(context: Context) {
         fun remainingMillis(capturedAtMs: Long, nowMs: Long): Long {
             if (capturedAtMs <= 0L) return 0L
             val ageMs = nowMs - capturedAtMs
+            // A wall-clock rollback must never extend a sensitive capture's lifetime.
             if (ageMs < 0L) return 0L
             return (MAX_TOKEN_AGE_MS - ageMs).coerceIn(0L, MAX_TOKEN_AGE_MS)
         }
