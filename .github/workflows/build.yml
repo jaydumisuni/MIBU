@@ -35,14 +35,15 @@ jobs:
       - name: Assemble debug APK
         run: gradle :android:app:assembleDebug
       - name: Verify APK artifact exists
-        run: test -f android/app/build/outputs/apk/debug/app-debug.apk
+        run: test -s android/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: MIBU-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
 
   pc-helper:
-    name: PC helper source and visual contract
+    name: PC helper source, timing and visual contract
     runs-on: ubuntu-latest
     env:
       QT_QPA_PLATFORM: offscreen
@@ -53,15 +54,14 @@ jobs:
           python-version: '3.12'
       - name: Install Qt requirements
         run: python -m pip install -r pc-helper/qt6/requirements.txt
-      - name: Syntax checks
+      - name: Compile active sources
         run: |
           python -m py_compile pc-helper/mibu_pc_helper.py
-          python -m py_compile pc-helper/qt6/mibu_pc_helper_ui.py
-          python -m py_compile pc-helper/qt6/mibu_pc_helper_final.py
           python -m py_compile pc-helper/qt6/mibu_actions.py
           python -m py_compile pc-helper/qt6/dependency_check.py
           python -m py_compile pc-helper/qt6/render_svg_assets.py
           python -m py_compile pc-helper/qt6/validate_ui_contract.py
+          python -m py_compile pc-helper/qt6/mibu_pc_helper_v2.py
           python -m py_compile tools/review_contracts.py
       - name: Validate hotspot artwork against click contract
         run: python pc-helper/qt6/validate_ui_contract.py
@@ -74,23 +74,65 @@ jobs:
           test -s "resources/expected ui/pc/03_popup_install_apk.png"
           test -s "resources/expected ui/pc/04_popup_login_get_token.png"
           test -s "resources/expected ui/pc/05_popup_phone_guide.png"
-      - name: Qt offscreen construction smoke test
+      - name: Qt v2 construction and time math smoke test
         run: |
           python - <<'PY'
           import os, sys
           os.environ['QT_QPA_PLATFORM'] = 'offscreen'
           sys.path.insert(0, 'pc-helper/qt6')
           from PySide6.QtWidgets import QApplication
-          from mibu_pc_helper_final import Window
+          import mibu_pc_helper_v2 as mibu
+          target = mibu.next_target()
+          assert target.tzinfo is not None
+          assert (target.hour, target.minute, target.second, target.microsecond) == (23, 59, 58, 600000)
           app = QApplication([])
-          window = Window()
-          assert window.main_image, 'Main hotspot image was not discovered'
+          window = mibu.Window()
           assert set(window.buttons) == {'Device Check', 'Install APK', 'Login & Get Token', 'Phone Guide'}
-          assert window.minimumWidth() >= 820
-          assert window.minimumHeight() >= 560
+          assert window.main_image.endswith('01_pc_main_four_button_workflow.png')
+          assert window.minimumWidth() >= 900
+          assert window.minimumHeight() >= 600
           window.close()
           app.quit()
-          print('Qt construction smoke test passed')
+          print('Qt v2 construction and timing proof passed')
           PY
-      - name: Time command smoke test
+      - name: CLI time smoke test
         run: python pc-helper/mibu_pc_helper.py time
+
+  windows-release:
+    name: Complete Windows release proof
+    needs: [source-review, android, pc-helper]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/download-artifact@v4
+        with:
+          name: MIBU-debug-apk
+          path: android/app/build/outputs/apk/debug
+      - name: Build complete release
+        shell: powershell
+        run: .\pc-helper\build_windows.ps1
+      - name: Verify release contract
+        shell: powershell
+        run: |
+          $root = "pc-helper\release\MIBU-PC-Helper"
+          $required = @(
+            "$root\MIBU-PC-Helper.exe",
+            "$root\dist\MIBU.apk",
+            "$root\resources\expected ui\pc\01_pc_main_four_button_workflow.png",
+            "$root\resources\expected ui\pc\02_popup_device_check_guide.png",
+            "$root\resources\expected ui\pc\03_popup_install_apk.png",
+            "$root\resources\expected ui\pc\04_popup_login_get_token.png",
+            "$root\resources\expected ui\pc\05_popup_phone_guide.png"
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) { throw "Release contract missing: $path" }
+            if ((Get-Item $path).Length -le 0) { throw "Release contract empty: $path" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MIBU-PC-Helper-Windows
+          path: pc-helper/release/MIBU-PC-Helper
+          if-no-files-found: error
