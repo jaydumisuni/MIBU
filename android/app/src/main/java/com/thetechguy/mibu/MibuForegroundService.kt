@@ -40,15 +40,14 @@ class MibuForegroundService : Service() {
             reachedCount = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
 
             when {
-                reconciled == VerificationState.TIMING_WINDOW_REACHED ||
-                    reconciled == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> {
+                reconciled.isTimingComplete() -> {
                     startForeground(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
                     Log.i(LOG_TAG, "WAITING_SERVICE_RECOVERED_COMPLETE state=${reconciled.name} reached=$reachedCount nonce=$proofNonce")
                     handler.postDelayed({ stopSelf() }, 15_000L)
                     START_NOT_STICKY
                 }
 
-                isAuthoritativeResult(reconciled) -> {
+                reconciled.isAuthoritativeResult() -> {
                     Log.i(LOG_TAG, "WAITING_SERVICE_NOT_NEEDED state=${reconciled.name} nonce=$proofNonce")
                     stopSelf(startId)
                     START_NOT_STICKY
@@ -97,23 +96,12 @@ class MibuForegroundService : Service() {
         } catch (exc: Exception) {
             Log.e(LOG_TAG, "WAITING_SERVICE_FAILED nonce=$proofNonce", exc)
             val current = stateStore.verificationState()
-            if (current != VerificationState.TIMING_WINDOW_REACHED &&
-                current != VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION &&
-                !isAuthoritativeResult(current)
-            ) {
+            if (!current.isTimingComplete() && !current.isAuthoritativeResult()) {
                 stateStore.setVerificationState(VerificationState.UNKNOWN)
             }
             stopSelf(startId)
             START_NOT_STICKY
         }
-    }
-
-    private fun isAuthoritativeResult(state: VerificationState): Boolean = when (state) {
-        VerificationState.WAIT_TIME_SHOWN,
-        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
-        VerificationState.COMMUNITY_AUTH_REQUIRED,
-        VerificationState.UNLOCKED -> true
-        else -> false
     }
 
     private fun markWindowReached(laneNumber: Int) {
