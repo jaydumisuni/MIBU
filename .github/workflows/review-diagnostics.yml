@@ -137,6 +137,8 @@ jobs:
         shell: bash
         run: |
           set +e
+          grep -R -n -E 'fun Activity\.(mibuPage|mibuCard|mibuButton|footer)' android/app/src/main/java > android-ui-definitions.log 2>&1
+          cat android-ui-definitions.log
           gradle :android:app:lintDebug :android:app:testDebugUnitTest --stacktrace > android-diagnostics.log 2>&1
           code=$?
           cat android-diagnostics.log
@@ -147,6 +149,7 @@ jobs:
         with:
           name: android-diagnostics
           path: |
+            android-ui-definitions.log
             android-diagnostics.log
             android-diagnostics.exit
             android/app/build/reports/
