@@ -32,53 +32,51 @@ class MibuForegroundService : Service() {
         return try {
             callbacks.forEach(handler::removeCallbacks)
             callbacks.clear()
-            reachedCount = 0
 
             if (!tokenStore.hasRequiredCaptures()) {
-                Log.w("MIBU", "Fresh Firefox + Chrome captures are not available; waiting service stopping")
+                Log.w(LOG_TAG, "Fresh Firefox + Chrome captures are not available; waiting service stopping")
                 stateStore.setVerificationState(VerificationState.UNKNOWN)
-                stateStore.clearWaitingTarget()
                 stopSelf(startId)
                 START_NOT_STICKY
             } else {
                 val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
                 val targetMidnight = stateStore.waitingTargetMidnight()
                     ?: throw IllegalStateException("Waiting target midnight was not persisted")
-                val lanes = MibuLane.defaultLanes()
-                val delays = lanes.associateWith {
-                    Duration.between(nowChina, it.targetTimeForMidnight(targetMidnight)).toMillis()
-                }
-                val earliestDelay = delays.values.minOrNull() ?: -1L
-                val latestDelay = delays.values.maxOrNull() ?: -1L
-                if (earliestDelay < 0L || latestDelay < 0L) {
-                    Log.w("MIBU", "Persisted timing session is already past; stopping")
-                    stateStore.setVerificationState(VerificationState.UNKNOWN)
-                    stateStore.clearWaitingTarget()
-                    stopSelf(startId)
-                    START_NOT_STICKY
-                } else if (latestDelay > tokenStore.millisRemaining()) {
-                    Log.w("MIBU", "Tokens expire before latest timing window; stopping")
-                    stateStore.setVerificationState(VerificationState.UNKNOWN)
-                    stateStore.clearWaitingTarget()
-                    stopSelf(startId)
+
+                val reconciled = stateStore.reconcileTimingState(nowChina)
+                reachedCount = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
+                if (reconciled == VerificationState.TIMING_WINDOW_REACHED) {
+                    startForeground(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
+                    Log.i(LOG_TAG, "Recovered completed timing-window state")
+                    handler.postDelayed({ stopSelf() }, 15_000L)
                     START_NOT_STICKY
                 } else {
-                    startForeground(NOTIFICATION_ID, buildNotification("Waiting armed • 0/4 timing windows reached"))
-                    acquireWakeLock(latestDelay + 60_000L)
-
-                    lanes.forEach { lane ->
-                        val callback = Runnable { markWindowReached(lane.number) }
-                        callbacks += callback
-                        handler.postDelayed(callback, delays.getValue(lane))
+                    val armedLanes = stateStore.lanes().filter { it.status == LaneStatus.ARMED }
+                    val delays = armedLanes.associateWith { lane ->
+                        Duration.between(nowChina, lane.targetTimeForMidnight(targetMidnight)).toMillis().coerceAtLeast(0L)
                     }
-                    Log.i("MIBU", "Waiting service scheduled four timing windows for ${targetMidnight.toInstant().toEpochMilli()}")
-                    START_NOT_STICKY
+                    val latestDelay = delays.values.maxOrNull() ?: 0L
+                    if (latestDelay > tokenStore.millisRemaining()) {
+                        Log.w(LOG_TAG, "Tokens expire before latest timing window; stopping")
+                        stateStore.setVerificationState(VerificationState.UNKNOWN)
+                        stopSelf(startId)
+                        START_NOT_STICKY
+                    } else {
+                        startForeground(NOTIFICATION_ID, buildNotification("Waiting armed • $reachedCount/4 timing windows reached"))
+                        acquireWakeLock(latestDelay + 60_000L)
+                        armedLanes.forEach { lane ->
+                            val callback = Runnable { markWindowReached(lane.number) }
+                            callbacks += callback
+                            handler.postDelayed(callback, delays.getValue(lane))
+                        }
+                        Log.i(LOG_TAG, "Waiting service scheduled ${armedLanes.size} remaining timing windows")
+                        START_NOT_STICKY
+                    }
                 }
             }
         } catch (exc: Exception) {
-            Log.e("MIBU", "Waiting service failed", exc)
+            Log.e(LOG_TAG, "Waiting service failed", exc)
             stateStore.setVerificationState(VerificationState.UNKNOWN)
-            stateStore.clearWaitingTarget()
             stopSelf(startId)
             START_NOT_STICKY
         }
@@ -86,16 +84,16 @@ class MibuForegroundService : Service() {
 
     private fun markWindowReached(laneNumber: Int) {
         stateStore.setLaneStatus(laneNumber, LaneStatus.WINDOW_REACHED)
-        reachedCount += 1
+        reachedCount = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
         val manager = getSystemService(NotificationManager::class.java)
         if (reachedCount >= MibuLane.defaultLanes().size) {
             stateStore.setVerificationState(VerificationState.TIMING_WINDOW_REACHED)
             manager.notify(NOTIFICATION_ID, buildNotification("Timing window reached • continue with PC verification"))
-            Log.i("MIBU", "All four timing windows reached")
+            Log.i(LOG_TAG, "All four timing windows reached")
             handler.postDelayed({ stopSelf() }, 15_000L)
         } else {
             manager.notify(NOTIFICATION_ID, buildNotification("Waiting armed • $reachedCount/4 timing windows reached"))
-            Log.i("MIBU", "Timing window reached for lane $laneNumber")
+            Log.i(LOG_TAG, "Timing window reached for lane $laneNumber")
         }
     }
 
@@ -151,5 +149,6 @@ class MibuForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "mibu_wait"
         private const val NOTIFICATION_ID = 49
+        private const val LOG_TAG = "MIBU_SERVICE"
     }
 }
