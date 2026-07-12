@@ -20,16 +20,16 @@ class MibuForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
-            if (!tokenStore.hasSession()) {
-                Log.w("MIBU", "No token imported; waiting service stopping cleanly")
+            if (!tokenStore.hasRequiredCaptures()) {
+                Log.w("MIBU", "Fresh Firefox + Chrome captures are not available; waiting service stopping cleanly")
                 stopSelf(startId)
                 START_NOT_STICKY
             } else {
                 stateStore.armWaiting()
                 startForeground(49, buildNotification())
-                Log.i("MIBU", "Waiting service running with lanes armed")
+                Log.i("MIBU", "Waiting service running with four lanes armed")
                 Log.i("MIBU", stateStore.laneSummary())
-                START_STICKY
+                START_NOT_STICKY
             }
         } catch (exc: Exception) {
             Log.e("MIBU", "Waiting service failed", exc)
@@ -53,7 +53,6 @@ class MibuForegroundService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        val fullMode = if (tokenStore.hasRequiredCaptures()) "Full token setup" else "Partial token setup"
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, "mibu_wait")
         } else {
@@ -62,8 +61,9 @@ class MibuForegroundService : Service() {
         }
         return builder
             .setContentTitle("MIBU waiting armed")
-            .setContentText("$fullMode • one countdown shown, four lanes tracked")
+            .setContentText("Fresh two-token setup • one countdown shown • four lanes tracked")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setOngoing(true)
             .build()
     }
 }
