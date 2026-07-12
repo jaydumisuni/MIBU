@@ -1,137 +1,147 @@
 # MIBU Review Status
 
-Review date: 2026-07-05
+Review date: 2026-07-12
 
 This review applies the THETECHGUY Build Standard: finish first, review hard, freeze, then prove.
 
 ## Current conclusion
 
-MIBU has moved past the old one-token visual shell.
+The active v2 architecture is now substantially implemented and source-reviewed. The previous one-token shell, static button glow, unverified bridge actions, incomplete release package, and metadata-only lane model have been replaced.
 
-The repo now contains the safe state/control-flow layer needed before runtime proof:
+The review is still open. Do not treat this document as permission to pull until the final source and CI pass is explicitly closed.
 
-- two token captures
-- four derived internal request slots
-- lane metadata for 1400 / 900 / 400 / 100 ms
-- one visible countdown on Android
-- waiting service that arms lane state
-- Android Community Device Check screen
-- Android Logs screen showing real stored token/slot/lane/community/verification state
-- shared Android UI helper functions restored for all simple activity screens
-- compile-safe Android hero artwork resource present
-- PC helper two-token push
-- PC helper fastboot verification guide
-- PC helper build script that handles locked release folders by renaming them instead of failing immediately
+## Android implementation
 
-This still must be clean-built and runtime-tested on the user's PC/phone before it can be claimed as fully proven.
+### Token model
 
-## What is present
+- Two explicit captures:
+  - Firefox `new_bbs_serviceToken`
+  - Chrome `popRunToken`
+- Firefox maps to slots 1 and 3.
+- Chrome maps to slots 2 and 4.
+- Each capture has its own timestamp.
+- The effective freshness is the shorter remaining freshness of the two captures.
+- Each stale capture is removed independently.
+- Token fields use password-style input.
+- ADB transfer uses URL-safe Base64 extras.
+- Android emits proof markers after successful import.
 
-### Android APK
+### Timing model
 
-- MainActivity renders a phone dashboard with one visible countdown and state cards for token setup, hidden request lanes, community check, and verification.
-- TokenStore supports two captures:
-  - Firefox/service token
-  - Chrome/pop token
-- TokenStore maps those captures into four slots:
-  - Slot 1 Firefox
-  - Slot 2 Chrome
-  - Slot 3 Firefox
-  - Slot 4 Chrome
-- MibuLane models the four lane offsets:
+- One visible live countdown.
+- Four hidden timing windows:
   - 1400 ms
   - 900 ms
   - 400 ms
   - 100 ms
-- MibuStateStore tracks lane state, community state, and verification state.
-- TokenImportActivity accepts either:
-  - two pushed tokens from PC Helper
-  - one legacy token/session
-  - manual two-token paste
-- StartWaitingActivity arms lane state before starting the foreground service.
-- MibuForegroundService logs and notifies that waiting is armed.
-- CommunityCheckActivity lets the user set:
-  - COMMUNITY_DEVICE_CONFIRMED
-  - COMMUNITY_DEVICE_NOT_FOUND
-  - COMMUNITY_ROUTE_NOT_REQUIRED
-  - COMMUNITY_ROUTE_UNKNOWN
-- LogsActivity displays current stored token preview, four-slot status, lane state, community state, and verification state.
-- MibuUiHelpers provides shared `mibuPage`, `mibuCard`, `mibuButton`, `footer`, `dp`, and `rounded` helpers used by TokenImportActivity, LogsActivity, InstructionsActivity, and CommunityCheckActivity.
-- AndroidManifest registers CommunityCheckActivity, TokenImportActivity, StartWaitingActivity, LogsActivity, InstructionsActivity, MainActivity, and MibuForegroundService.
-- Drawable resources include `ic_mibu` and `mibu_hero_art`, so MainActivity's hero image reference has a repo resource behind it.
+- All four lanes are derived from one shared upcoming Beijing midnight.
+- If the earliest window has passed, every lane rolls to the following midnight together.
+- Android unit tests cover mapping, ordering, same-day target, next-day rollover, sub-second values, and China-zone normalisation.
+- Start Waiting is rejected when captures cannot remain fresh until the latest timing window.
+- Foreground service schedules all four windows, holds a bounded partial wake lock, updates lane state, and records timing-stage completion.
 
-### PC Helper
+### Android UI and state
 
-- PC helper has four main workflow actions:
-  - Device Check
-  - Install APK
-  - Login & Get Token
-  - Phone Guide
-- PC helper checks ADB device state and distinguishes no device, unauthorized, offline, and online states.
-- PC helper can install an APK, launch MIBU, push one token/session, push two token captures, and start phone waiting.
-- PC helper includes fastboot verification helpers:
-  - reboot to bootloader
-  - detect fastboot devices
-  - query fastboot device info / unlocked state
-- Phone Guide has a Verify Fastboot path that hands off to official Mi Unlock Tool result interpretation.
-- PC helper supports image-hotspot UI with fallback controls when resources are missing.
-- PC helper sets the window maximize button hint and minimum size.
-- Build script copies APK/resources/audio when present and handles locked release folders by renaming old folders.
+- Main dashboard updates every second.
+- Main dashboard shows one countdown, not four.
+- Detailed lane state stays in Logs.
+- Completion wording is `TIMING STAGE COMPLETE`, not request approved.
+- Community check records evidence states without inventing a universal requirement.
+- Instructions and UI clearly state that MIBU does not prove Xiaomi approval or unlock success.
+- ADB bridge activities are protected with the privileged shell `DUMP` permission.
 
-## Remaining gaps before runtime proof
+## PC Helper implementation
 
-### Android APK
-
-- The lane request execution engine is intentionally not implemented in this safe patch.
-- Real endpoint/result handling must not be claimed until a permitted implementation and test exist.
-
-### PC Helper
-
-- Fastboot verification opens the correct technical path, but official Mi Unlock Tool result is still recorded by user interpretation, not automatic OCR/API.
-- Settings fallback is documented and guided, but not yet a separate wizard screen.
-- Image UI fidelity still depends on expected image resources being present in the local resource folder.
-
-### Build/runtime proof
-
-- Clean build proof has not been run inside this GitHub-only review.
-- Runtime proof on the connected phone has not been run inside this GitHub-only review.
-- Final confidence requires the user's PC to pull, build, install, and run the APK/PC helper.
-
-## Review gate status
-
-- Implementation complete for safe state/control-flow layer: YES
-- Code/docs match for safe layer: YES
-- Known gaps documented: YES
-- Clean build proof: NOT DONE IN THIS REVIEW
-- Runtime proof: NOT DONE IN THIS REVIEW
-- Ready to claim fully working on device: NO
-- Ready for clean build + runtime proof: YES
-
-## Next proof command group
-
-On the user's PC:
-
-```powershell
-cd "D:\projects\in progress\#MIBU"
-git pull
-.\pc-helper\build_windows.ps1
-```
-
-Then build/install Android using the available project build path, open the PC helper, and test:
+### Workflow
 
 1. Device Check
 2. Install APK
-3. Login & Get Token -> Paste Two Tokens
-4. Phone Guide -> Open MIBU
-5. Phone Guide -> Start Phone Waiting
-6. Community Check -> save current Community route evidence
-7. Open Logs -> confirm stored state shows correctly
-8. Phone Guide -> Verify Fastboot
+3. Login & Get Tokens
+4. Phone Guide / Fastboot Verification
 
-## Current confidence
+### Action proof
 
-I am confident the repo now matches the safe architecture we agreed on, based on source review.
+- Device Check distinguishes no device, unauthorized, offline, and online.
+- APK install is followed by package verification.
+- App launch uses `am start -W` and requires Android confirmation.
+- Token push clears logcat, opens the protected import activity, and waits for an Android proof marker.
+- Start Waiting clears logcat, opens the protected waiting activity, and waits for an Android proof marker.
+- Fastboot verification waits for device detection instead of checking immediately once.
+- PC helper records exact command output rather than claiming success from process launch alone.
 
-I also corrected the important code-level compile risk introduced by moving UI helper logic out of MainActivity: MibuUiHelpers now supplies the shared helpers used by the other Android screens.
+### Visual contract
 
-I am not claiming runtime success until the clean build and phone test are completed.
+- Five required source-controlled SVG screens.
+- Five deterministically rendered PNG screens.
+- One shared geometry source controls:
+  - artwork validation
+  - runtime hotspots
+  - tests
+- Every visible button rectangle must match exactly one runtime hotspot.
+- Validator rejects baked orange active styling.
+- Orange active glow comes from the button actually clicked.
+- Main artwork reserves separate regions for live status, output, target time, and buttons so overlays do not cover instructional text.
+
+## Build and release contract
+
+The complete Windows build now requires and verifies:
+
+- Android unit tests
+- Android APK
+- PC helper unit tests
+- source-contract review
+- visual geometry validation
+- deterministic PNG rendering
+- Qt offscreen construction/math smoke test
+- PyInstaller EXE
+- bundled MIBU.apk
+- bundled ADB and fastboot platform-tools
+- all five required UI PNGs
+
+The build fails instead of publishing an incomplete release when any required component is missing or empty.
+
+## CI contract
+
+GitHub Actions is configured to prove:
+
+- THETECHGUY source contracts
+- Android unit tests and APK compilation
+- Python syntax
+- PC unit tests
+- SVG/hotspot geometry
+- no baked active glow
+- deterministic image rendering
+- Qt offscreen construction
+- Beijing time math
+- complete Windows release contents
+
+Current CI completion status must be checked separately. Configuration is not the same thing as a passed workflow.
+
+## Honest remaining boundary
+
+Source review and CI can prove architecture, compilation, math, visual contracts, button wiring, bridge proof logic, and release contents.
+
+Only a physical run can prove external state:
+
+- ATHENA's current USB driver state
+- the connected phone accepting RSA authorization
+- the installed phone build running on that specific device
+- the phone entering fastboot through the cable/driver combination
+- Xiaomi/Mi Unlock's live response
+
+These are runtime proof facts, not unfinished design work.
+
+## Review gate
+
+- Intended safe architecture complete: YES
+- Two-capture/four-slot model complete: YES
+- Consistent timing math implemented and unit-tested: YES
+- One-countdown Android presentation: YES
+- PC visual/hotspot contract: YES
+- Android bridge actions require proof markers: YES
+- Self-contained release contract: YES
+- Documentation claims match current safe implementation: YES
+- GitHub CI configured for full proof: YES
+- GitHub CI confirmed green: PENDING
+- Physical ATHENA/phone proof: PENDING
+- Review frozen: NO — final review still in progress
