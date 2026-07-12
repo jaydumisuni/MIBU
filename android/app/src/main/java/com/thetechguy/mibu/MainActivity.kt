@@ -1,10 +1,13 @@
 package com.thetechguy.mibu
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -40,10 +43,12 @@ class MainActivity : Activity() {
     private lateinit var laneCard: TextView
     private lateinit var verifyCard: TextView
     private lateinit var communityCard: TextView
+    private lateinit var startWaitingButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
+        requestNotificationPermissionIfNeeded()
         refreshStatus()
     }
 
@@ -56,6 +61,14 @@ class MainActivity : Activity() {
     override fun onPause() {
         uiHandler.removeCallbacks(ticker)
         super.onPause()
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+        }
     }
 
     private fun buildUi() {
@@ -96,7 +109,8 @@ class MainActivity : Activity() {
         communityCard = rowTile("Community Device Check", "For China-routed devices, confirm device/account status in Xiaomi Community if needed.", stateStore.communityState().name)
         root.addView(communityCard)
 
-        root.addView(primaryButton("Start Waiting") { startActivity(Intent(this, StartWaitingActivity::class.java)) })
+        startWaitingButton = primaryButton("Start Waiting") { startActivity(Intent(this, StartWaitingActivity::class.java)) }
+        root.addView(startWaitingButton)
         root.addView(secondaryButton("Import Firefox + Chrome tokens") { startActivity(Intent(this, TokenImportActivity::class.java)) })
         root.addView(secondaryButton("Community Check") { startActivity(Intent(this, CommunityCheckActivity::class.java)) })
         root.addView(secondaryButton("Open Logs") { startActivity(Intent(this, LogsActivity::class.java)) })
@@ -200,14 +214,18 @@ class MainActivity : Activity() {
     private fun refreshStatus() {
         val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
         val verification = stateStore.reconcileTimingState(nowChina)
-        val persistedMidnight = stateStore.waitingTargetMidnight()
-        val targetChina = if (persistedMidnight != null && verification == VerificationState.WAITING_ARMED) {
-            MibuLane.defaultLanes().first().targetTimeForMidnight(persistedMidnight)
-        } else {
-            MibuLane.defaultLanes().first().targetTime(nowChina)
+        val persistedTarget = stateStore.waitingTargetMidnight()?.let {
+            MibuLane.defaultLanes().first().targetTimeForMidnight(it)
         }
-        val localTarget = targetChina.withZoneSameInstant(ZoneId.systemDefault())
-        val duration = Duration.between(nowChina, targetChina).let { if (it.isNegative) Duration.ZERO else it }
+        val targetChina = when {
+            persistedTarget != null -> persistedTarget
+            verification.isAuthoritativeResult() -> null
+            else -> MibuLane.defaultLanes().first().targetTime(nowChina)
+        }
+        val localTarget = targetChina?.withZoneSameInstant(ZoneId.systemDefault())
+        val duration = targetChina?.let { Duration.between(nowChina, it) }
+            ?.let { if (it.isNegative) Duration.ZERO else it }
+            ?: Duration.ZERO
         val totalSeconds = duration.seconds.coerceAtLeast(0L)
         val hours = totalSeconds / 3600L
         val minutes = (totalSeconds % 3600L) / 60L
@@ -224,22 +242,83 @@ class MainActivity : Activity() {
             VerificationState.TIMING_WINDOW_REACHED,
             VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Timing window reached"
             VerificationState.WAITING_ARMED -> "Armed • $reached/4 windows reached"
-            else -> "Not armed"
+            else -> if (verification.isAuthoritativeResult()) "Result recorded" else "Not armed"
         }
 
         statusCard.text = formatBlock("Account Status", tokenStatus, "User logs in themselves. MIBU stores only explicit token/session imports.")
         sessionCard.text = formatBlock("Token Setup", tokenStore.getSessionPreview(), "Firefox fills 1/3. Chrome fills 2/4.")
         laneCard.text = formatBlock("Waiting Engine", engineStatus, "Details stay in Logs. The main screen remains one clean countdown.")
-        verifyCard.text = formatBlock("Verification", verification.name, "MIBU confirms timing state only. PC Helper and the official Mi Unlock Tool provide device verification.")
+        verifyCard.text = formatBlock("Verification", friendlyVerification(verification), verificationGuidance(verification))
         communityCard.text = "Community Device Check\nFor China-routed devices, confirm device/account status in Xiaomi Community if needed.\n[${stateStore.communityState().name}]"
-        beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8"
-        localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${localTarget.zone.id}"
-        countdownCard.text = if (verification == VerificationState.TIMING_WINDOW_REACHED || verification == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION) {
-            formatBlock("Timing Stage", "COMPLETE", "Continue with PC verification")
+
+        if (targetChina != null && localTarget != null) {
+            beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8"
+            localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${localTarget.zone.id}"
         } else {
-            formatBlock("Time Remaining", "%02d : %02d : %02d".format(hours, minutes, seconds), "HOURS   MINUTES   SECONDS")
+            beijingCard.text = "Target Time (Beijing)\nNo active target\nResult recorded"
+            localCard.text = "Target Time (Local)\nNo active target\n${ZoneId.systemDefault().id}"
+        }
+
+        countdownCard.text = when {
+            verification == VerificationState.TIMING_WINDOW_REACHED ||
+                verification == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ->
+                formatBlock("Timing Stage", "COMPLETE", "Continue with PC verification")
+            verification.isAuthoritativeResult() ->
+                formatBlock("Verification Result", friendlyVerification(verification), "No new countdown is active")
+            else ->
+                formatBlock("Time Remaining", "%02d : %02d : %02d".format(hours, minutes, seconds), "HOURS   MINUTES   SECONDS")
+        }
+
+        when {
+            verification == VerificationState.WAITING_ARMED -> {
+                startWaitingButton.isEnabled = true
+                startWaitingButton.text = "Resume Waiting"
+            }
+            verification.blocksNewWaitingCycle() -> {
+                startWaitingButton.isEnabled = false
+                startWaitingButton.text = if (verification == VerificationState.UNLOCKED) "Device Unlocked" else "Result Recorded"
+            }
+            else -> {
+                startWaitingButton.isEnabled = true
+                startWaitingButton.text = "Start Waiting"
+            }
         }
     }
+
+    private fun friendlyVerification(state: VerificationState): String = when (state) {
+        VerificationState.NOT_STARTED -> "Not started"
+        VerificationState.WAITING_ARMED -> "Waiting armed"
+        VerificationState.TIMING_WINDOW_REACHED -> "Timing window reached"
+        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Ready for Mi Unlock verification"
+        VerificationState.WAIT_TIME_SHOWN -> "Official wait time shown"
+        VerificationState.ACCOUNT_DEVICE_NOT_ADDED -> "Account/device not added"
+        VerificationState.COMMUNITY_AUTH_REQUIRED -> "Community authorisation required"
+        VerificationState.UNLOCKED -> "Unlocked"
+        VerificationState.UNKNOWN -> "Unknown — review Logs"
+    }
+
+    private fun verificationGuidance(state: VerificationState): String = when (state) {
+        VerificationState.TIMING_WINDOW_REACHED,
+        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Continue with PC Helper and the official Mi Unlock Tool."
+        VerificationState.WAIT_TIME_SHOWN -> "Keep the official waiting period; do not restart the timing cycle."
+        VerificationState.ACCOUNT_DEVICE_NOT_ADDED -> "Resolve the phone-side account/device association before retrying."
+        VerificationState.COMMUNITY_AUTH_REQUIRED -> "Complete the Xiaomi Community authorisation route first."
+        VerificationState.UNLOCKED -> "The authoritative result is already complete."
+        else -> "MIBU confirms timing state only. PC Helper and the official Mi Unlock Tool provide device verification."
+    }
+
+    private fun VerificationState.isAuthoritativeResult(): Boolean = when (this) {
+        VerificationState.WAIT_TIME_SHOWN,
+        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
+        VerificationState.COMMUNITY_AUTH_REQUIRED,
+        VerificationState.UNLOCKED -> true
+        else -> false
+    }
+
+    private fun VerificationState.blocksNewWaitingCycle(): Boolean =
+        this == VerificationState.TIMING_WINDOW_REACHED ||
+            this == VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ||
+            isAuthoritativeResult()
 
     private fun formatBlock(title: String, main: String, small: String) = if (small.isBlank()) "$title\n$main" else "$title\n$main\n$small"
     private fun rounded(color: Int, radius: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); setStroke(dp(1), stroke) }
@@ -247,4 +326,8 @@ class MainActivity : Activity() {
         view.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, bottom) }
     }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val NOTIFICATION_PERMISSION_REQUEST = 49
+    }
 }
