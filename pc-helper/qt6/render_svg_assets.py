@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PIL import Image
 from PySide6.QtCore import QSize
-from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
 from ui_geometry import SCREENS
@@ -49,21 +50,28 @@ def render_icon(asset_dir: Path) -> None:
 
 
 def main() -> int:
-    repo_root = Path(__file__).resolve().parents[2]
-    asset_dir = repo_root / "resources" / "expected ui" / "pc"
-    seen_outputs: set[str] = set()
-    for screen_name, screen in SCREENS.items():
-        if screen.png in seen_outputs:
-            raise RuntimeError(f"Duplicate PNG output in geometry contract: {screen.png}")
-        seen_outputs.add(screen.png)
-        svg_path = asset_dir / screen.svg
-        if not svg_path.is_file():
-            raise FileNotFoundError(f"Required hotspot SVG missing for {screen_name}: {svg_path}")
-        render(svg_path, asset_dir / screen.png, screen.width, screen.height)
-    if len(seen_outputs) != 5:
-        raise RuntimeError(f"Expected exactly five required UI screens, found {len(seen_outputs)}")
-    render_icon(asset_dir)
-    return 0
+    existing_app = QGuiApplication.instance()
+    app = existing_app or QGuiApplication(sys.argv[:1])
+    owns_app = existing_app is None
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        asset_dir = repo_root / "resources" / "expected ui" / "pc"
+        seen_outputs: set[str] = set()
+        for screen_name, screen in SCREENS.items():
+            if screen.png in seen_outputs:
+                raise RuntimeError(f"Duplicate PNG output in geometry contract: {screen.png}")
+            seen_outputs.add(screen.png)
+            svg_path = asset_dir / screen.svg
+            if not svg_path.is_file():
+                raise FileNotFoundError(f"Required hotspot SVG missing for {screen_name}: {svg_path}")
+            render(svg_path, asset_dir / screen.png, screen.width, screen.height)
+        if len(seen_outputs) != 5:
+            raise RuntimeError(f"Expected exactly five required UI screens, found {len(seen_outputs)}")
+        render_icon(asset_dir)
+        return 0
+    finally:
+        if owns_app:
+            app.quit()
 
 
 if __name__ == "__main__":
