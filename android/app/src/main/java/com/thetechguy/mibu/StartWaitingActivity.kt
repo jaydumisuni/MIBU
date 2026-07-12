@@ -124,16 +124,6 @@ class StartWaitingActivity : Activity() {
         else -> "A completed verification result is already recorded."
     }
 
-    private fun VerificationState.blocksNewWaitingCycle(): Boolean = when (this) {
-        VerificationState.TIMING_WINDOW_REACHED,
-        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION,
-        VerificationState.WAIT_TIME_SHOWN,
-        VerificationState.ACCOUNT_DEVICE_NOT_ADDED,
-        VerificationState.COMMUNITY_AUTH_REQUIRED,
-        VerificationState.UNLOCKED -> true
-        else -> false
-    }
-
     companion object {
         private const val LOG_TAG = "MIBU_WAIT"
     }
