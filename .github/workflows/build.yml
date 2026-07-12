@@ -18,11 +18,14 @@ jobs:
       - name: Compile review validators
         run: |
           python -m py_compile tools/review_contracts.py
+          python -m py_compile tools/review_proof_v2.py
           python -m py_compile tools/validate_android_ui_baseline.py
       - name: Validate restored approved Android UI baseline
         run: python tools/validate_android_ui_baseline.py
       - name: Validate implementation against agreed architecture
         run: python tools/review_contracts.py
+      - name: Validate proof protocol and source-fresh release rules
+        run: python tools/review_proof_v2.py
 
   android:
     name: Android lint, unit tests and APK
@@ -74,6 +77,7 @@ jobs:
           python -m py_compile pc-helper/qt6/test_contracts.py
           python -m py_compile pc-helper/qt6/test_install_contracts.py
           python -m py_compile tools/review_contracts.py
+          python -m py_compile tools/review_proof_v2.py
           python -m py_compile tools/validate_android_ui_baseline.py
       - name: Run all PC helper unit tests
         working-directory: pc-helper/qt6
