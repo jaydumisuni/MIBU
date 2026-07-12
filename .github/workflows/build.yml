@@ -111,6 +111,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android platform-tools
+        shell: powershell
+        run: sdkmanager "platform-tools"
       - uses: actions/download-artifact@v4
         with:
           name: MIBU-debug-apk
@@ -125,6 +129,10 @@ jobs:
           $required = @(
             "$root\MIBU-PC-Helper.exe",
             "$root\dist\MIBU.apk",
+            "$root\platform-tools\adb.exe",
+            "$root\platform-tools\fastboot.exe",
+            "$root\platform-tools\AdbWinApi.dll",
+            "$root\platform-tools\AdbWinUsbApi.dll",
             "$root\resources\expected ui\pc\01_pc_main_four_button_workflow.png",
             "$root\resources\expected ui\pc\02_popup_device_check_guide.png",
             "$root\resources\expected ui\pc\03_popup_install_apk.png",
