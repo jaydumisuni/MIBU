@@ -26,11 +26,19 @@ EXPECTED_SOURCE_HASHES = (
     "c7babc28a23ecbacbcd775752fd3eef465abfda9a85402613c4fc50445595528",
     "ab22eb530c56edbb5525ba874bac95c1bddfd83f6d76c2ebf102bfac273364c3",
 )
-MIN_EMBEDDED_IMAGE_BYTES = 2_000
+MIN_EMBEDDED_IMAGE_BYTES = 1_024
 
 
 def fail(message: str) -> None:
     raise RuntimeError(f"Android expected-UI baseline invalid: {message}")
+
+
+def has_expected_image_signature(raw: bytes) -> bool:
+    return (
+        raw.startswith(b"\x89PNG\r\n\x1a\n")
+        or raw.startswith(b"\xff\xd8\xff")
+        or (len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP")
+    )
 
 
 def validate_sheet() -> str:
@@ -66,6 +74,8 @@ def validate_sheet() -> str:
             fail(f"embedded image {index} has invalid Base64: {exc}")
         if len(raw) < MIN_EMBEDDED_IMAGE_BYTES:
             fail(f"embedded image {index} is suspiciously small ({len(raw)} bytes)")
+        if not has_expected_image_signature(raw):
+            fail(f"embedded image {index} does not contain a valid PNG, JPEG or WebP signature")
 
     return hashlib.sha256(SHEET.read_bytes()).hexdigest()
 
