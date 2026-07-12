@@ -90,7 +90,9 @@ foreach ($requiredTool in $RequiredPlatformTools) {
     }
 }
 
-Write-Host "Validating and rendering deterministic branded UI assets..." -ForegroundColor Cyan
+Write-Host "Validating restored Android baseline and deterministic branded UI assets..." -ForegroundColor Cyan
+python (Join-Path $Root "tools\validate_android_ui_baseline.py")
+if ($LASTEXITCODE -ne 0) { throw "Android expected-UI baseline validation failed with exit code $LASTEXITCODE" }
 python (Join-Path $HelperDir "validate_ui_contract.py")
 if ($LASTEXITCODE -ne 0) { throw "UI contract validation failed with exit code $LASTEXITCODE" }
 python (Join-Path $HelperDir "render_svg_assets.py")
@@ -103,7 +105,9 @@ $RequiredUi = @(
     (Join-Path $Root "resources\expected ui\pc\04_popup_login_get_token.png"),
     (Join-Path $Root "resources\expected ui\pc\05_popup_phone_guide.png"),
     (Join-Path $Root "resources\expected ui\pc\mibu_app_icon.png"),
-    (Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico")
+    (Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico"),
+    (Join-Path $Root "resources\expected ui\android\approved_android_ui_baseline_sheet.svg"),
+    (Join-Path $Root "resources\expected ui\android\README.md")
 )
 foreach ($asset in $RequiredUi) {
     if (-not (Test-Path $asset) -or (Get-Item $asset).Length -le 0) {
@@ -111,7 +115,7 @@ foreach ($asset in $RequiredUi) {
     }
 }
 $IconPath = Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico"
-Write-Host "Hotspot UI and application icon verified." -ForegroundColor Green
+Write-Host "PC hotspot UI, Android approved baseline and application icon verified." -ForegroundColor Green
 
 $env:QT_QPA_PLATFORM = "offscreen"
 Push-Location $HelperDir
@@ -175,7 +179,7 @@ foreach ($path in $FinalRequired) {
         throw "Final release file missing or empty: $path"
     }
 }
-Write-Host "Release EXE, APK, icon, platform-tools and hotspot assets verified." -ForegroundColor Green
+Write-Host "Release EXE, APK, icon, platform-tools, PC hotspot assets and Android approved baseline verified." -ForegroundColor Green
 
 $AudioRoots = @(
     (Join-Path $Root "resources\expected ui"),
