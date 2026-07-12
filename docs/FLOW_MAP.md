@@ -1,91 +1,127 @@
 # MIBU Flow Map
 
-This file explains how the PC helper screens and Android app screens fit together.
+This file explains how the reviewed PC helper and Android app fit together.
 
-## Important correction
+## Product split
 
-The mockups are not all meant to be shown at the same time. They are different states of the same workflow.
+MIBU has two cooperating apps:
 
-## App pieces
+### MIBU PC Helper
 
-MIBU has two apps:
+Runs on Windows and owns the guided four-step workflow:
 
-1. **MIBU PC Helper**
-   - Runs on Windows.
-   - Prepares the phone.
-   - Opens the Xiaomi login page in the normal browser.
-   - Checks ADB.
-   - Installs MIBU.apk.
-   - Opens MIBU on the phone.
-   - Shows timing guidance.
+1. Device Check
+2. Install APK
+3. Login & Get Tokens
+4. Phone Guide / Fastboot Verification
 
-2. **MIBU Android App**
-   - Runs on the phone.
-   - Receives/imports the user-approved session/token.
-   - Shows countdown, timing, logs, and guide.
-   - Starts the foreground waiting service.
+### MIBU Android App
 
-## Correct screen order
+Runs on the phone and owns:
 
-```text
-PC Helper Screen 1: Welcome / checklist
-  -> user connects phone
-  -> user enables USB debugging / approves ADB
-  -> helper checks device
+- explicit token import
+- token freshness state
+- one live Beijing countdown
+- four hidden timing-window states
+- Community evidence state
+- Logs and Instructions
 
-PC Helper Screen 2: Ready / status
-  -> shows connected device
-  -> shows ADB authorized
-  -> installs MIBU.apk
-  -> opens MIBU on the phone
-  -> user opens browser login and obtains/approves session/token
+The Android app stops running when the phone enters fastboot. PC Helper owns the fastboot handoff.
 
-Android Screen 1: Welcome / import
-  -> user imports session/token from PC/manual flow
-  -> phone app saves session locally
-
-Android Screen 2: Dashboard / waiting
-  -> shows account/session status
-  -> shows Beijing target time
-  -> shows local target time
-  -> shows countdown
-  -> starts foreground waiting service
-  -> logs actions and shows instructions
-```
-
-## What each mockup means
-
-### PC compact wizard mockup
-
-This is the first screen of the Windows helper. It should not be a huge full control panel. It is only the setup wizard.
-
-### PC ready/status mockup
-
-This is the second screen after device connection and install actions. It should show connected device, ADB authorized, APK install, session ready, timing, and final actions.
-
-### Android welcome/import mockup
-
-This is what the phone shows before the session/token is imported.
-
-### Android dashboard/waiting mockup
-
-This is what the phone shows after a session/token is imported and the app is ready to wait for the target time.
-
-## Simplified user flow
+## Exact user flow
 
 ```text
-1. Open MIBU PC Helper.
-2. Connect phone with USB debugging enabled.
-3. PC Helper checks ADB.
-4. PC Helper installs MIBU.apk.
-5. PC Helper opens MIBU on phone.
-6. User logs into Xiaomi in normal browser.
-7. User imports/approves token/session.
-8. Phone app shows dashboard and countdown.
-9. User starts waiting service.
-10. At the target time, user follows the official next step shown by MIBU.
+1. Device Check
+   PC Helper checks ADB.
+   Result is one of:
+   - no device
+   - unauthorized / RSA prompt required
+   - offline
+   - online and authorized
+
+2. Install APK
+   PC Helper installs the bundled MIBU.apk.
+   It then verifies the Android package exists and opens MainActivity.
+
+3. Login & Get Tokens
+   User logs in themselves in normal browsers.
+   User obtains two captures only:
+   - Firefox new_bbs_serviceToken
+   - Chrome popRunToken
+
+   PC Helper transfers them through URL-safe Base64 extras.
+   Android emits an explicit proof marker after saving both captures.
+
+4. Android preparation
+   Android shows:
+   - token freshness
+   - Beijing target time
+   - local converted time
+   - one live countdown
+   - mobile-data / Wi-Fi reminder
+   - Community check state
+
+5. Start Waiting
+   Android refuses to arm when:
+   - either capture is missing
+   - either capture is stale
+   - the next timing window is farther away than the remaining freshness
+
+   When valid, Android schedules four hidden timing windows around one Beijing midnight:
+   - lane 1: 1400 ms before midnight
+   - lane 2: 900 ms before midnight
+   - lane 3: 400 ms before midnight
+   - lane 4: 100 ms before midnight
+
+   PC Helper treats Start Waiting as successful only after Android emits its proof marker.
+
+6. Timing stage complete
+   Android records each lane as WINDOW_REACHED.
+   After all four, Android shows:
+   - TIMING STAGE COMPLETE
+   - Continue with PC verification
+
+   This does not mean Xiaomi approved an unlock request.
+
+7. Fastboot verification
+   PC Helper:
+   - sends adb reboot bootloader
+   - waits for fastboot detection
+   - reads available device/unlocked information
+   - hands the user to the official Mi Unlock Tool
+
+8. Result interpretation
+   - Mi Unlock shows a wait time: accepted far enough to continue later
+   - account/device not added: use Mi Unlock Status binding fallback
+   - Community/authorisation required: account/device remains gated
+   - unlocked/already unlocked: success
+   - unclear response: record UNKNOWN, never invent success
 ```
 
-## Design rule
+## Token mapping
 
-Do not mix all mockup elements into one screen. The PC helper has its own two states, and the Android app has its own two states.
+```text
+Firefox capture -> slots 1 and 3
+Chrome capture  -> slots 2 and 4
+```
+
+The user does not perform four logins.
+
+## Visual rule
+
+The PC helper is one image-hotspot application with four main actions and four matching popup screens. The orange outline is applied dynamically to the button the user clicks; it is not baked into the artwork.
+
+The Android dashboard shows one countdown. Individual timing-window detail belongs in Logs, not on the main screen.
+
+## Claim boundary
+
+MIBU can prove:
+
+- device/ADB state
+- APK installation and launch
+- explicit token import
+- token freshness
+- timing-window scheduling and completion
+- fastboot detection
+
+MIBU cannot by itself prove Xiaomi request approval, account/device binding, or bootloader unlock. The official Mi Unlock Tool remains the authoritative final verifier.
