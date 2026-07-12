@@ -22,6 +22,13 @@ def require_text(path: str, *needles: str) -> None:
             raise AssertionError(f"{path} is missing required contract: {needle}")
 
 
+def forbid_text(path: str, *needles: str) -> None:
+    text = require(path).read_text(encoding="utf-8")
+    for needle in needles:
+        if needle in text:
+            raise AssertionError(f"{path} contains outdated claim: {needle}")
+
+
 def check_python(path: str) -> None:
     ast.parse(require(path).read_text(encoding="utf-8"), filename=path)
 
@@ -35,11 +42,16 @@ def check_svg(path: str, width: str, height: str) -> None:
 def main() -> int:
     require_text(
         "android/app/src/main/AndroidManifest.xml",
-        ".CommunityCheckActivity", ".TokenImportActivity", ".StartWaitingActivity", ".MibuForegroundService",
+        "android.permission.WAKE_LOCK",
+        ".CommunityCheckActivity",
+        ".TokenImportActivity",
+        ".StartWaitingActivity",
+        ".MibuForegroundService",
     )
     require("android/app/src/main/res/drawable/ic_mibu.xml")
     require("android/app/src/main/res/drawable/mibu_hero_art.xml")
     require("android/app/src/test/java/com/thetechguy/mibu/MibuLaneTest.kt")
+
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuLane.kt",
         'MibuLane(1, "Firefox service token", 1400)',
@@ -47,54 +59,92 @@ def main() -> int:
         'MibuLane(3, "Firefox service token", 400)',
         'MibuLane(4, "Chrome pop token", 100)',
         "midnightToday.plusDays(1).minusNanos",
+        "WINDOW_REACHED",
+        "TIMING_WINDOW_REACHED",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MainActivity.kt",
-        "uiHandler.postDelayed(this, 1000L)", '"Armed • 4 lanes"', "Details stay in Logs",
+        "uiHandler.postDelayed(this, 1000L)",
+        '"Armed • 4 lanes"',
+        "Details stay in Logs",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/TokenStore.kt",
-        "MAX_TOKEN_AGE_MS = 30L * 60L * 1000L", "expireIfStale()", "hasRequiredCaptures()",
+        "MAX_TOKEN_AGE_MS = 30L * 60L * 1000L",
+        "millisRemaining",
+        "expireIfStale()",
+        "hasRequiredCaptures()",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/TokenImportActivity.kt",
-        "mibu_service_token_b64", "mibu_pop_token_b64", "Base64.URL_SAFE or Base64.NO_WRAP",
+        "mibu_service_token_b64",
+        "mibu_pop_token_b64",
+        "Base64.URL_SAFE or Base64.NO_WRAP",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/StartWaitingActivity.kt",
-        "if (!tokenStore.hasRequiredCaptures())", "stateStore.armWaiting()",
+        "if (!tokenStore.hasRequiredCaptures())",
+        "waitMs > freshnessMs",
+        "VerificationState.WAITING_ARMED",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuForegroundService.kt",
-        "if (!tokenStore.hasRequiredCaptures())", "START_NOT_STICKY",
+        "handler.postDelayed(callback",
+        "LaneStatus.WINDOW_REACHED",
+        "VerificationState.TIMING_WINDOW_REACHED",
+        "PowerManager.PARTIAL_WAKE_LOCK",
+        "START_NOT_STICKY",
     )
     require_text(
         "android/app/src/main/java/com/thetechguy/mibu/MibuUiHelpers.kt",
-        "fun Activity.mibuPage", "fun Activity.mibuCard", "fun Activity.mibuButton",
+        "fun Activity.mibuPage",
+        "fun Activity.mibuCard",
+        "fun Activity.mibuButton",
+    )
+    require_text(
+        "android/app/src/main/java/com/thetechguy/mibu/InstructionsActivity.kt",
+        "MIBU does not claim request approval or unlock success by itself",
+    )
+    forbid_text(
+        "android/app/src/main/java/com/thetechguy/mibu/InstructionsActivity.kt",
+        "After the request stage",
     )
 
     for path in (
         "pc-helper/mibu_pc_helper.py",
-        "pc-helper/qt6/mibu_pc_helper_ui.py",
-        "pc-helper/qt6/mibu_pc_helper_final.py",
         "pc-helper/qt6/mibu_actions.py",
         "pc-helper/qt6/dependency_check.py",
         "pc-helper/qt6/render_svg_assets.py",
         "pc-helper/qt6/validate_ui_contract.py",
+        "pc-helper/qt6/mibu_pc_helper_v2.py",
     ):
         check_python(path)
+
     require_text(
         "pc-helper/qt6/mibu_actions.py",
-        "def push_two_tokens_to_phone", "mibu_service_token_b64", "base64.urlsafe_b64encode",
-        "def reboot_to_fastboot", "def check_fastboot_ready(wait_seconds: int = 30)", "time.monotonic()",
+        "def push_two_tokens_to_phone",
+        "mibu_service_token_b64",
+        "base64.urlsafe_b64encode",
+        "def reboot_to_fastboot",
+        "def check_fastboot_ready(wait_seconds: int = 30)",
+        "time.monotonic()",
     )
     require_text(
-        "pc-helper/qt6/mibu_pc_helper_final.py",
-        "Paste Two Tokens", "Verify Fastboot", "01_pc_main_four_button_workflow.png", "05_popup_phone_guide.png",
+        "pc-helper/qt6/mibu_pc_helper_v2.py",
+        "required_asset",
+        "Paste Two Tokens",
+        "Verify Fastboot",
+        "QTimer",
+        "01_pc_main_four_button_workflow.png",
+        "05_popup_phone_guide.png",
     )
     require_text(
         "pc-helper/build_windows.ps1",
-        "render_svg_assets.py", "Hotspot UI assets verified.", "Release hotspot assets verified.",
+        "mibu_pc_helper_v2.py",
+        "render_svg_assets.py",
+        "Hotspot UI assets verified.",
+        "Release APK and hotspot assets verified.",
+        "Android APK is required for a complete MIBU release",
     )
 
     check_svg("resources/expected ui/pc/01_pc_main_four_button_workflow.svg", "1200", "800")
@@ -106,7 +156,7 @@ def main() -> int:
     ):
         check_svg(f"resources/expected ui/pc/{name}", "1000", "700")
 
-    print("MIBU source-contract review passed.")
+    print("MIBU source-contract review passed for active v2 architecture.")
     return 0
 
 
