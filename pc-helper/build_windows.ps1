@@ -99,6 +99,8 @@ foreach ($requiredTool in $RequiredPlatformTools) {
 Write-Host "Running source review and validating deterministic branded UI assets..." -ForegroundColor Cyan
 python (Join-Path $Root "tools\review_contracts.py")
 if ($LASTEXITCODE -ne 0) { throw "THETECHGUY source-contract review failed with exit code $LASTEXITCODE" }
+python (Join-Path $Root "tools\review_proof_v2.py")
+if ($LASTEXITCODE -ne 0) { throw "MIBU proof-v2 review failed with exit code $LASTEXITCODE" }
 python (Join-Path $Root "tools\validate_android_ui_baseline.py")
 if ($LASTEXITCODE -ne 0) { throw "Android expected-UI baseline validation failed with exit code $LASTEXITCODE" }
 python (Join-Path $HelperDir "validate_ui_contract.py")
