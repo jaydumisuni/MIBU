@@ -43,9 +43,9 @@ SCREENS: dict[str, ScreenGeometry] = {
     "login": ScreenGeometry(
         "04_popup_login_get_token.svg", "04_popup_login_get_token.png", 1000, 700,
         {
-            "Open Browser": (180, 539, 200, 56),
-            "Paste One": (405, 539, 190, 56),
-            "Paste Two Tokens": (620, 539, 300, 56),
+            "Open Browser": (180, 585, 200, 56),
+            "Paste One": (405, 585, 190, 56),
+            "Paste Two Tokens": (620, 585, 300, 56),
         },
     ),
     "phone": ScreenGeometry(
