@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Bundle
 import android.text.InputType
 import android.util.Base64
+import android.util.Log
 import android.widget.EditText
 
 class TokenImportActivity : Activity() {
@@ -21,16 +22,21 @@ class TokenImportActivity : Activity() {
 
         if (serviceToken.length >= MIN_TOKEN_LENGTH && popToken.length >= MIN_TOKEN_LENGTH) {
             tokenStore.saveCaptures(serviceToken, popToken)
+            Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED")
             showImported("Two captures imported", "Firefox service token and Chrome pop token were received. MIBU populated slots 1/3 and 2/4 automatically.")
             return
         }
 
         if (pushedToken.length >= MIN_TOKEN_LENGTH) {
             tokenStore.saveSession(pushedToken)
+            Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED")
             showImported("Service token imported", "A single token/session was received and saved as the Firefox/service capture. Chrome pop token is still missing, so waiting cannot be armed yet.")
             return
         }
 
+        if (intent?.hasExtra("mibu_service_token_b64") == true || intent?.hasExtra("mibu_pop_token_b64") == true) {
+            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_CAPTURE_LENGTH")
+        }
         showManualImport()
     }
 
@@ -39,6 +45,8 @@ class TokenImportActivity : Activity() {
         if (encoded.isBlank()) return ""
         return runCatching {
             String(Base64.decode(encoded, Base64.URL_SAFE or Base64.NO_WRAP), Charsets.UTF_8).trim()
+        }.onFailure {
+            Log.w(LOG_TAG, "IMPORT_REJECTED_INVALID_BASE64 name=$name")
         }.getOrDefault("")
     }
 
@@ -72,6 +80,7 @@ class TokenImportActivity : Activity() {
                     pop.length < MIN_TOKEN_LENGTH -> popInput.error = "Chrome/pop token looks too short"
                     else -> {
                         tokenStore.saveCaptures(service, pop)
+                        Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED_MANUALLY")
                         finish()
                     }
                 }
@@ -82,6 +91,7 @@ class TokenImportActivity : Activity() {
                     serviceInput.error = "Firefox/service token looks too short"
                 } else {
                     tokenStore.saveServiceToken(service)
+                    Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED_MANUALLY")
                     finish()
                 }
             })
@@ -89,6 +99,7 @@ class TokenImportActivity : Activity() {
                 tokenStore.clear()
                 serviceInput.setText("")
                 popInput.setText("")
+                Log.i(LOG_TAG, "CAPTURES_CLEARED")
             })
             addView(mibuButton("Back") { finish() })
             addView(footer())
@@ -100,7 +111,7 @@ class TokenImportActivity : Activity() {
             hint = hintText
             setTextColor(android.graphics.Color.WHITE)
             setHintTextColor(android.graphics.Color.rgb(145, 160, 190))
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             minLines = 3
             setPadding(dp(16), dp(14), dp(16), dp(14))
             background = rounded(android.graphics.Color.rgb(13, 20, 35), dp(16), android.graphics.Color.rgb(30, 40, 65))
@@ -109,5 +120,6 @@ class TokenImportActivity : Activity() {
 
     companion object {
         private const val MIN_TOKEN_LENGTH = 8
+        private const val LOG_TAG = "MIBU_IMPORT"
     }
 }
