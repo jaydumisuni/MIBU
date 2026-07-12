@@ -7,32 +7,65 @@ class TokenStore(context: Context) {
 
     fun saveSession(session: String) {
         val clean = session.trim()
-        prefs.edit().putString(KEY_LEGACY_SESSION, clean).putString(KEY_SERVICE_TOKEN, clean).putLong(KEY_CAPTURED_AT, System.currentTimeMillis()).apply()
+        val now = System.currentTimeMillis()
+        prefs.edit()
+            .putString(KEY_LEGACY_SESSION, clean)
+            .putString(KEY_SERVICE_TOKEN, clean)
+            .putLong(KEY_SERVICE_CAPTURED_AT, now)
+            .apply()
     }
 
     fun saveServiceToken(token: String) {
-        prefs.edit().putString(KEY_SERVICE_TOKEN, token.trim()).putLong(KEY_CAPTURED_AT, System.currentTimeMillis()).apply()
+        prefs.edit()
+            .putString(KEY_SERVICE_TOKEN, token.trim())
+            .putLong(KEY_SERVICE_CAPTURED_AT, System.currentTimeMillis())
+            .apply()
     }
 
     fun savePopToken(token: String) {
-        prefs.edit().putString(KEY_POP_TOKEN, token.trim()).putLong(KEY_CAPTURED_AT, System.currentTimeMillis()).apply()
+        prefs.edit()
+            .putString(KEY_POP_TOKEN, token.trim())
+            .putLong(KEY_POP_CAPTURED_AT, System.currentTimeMillis())
+            .apply()
     }
 
     fun saveCaptures(serviceToken: String, popToken: String) {
-        prefs.edit().putString(KEY_SERVICE_TOKEN, serviceToken.trim()).putString(KEY_POP_TOKEN, popToken.trim()).putLong(KEY_CAPTURED_AT, System.currentTimeMillis()).apply()
+        val now = System.currentTimeMillis()
+        prefs.edit()
+            .putString(KEY_SERVICE_TOKEN, serviceToken.trim())
+            .putString(KEY_POP_TOKEN, popToken.trim())
+            .putLong(KEY_SERVICE_CAPTURED_AT, now)
+            .putLong(KEY_POP_CAPTURED_AT, now)
+            .apply()
     }
 
-    fun hasSession(): Boolean { expireIfStale(); return hasServiceTokenRaw() || !prefs.getString(KEY_LEGACY_SESSION, null).isNullOrBlank() }
-    fun hasServiceToken(): Boolean { expireIfStale(); return hasServiceTokenRaw() }
-    fun hasPopToken(): Boolean { expireIfStale(); return !prefs.getString(KEY_POP_TOKEN, null).isNullOrBlank() }
+    fun hasSession(): Boolean {
+        expireStaleCaptures()
+        return hasServiceTokenRaw() || !prefs.getString(KEY_LEGACY_SESSION, null).isNullOrBlank()
+    }
+
+    fun hasServiceToken(): Boolean {
+        expireStaleCaptures()
+        return hasServiceTokenRaw()
+    }
+
+    fun hasPopToken(): Boolean {
+        expireStaleCaptures()
+        return hasPopTokenRaw()
+    }
+
     fun hasRequiredCaptures(): Boolean = hasServiceToken() && hasPopToken()
 
-    fun capturedAtMs(): Long = prefs.getLong(KEY_CAPTURED_AT, 0L)
+    fun serviceMillisRemaining(nowMs: Long = System.currentTimeMillis()): Long =
+        remainingFor(KEY_SERVICE_CAPTURED_AT, nowMs)
+
+    fun popMillisRemaining(nowMs: Long = System.currentTimeMillis()): Long =
+        remainingFor(KEY_POP_CAPTURED_AT, nowMs)
 
     fun millisRemaining(nowMs: Long = System.currentTimeMillis()): Long {
-        val capturedAt = capturedAtMs()
-        if (capturedAt <= 0L) return 0L
-        return (MAX_TOKEN_AGE_MS - (nowMs - capturedAt)).coerceAtLeast(0L)
+        expireStaleCaptures(nowMs)
+        if (!hasServiceTokenRaw() || !hasPopTokenRaw()) return 0L
+        return minOf(serviceMillisRemaining(nowMs), popMillisRemaining(nowMs))
     }
 
     fun isFresh(): Boolean = millisRemaining() > 0L
@@ -40,14 +73,14 @@ class TokenStore(context: Context) {
     fun minutesRemaining(): Long = (millisRemaining() + 59_999L) / 60_000L
 
     fun getSessionPreview(): String {
-        expireIfStale()
+        expireStaleCaptures()
         val service = prefs.getString(KEY_SERVICE_TOKEN, null)
         val pop = prefs.getString(KEY_POP_TOKEN, null)
-        val freshness = if (isFresh()) "${minutesRemaining()} min left" else "expired"
+        val freshness = if (hasRequiredCaptures()) "${minutesRemaining()} min minimum freshness" else "incomplete"
         return when {
             !service.isNullOrBlank() && !pop.isNullOrBlank() -> "service:${service.length}chars • pop:${pop.length}chars • $freshness"
-            !service.isNullOrBlank() -> "service:${service.length}chars • pop:missing • $freshness"
-            !pop.isNullOrBlank() -> "service:missing • pop:${pop.length}chars • $freshness"
+            !service.isNullOrBlank() -> "service:${service.length}chars • pop:missing"
+            !pop.isNullOrBlank() -> "service:missing • pop:${pop.length}chars"
             else -> "none"
         }
     }
@@ -58,21 +91,49 @@ class TokenStore(context: Context) {
         return "Slot 1 Firefox: $serviceReady\nSlot 2 Chrome: $popReady\nSlot 3 Firefox: $serviceReady\nSlot 4 Chrome: $popReady"
     }
 
-    fun getServiceToken(): String? { expireIfStale(); return prefs.getString(KEY_SERVICE_TOKEN, null) }
-    fun getPopToken(): String? { expireIfStale(); return prefs.getString(KEY_POP_TOKEN, null) }
-    fun clear() { prefs.edit().clear().apply() }
+    fun getServiceToken(): String? {
+        expireStaleCaptures()
+        return prefs.getString(KEY_SERVICE_TOKEN, null)
+    }
+
+    fun getPopToken(): String? {
+        expireStaleCaptures()
+        return prefs.getString(KEY_POP_TOKEN, null)
+    }
+
+    fun clear() {
+        prefs.edit().clear().apply()
+    }
 
     private fun hasServiceTokenRaw(): Boolean = !prefs.getString(KEY_SERVICE_TOKEN, null).isNullOrBlank()
-    private fun expireIfStale() {
-        val capturedAt = capturedAtMs()
-        if (capturedAt > 0L && System.currentTimeMillis() - capturedAt > MAX_TOKEN_AGE_MS) clear()
+    private fun hasPopTokenRaw(): Boolean = !prefs.getString(KEY_POP_TOKEN, null).isNullOrBlank()
+
+    private fun remainingFor(timestampKey: String, nowMs: Long): Long {
+        val capturedAt = prefs.getLong(timestampKey, 0L)
+        if (capturedAt <= 0L) return 0L
+        return (MAX_TOKEN_AGE_MS - (nowMs - capturedAt)).coerceAtLeast(0L)
+    }
+
+    private fun expireStaleCaptures(nowMs: Long = System.currentTimeMillis()) {
+        val edit = prefs.edit()
+        var changed = false
+        if (hasServiceTokenRaw() && serviceMillisRemaining(nowMs) <= 0L) {
+            edit.remove(KEY_SERVICE_TOKEN).remove(KEY_SERVICE_CAPTURED_AT).remove(KEY_LEGACY_SESSION)
+            changed = true
+        }
+        if (hasPopTokenRaw() && popMillisRemaining(nowMs) <= 0L) {
+            edit.remove(KEY_POP_TOKEN).remove(KEY_POP_CAPTURED_AT)
+            changed = true
+        }
+        if (changed) edit.apply()
     }
 
     companion object {
         private const val KEY_LEGACY_SESSION = "session"
         private const val KEY_SERVICE_TOKEN = "service_token"
         private const val KEY_POP_TOKEN = "pop_token"
-        private const val KEY_CAPTURED_AT = "captured_at"
+        private const val KEY_SERVICE_CAPTURED_AT = "service_captured_at"
+        private const val KEY_POP_CAPTURED_AT = "pop_captured_at"
         const val MAX_TOKEN_AGE_MS = 30L * 60L * 1000L
     }
 }
