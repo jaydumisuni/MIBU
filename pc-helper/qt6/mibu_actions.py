@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,9 @@ APP_ENTRY = "com.thetechguy.mibu/.MainActivity"
 TOKEN_ENTRY = "com.thetechguy.mibu/.TokenImportActivity"
 WAIT_ENTRY = "com.thetechguy.mibu/.StartWaitingActivity"
 REMOTE_APK = "/sdcard/Download/MIBU.apk"
+PROOF_NONCE_EXTRA = "mibu_proof_nonce"
+MIN_TOKEN_LENGTH = 8
+MAX_TOKEN_LENGTH = 8_192
 
 
 @dataclass
@@ -99,8 +103,20 @@ def parse_devices(devices_output: str) -> list[tuple[str, str]]:
         if not line or line.lower().startswith("list of devices") or line.startswith("*"):
             continue
         parts = line.split()
-        if len(parts) >= 2:
+        if len(parts) >= 2 and parts[1] in {"device", "unauthorized", "offline", "recovery", "sideload", "bootloader"}:
             parsed.append((parts[0], parts[1]))
+    return parsed
+
+
+def parse_fastboot_devices(output: str) -> list[tuple[str, str]]:
+    parsed: list[tuple[str, str]] = []
+    for raw in output.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("<") or line.startswith("(") or line.lower().startswith("waiting for"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[1].lower() in {"fastboot", "bootloader"}:
+            parsed.append((parts[0], parts[1].lower()))
     return parsed
 
 
@@ -125,7 +141,7 @@ def check_device_ready() -> Result:
     if state == "offline":
         return Result(False, f"Device {serial} is offline. Reconnect cable or toggle USB debugging, then retry.")
     if state != "device":
-        return Result(False, f"Device {serial} state is {state}. Wait for it to become online/device.")
+        return Result(False, f"Device {serial} state is {state}. Return Android to normal online ADB mode before continuing.")
     adb_state = run_tool(["-s", serial, "shell", "settings", "get", "global", "adb_enabled"])
     adb_value = adb_state.message.strip() if adb_state.ok else "unknown"
     if adb_value != "1":
@@ -191,12 +207,17 @@ def launch_phone_app() -> Result:
     return Result(False, result.message or "Android did not confirm that MIBU opened.")
 
 
+def _valid_token(value: str) -> bool:
+    clean = value.strip()
+    return MIN_TOKEN_LENGTH <= len(clean) <= MAX_TOKEN_LENGTH and not any(ord(char) < 32 or ord(char) == 127 for char in clean)
+
+
 def _encode_token(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii")
 
 
-def _clear_logcat() -> None:
-    run_tool(["logcat", "-c"], timeout=10)
+def _proof_nonce() -> str:
+    return secrets.token_urlsafe(12)
 
 
 def _wait_for_log_outcome(
@@ -204,63 +225,74 @@ def _wait_for_log_outcome(
     success_marker: str,
     failure_markers: tuple[str, ...] = (),
     wait_seconds: int = 6,
+    nonce: str | None = None,
 ) -> Result:
     deadline = time.monotonic() + max(1, wait_seconds)
     last = ""
+    nonce_marker = f"nonce={nonce}" if nonce else None
     while time.monotonic() < deadline:
-        logs = run_tool(["logcat", "-d", "-s", f"{tag}:I", "*:S"], timeout=10)
+        logs = run_tool(["logcat", "-d", "-s", f"{tag}:V", "*:S"], timeout=10)
         last = logs.message
         if logs.ok:
+            matching_lines = [
+                line for line in logs.message.splitlines()
+                if nonce_marker is None or nonce_marker in line
+            ]
+            matching_text = "\n".join(matching_lines)
             for failure_marker in failure_markers:
-                if failure_marker in logs.message:
-                    return Result(False, f"Android reported failure marker: {failure_marker}\n{logs.message}")
-            if success_marker in logs.message:
-                return Result(True, f"Android proof marker confirmed: {success_marker}")
+                if failure_marker in matching_text:
+                    return Result(False, f"Android reported failure marker: {failure_marker}\n{matching_text}")
+            if success_marker in matching_text:
+                detail = f" with nonce {nonce}" if nonce else ""
+                return Result(True, f"Android proof marker confirmed: {success_marker}{detail}")
         time.sleep(0.35)
-    return Result(False, f"Android did not emit proof marker {success_marker}. Last filtered log: {last or 'none'}")
+    nonce_detail = f" for nonce {nonce}" if nonce else ""
+    return Result(False, f"Android did not emit proof marker {success_marker}{nonce_detail}. Last filtered log: {last or 'none'}")
 
 
-def _wait_for_log_marker(tag: str, marker: str, wait_seconds: int = 6) -> Result:
-    return _wait_for_log_outcome(tag, marker, wait_seconds=wait_seconds)
+def _wait_for_log_marker(tag: str, marker: str, wait_seconds: int = 6, nonce: str | None = None) -> Result:
+    return _wait_for_log_outcome(tag, marker, wait_seconds=wait_seconds, nonce=nonce)
 
 
 def push_session_to_phone(token: str) -> Result:
     token = token.strip()
-    if len(token) < 8:
-        return Result(False, "Token/session looks too short.")
+    if not _valid_token(token):
+        return Result(False, f"Token/session must be {MIN_TOKEN_LENGTH}-{MAX_TOKEN_LENGTH} characters with no control characters.")
     ready = check_device_ready()
     if not ready.ok:
         return ready
-    _clear_logcat()
+    nonce = _proof_nonce()
     started = run_tool([
         "shell", "am", "start", "-W", "-n", TOKEN_ENTRY,
         "--es", "mibu_session_token_b64", _encode_token(token),
+        "--es", PROOF_NONCE_EXTRA, nonce,
     ], timeout=30)
     if not started.ok:
         return started
-    marker = _wait_for_log_marker("MIBU_IMPORT", "SERVICE_CAPTURE_IMPORTED")
+    marker = _wait_for_log_marker("MIBU_IMPORT", "SERVICE_CAPTURE_IMPORTED", nonce=nonce)
     return marker if marker.ok else Result(False, f"Token import activity opened, but import was not proven.\n{marker.message}")
 
 
 def push_two_tokens_to_phone(service_token: str, pop_token: str) -> Result:
     service_token = service_token.strip()
     pop_token = pop_token.strip()
-    if len(service_token) < 8:
-        return Result(False, "Firefox/service token looks too short.")
-    if len(pop_token) < 8:
-        return Result(False, "Chrome/pop token looks too short.")
+    if not _valid_token(service_token):
+        return Result(False, f"Firefox/service token must be {MIN_TOKEN_LENGTH}-{MAX_TOKEN_LENGTH} characters with no control characters.")
+    if not _valid_token(pop_token):
+        return Result(False, f"Chrome/pop token must be {MIN_TOKEN_LENGTH}-{MAX_TOKEN_LENGTH} characters with no control characters.")
     ready = check_device_ready()
     if not ready.ok:
         return ready
-    _clear_logcat()
+    nonce = _proof_nonce()
     started = run_tool([
         "shell", "am", "start", "-W", "-n", TOKEN_ENTRY,
         "--es", "mibu_service_token_b64", _encode_token(service_token),
         "--es", "mibu_pop_token_b64", _encode_token(pop_token),
+        "--es", PROOF_NONCE_EXTRA, nonce,
     ], timeout=30)
     if not started.ok:
         return started
-    marker = _wait_for_log_marker("MIBU_IMPORT", "TWO_CAPTURES_IMPORTED")
+    marker = _wait_for_log_marker("MIBU_IMPORT", "TWO_CAPTURES_IMPORTED", nonce=nonce)
     return marker if marker.ok else Result(False, f"Token import activity opened, but two-capture import was not proven.\n{marker.message}")
 
 
@@ -268,8 +300,11 @@ def start_phone_waiting() -> Result:
     ready = check_device_ready()
     if not ready.ok:
         return ready
-    _clear_logcat()
-    started = run_tool(["shell", "am", "start", "-W", "-n", WAIT_ENTRY], timeout=30)
+    nonce = _proof_nonce()
+    started = run_tool([
+        "shell", "am", "start", "-W", "-n", WAIT_ENTRY,
+        "--es", PROOF_NONCE_EXTRA, nonce,
+    ], timeout=30)
     if not started.ok:
         return started
     proof = _wait_for_log_outcome(
@@ -279,8 +314,10 @@ def start_phone_waiting() -> Result:
             "WAITING_SERVICE_REJECTED_MISSING_CAPTURES",
             "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY",
             "WAITING_SERVICE_FAILED",
+            "WAITING_SERVICE_NOT_NEEDED",
         ),
         wait_seconds=10,
+        nonce=nonce,
     )
     return proof if proof.ok else Result(False, f"Waiting activity opened, but the foreground service was not proven armed.\n{proof.message}")
 
@@ -299,11 +336,13 @@ def check_fastboot_ready(wait_seconds: int = 30) -> Result:
     while True:
         result = run_fastboot(["devices"], timeout=10)
         last_message = result.message
-        lines = [line.strip() for line in result.message.splitlines() if line.strip()] if result.ok else []
-        if len(lines) == 1:
-            return Result(True, "Fastboot device detected:\n" + lines[0])
-        if len(lines) > 1:
-            return Result(False, "Multiple fastboot devices are connected. Leave only the phone being serviced connected, then retry.\n" + result.message)
+        devices = parse_fastboot_devices(result.message) if result.ok else []
+        if len(devices) == 1:
+            serial, state = devices[0]
+            return Result(True, f"Fastboot device detected:\n{serial}\t{state}")
+        if len(devices) > 1:
+            summary = "\n".join(f"{serial}\t{state}" for serial, state in devices)
+            return Result(False, "Multiple fastboot devices are connected. Leave only the phone being serviced connected, then retry.\n" + summary)
         if time.monotonic() >= deadline:
             break
         time.sleep(1)
