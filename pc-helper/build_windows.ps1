@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $HelperDir = Join-Path $Root "pc-helper\qt6"
 $DistDir = Join-Path $HelperDir "dist"
+$BuildDir = Join-Path $HelperDir "build"
 $BundleDir = Join-Path $Root "pc-helper\release"
 $ResolvedApk = Join-Path $Root $ApkPath
 $RequiredPlatformTools = @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")
@@ -49,6 +50,12 @@ function Resolve-AndroidSdk {
     return $null
 }
 
+function Assert-NonEmptyFile([string]$Path, [string]$Description) {
+    if (-not (Test-Path $Path) -or (Get-Item $Path).Length -le 0) {
+        throw "$Description missing or empty: $Path"
+    }
+}
+
 python -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed with exit code $LASTEXITCODE" }
 python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
@@ -68,15 +75,13 @@ if (-not (Test-Path $ResolvedApk)) {
     Set-Content -Path $LocalProperties -Value "sdk.dir=$EscapedSdk" -Encoding ASCII
     Push-Location $Root
     try {
-        & $GradlePath :android:app:testDebugUnitTest :android:app:assembleDebug --stacktrace
-        if ($LASTEXITCODE -ne 0) { throw "Android Gradle build failed with exit code $LASTEXITCODE" }
+        & $GradlePath :android:app:lintDebug :android:app:testDebugUnitTest :android:app:assembleDebug --stacktrace
+        if ($LASTEXITCODE -ne 0) { throw "Android lint/test/build failed with exit code $LASTEXITCODE" }
     } finally {
         Pop-Location
     }
 }
-if (-not (Test-Path $ResolvedApk) -or (Get-Item $ResolvedApk).Length -le 0) {
-    throw "Android APK is required for a complete MIBU release but was not created at $ResolvedApk."
-}
+Assert-NonEmptyFile $ResolvedApk "Android APK required for a complete MIBU release"
 
 if (-not $AndroidSdk) { $AndroidSdk = Resolve-AndroidSdk }
 if (-not $AndroidSdk) {
@@ -84,13 +89,12 @@ if (-not $AndroidSdk) {
 }
 $PlatformTools = Join-Path $AndroidSdk "platform-tools"
 foreach ($requiredTool in $RequiredPlatformTools) {
-    $toolPath = Join-Path $PlatformTools $requiredTool
-    if (-not (Test-Path $toolPath) -or (Get-Item $toolPath).Length -le 0) {
-        throw "Required platform-tool missing or empty: $toolPath"
-    }
+    Assert-NonEmptyFile (Join-Path $PlatformTools $requiredTool) "Required platform-tool"
 }
 
-Write-Host "Validating restored Android baseline and deterministic branded UI assets..." -ForegroundColor Cyan
+Write-Host "Running source review and validating deterministic branded UI assets..." -ForegroundColor Cyan
+python (Join-Path $Root "tools\review_contracts.py")
+if ($LASTEXITCODE -ne 0) { throw "THETECHGUY source-contract review failed with exit code $LASTEXITCODE" }
 python (Join-Path $Root "tools\validate_android_ui_baseline.py")
 if ($LASTEXITCODE -ne 0) { throw "Android expected-UI baseline validation failed with exit code $LASTEXITCODE" }
 python (Join-Path $HelperDir "validate_ui_contract.py")
@@ -110,9 +114,7 @@ $RequiredUi = @(
     (Join-Path $Root "resources\expected ui\android\README.md")
 )
 foreach ($asset in $RequiredUi) {
-    if (-not (Test-Path $asset) -or (Get-Item $asset).Length -le 0) {
-        throw "Required branded UI asset missing or empty: $asset"
-    }
+    Assert-NonEmptyFile $asset "Required branded UI asset"
 }
 $IconPath = Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico"
 Write-Host "PC hotspot UI, Android approved baseline and application icon verified." -ForegroundColor Green
@@ -120,9 +122,9 @@ Write-Host "PC hotspot UI, Android approved baseline and application icon verifi
 $env:QT_QPA_PLATFORM = "offscreen"
 Push-Location $HelperDir
 try {
-    python -m unittest -v test_contracts.py
+    python -m unittest discover -v
     if ($LASTEXITCODE -ne 0) { throw "PC helper unit tests failed with exit code $LASTEXITCODE" }
-    python -c "import mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; print('MIBU v3 import/proof-gate smoke check passed')"
+    python -c "import mibu_actions, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_actions.EXPECTED_APP_VERSION == '0.2.0-dev'; print('MIBU v3 import/version/proof-gate smoke check passed')"
     if ($LASTEXITCODE -ne 0) { throw "MIBU v3 source smoke check failed" }
 } finally {
     Pop-Location
@@ -130,12 +132,13 @@ try {
 }
 
 Remove-SafeDir $DistDir
+Remove-SafeDir $BuildDir
 Remove-SafeDir $BundleDir
 New-Item -ItemType Directory -Path $BundleDir | Out-Null
 
 Push-Location $HelperDir
 try {
-    python -m PyInstaller --noconfirm --windowed --name "MIBU-PC-Helper" --icon $IconPath --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v3.py"
+    python -m PyInstaller --clean --noconfirm --windowed --name "MIBU-PC-Helper" --icon $IconPath --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v3.py"
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 } finally {
     Pop-Location
@@ -160,13 +163,14 @@ if (-not (Test-Path $ResourceRoot)) { throw "resources folder not found. Hotspot
 $BundleResources = Join-Path $BundleApp "resources"
 Copy-Item $ResourceRoot $BundleResources -Recurse -Force
 
+$BundledRequiredUi = @()
 foreach ($asset in $RequiredUi) {
     $relative = $asset.Substring($ResourceRoot.Length).TrimStart('\')
     $bundled = Join-Path $BundleResources $relative
-    if (-not (Test-Path $bundled) -or (Get-Item $bundled).Length -le 0) {
-        throw "Required branded asset missing or empty from release bundle: $bundled"
-    }
+    Assert-NonEmptyFile $bundled "Required branded asset in release bundle"
+    $BundledRequiredUi += $bundled
 }
+
 $FinalRequired = @(
     (Join-Path $BundleApp "MIBU-PC-Helper.exe"),
     (Join-Path $BundleDist "MIBU.apk")
@@ -175,23 +179,23 @@ foreach ($requiredTool in $RequiredPlatformTools) {
     $FinalRequired += (Join-Path $BundlePlatformTools $requiredTool)
 }
 foreach ($path in $FinalRequired) {
-    if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
-        throw "Final release file missing or empty: $path"
-    }
+    Assert-NonEmptyFile $path "Final release file"
 }
-Write-Host "Release EXE, APK, icon, platform-tools, PC hotspot assets and Android approved baseline verified." -ForegroundColor Green
 
 $AudioRoots = @(
     (Join-Path $Root "resources\expected ui"),
     (Join-Path $Root "resources\expected ui\android"),
     (Join-Path $Root "resources")
 )
+$BundledAudio = @()
 foreach ($name in @("TTG_v4_clean_connected_success.wav", "TTG_v4_clean_speaker_turn_on.wav")) {
     $found = $false
     foreach ($dir in $AudioRoots) {
         $candidate = Join-Path $dir $name
         if (Test-Path $candidate) {
-            Copy-Item $candidate (Join-Path $BundleDist $name) -Force
+            $destination = Join-Path $BundleDist $name
+            Copy-Item $candidate $destination -Force
+            $BundledAudio += $destination
             $found = $true
             break
         }
@@ -199,4 +203,20 @@ foreach ($name in @("TTG_v4_clean_connected_success.wav", "TTG_v4_clean_speaker_
     if (-not $found) { Write-Warning "Optional audio not found: $name" }
 }
 
+$ChecksumTargets = @($FinalRequired + $BundledRequiredUi + $BundledAudio) |
+    Sort-Object -Unique
+$ChecksumLines = foreach ($item in $ChecksumTargets) {
+    Assert-NonEmptyFile $item "Checksummed release file"
+    $hash = (Get-FileHash -Algorithm SHA256 $item).Hash.ToLowerInvariant()
+    $relative = $item.Substring($BundleApp.Length).TrimStart('\').Replace('\', '/')
+    "$hash  $relative"
+}
+$ChecksumPath = Join-Path $BundleApp "SHA256SUMS.txt"
+Set-Content -Path $ChecksumPath -Value $ChecksumLines -Encoding ASCII
+Assert-NonEmptyFile $ChecksumPath "Release checksum manifest"
+if ((Get-Content $ChecksumPath).Count -ne $ChecksumTargets.Count) {
+    throw "Release checksum manifest count does not match the protected release-file count."
+}
+
+Write-Host "Release EXE, APK, platform-tools, UI evidence and SHA-256 manifest verified." -ForegroundColor Green
 Write-Host "Release folder: $BundleDir" -ForegroundColor Green
