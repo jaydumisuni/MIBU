@@ -63,7 +63,11 @@ jobs:
           python -m py_compile pc-helper/qt6/render_svg_assets.py
           python -m py_compile pc-helper/qt6/validate_ui_contract.py
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v2.py
+          python -m py_compile pc-helper/qt6/test_contracts.py
           python -m py_compile tools/review_contracts.py
+      - name: Run PC helper unit tests
+        working-directory: pc-helper/qt6
+        run: python -m unittest -v test_contracts.py
       - name: Validate hotspot artwork against shared click contract
         run: python pc-helper/qt6/validate_ui_contract.py
       - name: Render required hotspot PNGs
