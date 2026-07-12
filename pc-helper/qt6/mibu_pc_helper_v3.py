@@ -63,6 +63,9 @@ class Window(V2Window):
             if status.timing_complete:
                 report(Result(True, f"Phone timing stage is already complete. No new waiting cycle was started.\n{status.raw}"))
                 return
+            if status.authoritative_result:
+                report(Result(True, f"An official result is already recorded as {status.verification}. No new waiting cycle was started. Reset the workflow on the phone only when a fresh authorised attempt is genuinely required.\n{status.raw}"))
+                return
             if not status.captures_ready:
                 report(Result(False, "Phone proof says both fresh captures are not ready. Import Firefox + Chrome tokens first."))
                 return
@@ -79,6 +82,9 @@ class Window(V2Window):
             if proof.timing_complete:
                 report(Result(True, f"Timing completed while the waiting service was starting.\n{proof.raw}"))
                 return
+            if proof.authoritative_result:
+                report(Result(True, f"An official result became authoritative while waiting was starting: {proof.verification}.\n{proof.raw}"))
+                return
             armed = proof.verification == "WAITING_ARMED"
             report(Result(armed, proof.raw if armed else f"Foreground service proof succeeded, but phone state did not remain WAITING_ARMED. {proof.raw}"))
 
@@ -86,6 +92,12 @@ class Window(V2Window):
             status_result, status = query_phone_status()
             if not status_result.ok or status is None:
                 report(status_result)
+                return
+            if status.unlocked:
+                report(Result(True, f"The phone already records the authoritative result UNLOCKED. No new fastboot handoff is required.\n{status.raw}"))
+                return
+            if status.authoritative_result:
+                report(Result(False, f"Fastboot handoff is blocked because the recorded official result is {status.verification}. Follow that result or reset the workflow only for a legitimate fresh attempt.\n{status.raw}"))
                 return
             if not status.timing_complete:
                 report(Result(False, f"Phone timing proof is not complete yet. Current state: {status.verification}"))
