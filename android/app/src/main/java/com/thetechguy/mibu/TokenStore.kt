@@ -6,7 +6,7 @@ class TokenStore(context: Context) {
     private val prefs = context.getSharedPreferences("mibu_session", Context.MODE_PRIVATE)
 
     fun saveSession(session: String) {
-        val clean = session.trim()
+        val clean = normalizeToken(session)
         val now = System.currentTimeMillis()
         prefs.edit()
             .putString(KEY_LEGACY_SESSION, clean)
@@ -16,24 +16,28 @@ class TokenStore(context: Context) {
     }
 
     fun saveServiceToken(token: String) {
+        val clean = normalizeToken(token)
         prefs.edit()
-            .putString(KEY_SERVICE_TOKEN, token.trim())
+            .putString(KEY_SERVICE_TOKEN, clean)
             .putLong(KEY_SERVICE_CAPTURED_AT, System.currentTimeMillis())
             .apply()
     }
 
     fun savePopToken(token: String) {
+        val clean = normalizeToken(token)
         prefs.edit()
-            .putString(KEY_POP_TOKEN, token.trim())
+            .putString(KEY_POP_TOKEN, clean)
             .putLong(KEY_POP_CAPTURED_AT, System.currentTimeMillis())
             .apply()
     }
 
     fun saveCaptures(serviceToken: String, popToken: String) {
+        val cleanService = normalizeToken(serviceToken)
+        val cleanPop = normalizeToken(popToken)
         val now = System.currentTimeMillis()
         prefs.edit()
-            .putString(KEY_SERVICE_TOKEN, serviceToken.trim())
-            .putString(KEY_POP_TOKEN, popToken.trim())
+            .putString(KEY_SERVICE_TOKEN, cleanService)
+            .putString(KEY_POP_TOKEN, cleanPop)
             .putLong(KEY_SERVICE_CAPTURED_AT, now)
             .putLong(KEY_POP_CAPTURED_AT, now)
             .apply()
@@ -111,7 +115,10 @@ class TokenStore(context: Context) {
     private fun remainingFor(timestampKey: String, nowMs: Long): Long {
         val capturedAt = prefs.getLong(timestampKey, 0L)
         if (capturedAt <= 0L) return 0L
-        return (MAX_TOKEN_AGE_MS - (nowMs - capturedAt)).coerceAtLeast(0L)
+        val ageMs = nowMs - capturedAt
+        // A wall-clock rollback must never extend a sensitive capture's lifetime.
+        if (ageMs < 0L) return 0L
+        return (MAX_TOKEN_AGE_MS - ageMs).coerceIn(0L, MAX_TOKEN_AGE_MS)
     }
 
     private fun expireStaleCaptures(nowMs: Long = System.currentTimeMillis()) {
@@ -128,12 +135,32 @@ class TokenStore(context: Context) {
         if (changed) edit.apply()
     }
 
+    private fun normalizeToken(value: String): String {
+        val clean = value.trim()
+        require(isAcceptableToken(clean)) { "Token capture is malformed or outside the accepted size range" }
+        return clean
+    }
+
     companion object {
         private const val KEY_LEGACY_SESSION = "session"
         private const val KEY_SERVICE_TOKEN = "service_token"
         private const val KEY_POP_TOKEN = "pop_token"
         private const val KEY_SERVICE_CAPTURED_AT = "service_captured_at"
         private const val KEY_POP_CAPTURED_AT = "pop_captured_at"
+        const val MIN_TOKEN_LENGTH = 8
+        const val MAX_TOKEN_LENGTH = 8_192
         const val MAX_TOKEN_AGE_MS = 30L * 60L * 1000L
+
+        fun isAcceptableToken(value: String): Boolean {
+            val clean = value.trim()
+            return clean.length in MIN_TOKEN_LENGTH..MAX_TOKEN_LENGTH && clean.none { it.isISOControl() }
+        }
+
+        fun remainingMillis(capturedAtMs: Long, nowMs: Long): Long {
+            if (capturedAtMs <= 0L) return 0L
+            val ageMs = nowMs - capturedAtMs
+            if (ageMs < 0L) return 0L
+            return (MAX_TOKEN_AGE_MS - ageMs).coerceIn(0L, MAX_TOKEN_AGE_MS)
+        }
     }
 }
