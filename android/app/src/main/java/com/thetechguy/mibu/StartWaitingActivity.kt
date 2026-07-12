@@ -17,26 +17,12 @@ class StartWaitingActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val currentState = stateStore.reconcileTimingState()
+        val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
+        val currentState = stateStore.reconcileTimingState(nowChina)
         if (currentState.blocksNewWaitingCycle()) {
             Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${currentState.name} nonce=$proofNonce")
-            val message = when (currentState) {
-                VerificationState.TIMING_WINDOW_REACHED,
-                VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ->
-                    "The timing stage is already complete. Continue with PC verification instead of starting a new wait."
-                VerificationState.WAIT_TIME_SHOWN ->
-                    "Mi Unlock already returned a waiting period. Keep that result; do not start another timing cycle."
-                VerificationState.ACCOUNT_DEVICE_NOT_ADDED ->
-                    "The account/device result must be resolved before another timing cycle can be started."
-                VerificationState.COMMUNITY_AUTH_REQUIRED ->
-                    "Xiaomi Community authorisation is still required. Resolve that result before starting another timing cycle."
-                VerificationState.UNLOCKED ->
-                    "This device is already recorded as unlocked. No waiting cycle is required."
-                else -> "A completed verification result is already recorded."
-            }
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-            startActivity(Intent(this, MainActivity::class.java))
-            finish()
+            Toast.makeText(this, completedMessage(currentState), Toast.LENGTH_LONG).show()
+            returnToDashboard()
             return
         }
 
@@ -48,9 +34,32 @@ class StartWaitingActivity : Activity() {
             return
         }
 
-        val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
-        val targetMidnight = MibuLane.nextTargetMidnight(nowChina)
-        val latestTarget = MibuLane.defaultLanes().maxOf { it.targetTimeForMidnight(targetMidnight) }
+        val resuming = currentState == VerificationState.WAITING_ARMED
+        val targetMidnight = if (resuming) {
+            stateStore.waitingTargetMidnight() ?: run {
+                Log.e(LOG_TAG, "WAITING_RESUME_REJECTED_MISSING_TARGET nonce=$proofNonce")
+                stateStore.setVerificationState(VerificationState.UNKNOWN)
+                Toast.makeText(this, "The saved waiting target is missing. Import fresh captures and start again.", Toast.LENGTH_LONG).show()
+                returnToDashboard()
+                return
+            }
+        } else {
+            MibuLane.nextTargetMidnight(nowChina)
+        }
+
+        val remainingLanes = if (resuming) {
+            stateStore.lanes().filter { it.status == LaneStatus.ARMED }
+        } else {
+            MibuLane.defaultLanes()
+        }
+        if (remainingLanes.isEmpty()) {
+            stateStore.reconcileTimingState(nowChina)
+            Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${stateStore.verificationState().name} nonce=$proofNonce")
+            returnToDashboard()
+            return
+        }
+
+        val latestTarget = remainingLanes.maxOf { it.targetTimeForMidnight(targetMidnight) }
         val waitMs = Duration.between(nowChina, latestTarget).toMillis().coerceAtLeast(0L)
         val freshnessMs = tokenStore.millisRemaining()
         if (waitMs > freshnessMs) {
@@ -67,23 +76,52 @@ class StartWaitingActivity : Activity() {
             return
         }
 
-        stateStore.armWaiting(targetMidnight)
+        if (!resuming) {
+            stateStore.armWaiting(targetMidnight)
+        }
 
         try {
             val serviceIntent = Intent(this, MibuForegroundService::class.java)
                 .putExtra(ProofNonce.EXTRA, proofNonce)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
-            Log.i(LOG_TAG, "WAITING_ACTIVITY_STARTED targetMidnight=${targetMidnight.toInstant().toEpochMilli()} nonce=$proofNonce")
-            Toast.makeText(this, "MIBU is starting the waiting service. The PC helper confirms when the service is actually armed.", Toast.LENGTH_SHORT).show()
+            val marker = if (resuming) "WAITING_ACTIVITY_RESUMED" else "WAITING_ACTIVITY_STARTED"
+            Log.i(LOG_TAG, "$marker targetMidnight=${targetMidnight.toInstant().toEpochMilli()} nonce=$proofNonce")
+            Toast.makeText(
+                this,
+                if (resuming) "MIBU is resuming the saved waiting service without resetting reached windows."
+                else "MIBU is starting the waiting service. The PC helper confirms when the service is actually armed.",
+                Toast.LENGTH_SHORT
+            ).show()
         } catch (exc: Exception) {
-            stateStore.setVerificationState(VerificationState.UNKNOWN)
-            stateStore.clearWaitingTarget()
+            if (!resuming) {
+                stateStore.setVerificationState(VerificationState.UNKNOWN)
+                stateStore.clearWaitingTarget()
+            }
             Log.e(LOG_TAG, "WAITING_START_FAILED nonce=$proofNonce", exc)
             Toast.makeText(this, "Could not start waiting service: ${exc.message}", Toast.LENGTH_LONG).show()
         }
 
+        returnToDashboard()
+    }
+
+    private fun returnToDashboard() {
         startActivity(Intent(this, MainActivity::class.java))
         finish()
+    }
+
+    private fun completedMessage(state: VerificationState): String = when (state) {
+        VerificationState.TIMING_WINDOW_REACHED,
+        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ->
+            "The timing stage is already complete. Continue with PC verification instead of starting a new wait."
+        VerificationState.WAIT_TIME_SHOWN ->
+            "Mi Unlock already returned a waiting period. Keep that result; do not start another timing cycle."
+        VerificationState.ACCOUNT_DEVICE_NOT_ADDED ->
+            "The account/device result must be resolved before another timing cycle can be started."
+        VerificationState.COMMUNITY_AUTH_REQUIRED ->
+            "Xiaomi Community authorisation is still required. Resolve that result before starting another timing cycle."
+        VerificationState.UNLOCKED ->
+            "This device is already recorded as unlocked. No waiting cycle is required."
+        else -> "A completed verification result is already recorded."
     }
 
     private fun VerificationState.blocksNewWaitingCycle(): Boolean = when (this) {
