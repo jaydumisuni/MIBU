@@ -12,29 +12,23 @@ class CommunityCheckActivity : Activity() {
     }
 
     private fun render() {
-        mibuPage("MIBU", "Community Device Check / THETECHGUY TOOL") {
-            addView(mibuExpectedImage(R.drawable.android_settings))
-            addView(mibuCard("Why this exists", "For China-routed or Community-routed Xiaomi devices, manually checking whether the same Xiaomi account/device appears in Xiaomi Community may be useful evidence. This is not treated as a guaranteed blocker."))
-            addView(mibuCard("Current state", stateStore.communityState().name))
-            addView(mibuCard("Manual check", "Open Xiaomi Community with the same Xiaomi account, then check My Devices / device area. Come back here and save what you saw."))
-            addView(mibuButton("Device confirmed in Community", true) {
-                stateStore.setCommunityState(CommunityDeviceState.COMMUNITY_DEVICE_CONFIRMED)
-                render()
-            })
-            addView(mibuButton("Device not found") {
-                stateStore.setCommunityState(CommunityDeviceState.COMMUNITY_DEVICE_NOT_FOUND)
-                render()
-            })
-            addView(mibuButton("Community route not required") {
-                stateStore.setCommunityState(CommunityDeviceState.COMMUNITY_ROUTE_NOT_REQUIRED)
-                render()
-            })
-            addView(mibuButton("Unknown / skip for now") {
-                stateStore.setCommunityState(CommunityDeviceState.COMMUNITY_ROUTE_UNKNOWN)
-                render()
-            })
-            addView(mibuButton("Back") { finish() })
-            addView(footer())
-        }
+        mibuImageHotspotScreen(
+            R.drawable.android_settings,
+            listOf(
+                MibuHotspot(0.03f, 0.03f, 0.12f, 0.07f, "Back") { finish() },
+                MibuHotspot(0.09f, 0.515f, 0.82f, 0.065f, "Device confirmed") {
+                    stateStore.setCommunityState(CommunityDeviceState.COMMUNITY_DEVICE_CONFIRMED)
+                    render()
+                },
+                MibuHotspot(0.09f, 0.590f, 0.82f, 0.065f, "Device not found") {
+                    stateStore.setCommunityState(CommunityDeviceState.COMMUNITY_DEVICE_NOT_FOUND)
+                    render()
+                },
+                MibuHotspot(0.09f, 0.665f, 0.82f, 0.065f, "Route not required") {
+                    stateStore.setCommunityState(CommunityDeviceState.COMMUNITY_ROUTE_NOT_REQUIRED)
+                    render()
+                },
+            ),
+        )
     }
 }

@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -65,6 +66,52 @@ fun Activity.mibuExpectedImage(resId: Int): ImageView {
             setMargins(0, 0, 0, dp(12))
         }
     }
+}
+
+data class MibuHotspot(
+    val left: Float,
+    val top: Float,
+    val width: Float,
+    val height: Float,
+    val label: String,
+    val onClick: () -> Unit,
+)
+
+fun Activity.mibuImageHotspotScreen(resId: Int, hotspots: List<MibuHotspot>) {
+    val frame = FrameLayout(this).apply {
+        setBackgroundColor(Color.BLACK)
+    }
+    frame.addView(ImageView(this).apply {
+        setImageResource(resId)
+        scaleType = ImageView.ScaleType.FIT_XY
+        contentDescription = "MIBU expected UI"
+    }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
+    hotspots.forEach { hotspot ->
+        frame.addView(View(this).apply {
+            contentDescription = hotspot.label
+            isClickable = true
+            isFocusable = true
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener { hotspot.onClick() }
+        }, FrameLayout.LayoutParams(1, 1))
+    }
+
+    frame.viewTreeObserver.addOnGlobalLayoutListener {
+        for (index in hotspots.indices) {
+            val child = frame.getChildAt(index + 1)
+            val hotspot = hotspots[index]
+            child.layoutParams = FrameLayout.LayoutParams(
+                (frame.width * hotspot.width).toInt(),
+                (frame.height * hotspot.height).toInt(),
+            ).apply {
+                leftMargin = (frame.width * hotspot.left).toInt()
+                topMargin = (frame.height * hotspot.top).toInt()
+            }
+            child.requestLayout()
+        }
+    }
+    setContentView(frame)
 }
 
 fun Activity.mibuButton(text: String, primary: Boolean = false, onClick: () -> Unit): Button {

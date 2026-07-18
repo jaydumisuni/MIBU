@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import platform
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from mibu_actions import adb_path, fastboot_path
 
@@ -47,8 +50,55 @@ def fastboot_check() -> CheckItem:
     return executable_check("Fastboot platform-tools", fastboot_path(), ["--version"])
 
 
+def _browser_candidates(name: str) -> list[Path]:
+    local = Path(os.environ.get("LOCALAPPDATA", ""))
+    program_files = [Path(os.environ.get("PROGRAMFILES", "")), Path(os.environ.get("PROGRAMFILES(X86)", ""))]
+    if name == "chrome":
+        return [
+            local / "Google" / "Chrome" / "Application" / "chrome.exe",
+            *(root / "Google" / "Chrome" / "Application" / "chrome.exe" for root in program_files),
+            Path(shutil.which("chrome") or ""),
+            Path(shutil.which("chrome.exe") or ""),
+        ]
+    if name == "firefox":
+        return [
+            *(root / "Mozilla Firefox" / "firefox.exe" for root in program_files),
+            local / "Mozilla Firefox" / "firefox.exe",
+            Path(shutil.which("firefox") or ""),
+            Path(shutil.which("firefox.exe") or ""),
+        ]
+    if name == "brave":
+        return [
+            local / "BraveSoftware" / "Brave-Browser" / "Application" / "brave.exe",
+            *(root / "BraveSoftware" / "Brave-Browser" / "Application" / "brave.exe" for root in program_files),
+            Path(shutil.which("brave") or ""),
+            Path(shutil.which("brave.exe") or ""),
+        ]
+    return []
+
+
+def browser_path(name: str) -> str | None:
+    for candidate in _browser_candidates(name):
+        if str(candidate) and candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def browser_check(display: str, key: str) -> CheckItem:
+    path = browser_path(key)
+    return CheckItem(display, path is not None, path or "not installed/detected")
+
+
 def run_all_checks() -> list[CheckItem]:
-    return [python_check(), pyside_check(), adb_check(), fastboot_check()]
+    return [
+        python_check(),
+        pyside_check(),
+        adb_check(),
+        fastboot_check(),
+        browser_check("Chrome browser", "chrome"),
+        browser_check("Firefox browser", "firefox"),
+        browser_check("Brave browser", "brave"),
+    ]
 
 
 def format_checks(items: list[CheckItem]) -> str:

@@ -21,6 +21,9 @@ image-hotspot-log.txt
 design-match-log.txt
 page-split-polish-log.txt
 visual-polish-log.txt
+visual-audit-log.txt
+mibu-current-phone.png
+pc-helper/release.locked_*/
 
 # Ignore unapproved/local binary resources by default. Canonical UI source,
 # provenance and placeholders are explicitly source-controlled below.

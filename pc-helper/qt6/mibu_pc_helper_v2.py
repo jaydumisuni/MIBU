@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import sys
+import subprocess
+import shutil
 import webbrowser
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -29,7 +31,7 @@ try:
 except Exception:  # pragma: no cover
     QSoundEffect = None  # type: ignore
 
-from dependency_check import format_checks, run_all_checks
+from dependency_check import browser_path, format_checks, run_all_checks
 from mibu_actions import (
     check_device_ready,
     check_fastboot_ready,
@@ -47,6 +49,11 @@ from ui_geometry import SCREENS, ScreenGeometry
 BEIJING_ZONE = ZoneInfo("Asia/Shanghai")
 TARGET_TIME = time(23, 59, 58, 600000)
 LOGIN_URL = "https://account.xiaomi.com/"
+WINGET_BROWSER_IDS = {
+    "chrome": "Google.Chrome",
+    "firefox": "Mozilla.Firefox",
+    "brave": "Brave.Brave",
+}
 
 
 def app_base_dir() -> Path:
@@ -56,7 +63,18 @@ def app_base_dir() -> Path:
 def asset_roots() -> list[Path]:
     base = app_base_dir()
     cwd = Path.cwd()
-    roots = [base, cwd]
+    repo_candidates = [
+        base,
+        cwd,
+        base.parent,
+        base.parent.parent,
+        cwd.parent,
+        cwd.parent.parent,
+    ]
+    roots: list[Path] = []
+    for root in repo_candidates:
+        if root not in roots:
+            roots.append(root)
     expanded: list[Path] = []
     for root in roots:
         expanded.extend([
@@ -67,6 +85,8 @@ def asset_roots() -> list[Path]:
             root / "resources" / "expected ui" / "pc",
             root / "_internal",
             root / "_internal" / "dist",
+            root / "_internal" / "resources",
+            root / "_internal" / "resources" / "expected ui",
             root / "_internal" / "resources" / "expected ui" / "pc",
         ])
     return expanded
@@ -86,6 +106,37 @@ def required_asset(name: str) -> str:
     if not path:
         raise FileNotFoundError(f"Required MIBU UI asset missing: {name}")
     return path
+
+
+def open_or_install_browser(key: str, url: str = LOGIN_URL) -> str:
+    path = browser_path(key)
+    if path:
+        subprocess.Popen([path, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return f"{key.title()} opened: {path}"
+    winget_id = WINGET_BROWSER_IDS.get(key)
+    if not winget_id:
+        webbrowser.open(url)
+        return f"{key.title()} not detected. Opened default browser instead."
+    winget = shutil.which("winget")
+    if not winget:
+        webbrowser.open(f"https://www.google.com/search?q=install+{key}+browser")
+        return f"{key.title()} is not installed and winget is not available. Opened install search in the default browser."
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    subprocess.Popen(
+        [
+            winget,
+            "install",
+            "-e",
+            "--id",
+            winget_id,
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=creationflags,
+    )
+    return f"{key.title()} was not detected. Started winget install for {winget_id}."
 
 
 def next_target(now: datetime | None = None) -> datetime:
@@ -130,6 +181,7 @@ class WorkflowDialog(QDialog):
         self.status = QLabel("Ready", self)
         self.status.setObjectName("dialogStatus")
         self.status.setWordWrap(False)
+        self.status.hide()
         self.hotspots: dict[str, HotspotButton] = {}
         close = HotspotButton("Close", self)
         close.clicked.connect(self.reject)
@@ -157,6 +209,7 @@ class WorkflowDialog(QDialog):
         one_line = "  •  ".join(part.strip() for part in message.splitlines() if part.strip())
         self.status.setText(one_line or "Done")
         self.status.setToolTip(message)
+        self.status.show()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -214,17 +267,22 @@ class Window(QMainWindow):
         self.output.setObjectName("floatingOutput")
         self.output.setReadOnly(True)
         self.output.setMaximumBlockCount(250)
+        self.output.hide()
         self.command_input = QLineEdit(root)
         self.command_input.setObjectName("commandInput")
         self.command_input.setPlaceholderText("ADB command, e.g. shell getprop ro.product.model")
         self.command_input.returnPressed.connect(self.run_custom_adb_command)
+        self.command_input.hide()
         self.command_button = QPushButton("Run", root)
         self.command_button.setObjectName("commandButton")
         self.command_button.clicked.connect(self.run_custom_adb_command)
+        self.command_button.hide()
         self.status = QLabel(root)
         self.status.setObjectName("floatingStatus")
+        self.status.hide()
         self.time_label = QLabel(root)
         self.time_label.setObjectName("floatingTime")
+        self.time_label.hide()
 
         handlers = {
             "Device Check": self.show_device_check,
@@ -360,8 +418,12 @@ class Window(QMainWindow):
         dialog = WorkflowDialog(self, "Login & Get Tokens", SCREENS["login"])
 
         def open_browser() -> None:
-            opened = webbrowser.open(LOGIN_URL)
-            message = f"Browser open result: {opened}. User logs in themselves."
+            chrome = open_or_install_browser("chrome")
+            firefox = open_or_install_browser("firefox")
+            message = (
+                f"{chrome}\n{firefox}\n"
+                "Log in yourself. MIBU will only import tokens that you paste or explicitly push from this helper."
+            )
             self._log(message)
             dialog.set_status(message)
 

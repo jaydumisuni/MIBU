@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import webbrowser
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from mibu_actions import (
     fastboot_oem_info,
     install_package,
     launch_phone_app,
+    launch_token_import,
     reboot_to_fastboot,
     start_phone_waiting,
 )
@@ -72,7 +74,22 @@ class AssistantWorker(QObject):
         if status.authoritative_result:
             return Result(True, f"The phone already has an official result recorded as {status.verification}. No new waiting cycle was started.\n\n{status.raw}")
         if not status.captures_ready:
-            return Result(False, "Assistant needs you: log in in the browser and import fresh Firefox service + Chrome pop token captures. I opened MIBU; use Login & Get Token, then run One Click Assist again.\n\n" + status.raw)
+            token_screen = launch_token_import()
+            opened = "Phone token-import screen opened." if token_screen.ok else "Could not open the phone token-import screen: " + token_screen.message
+            self.step.emit("Opening browser login and waiting for explicit token import...")
+            webbrowser.open(LOGIN_URL)
+            deadline = time.monotonic() + 300
+            latest_raw = status.raw
+            while time.monotonic() < deadline:
+                poll_result, poll_status = query_phone_status()
+                if poll_result.ok and poll_status is not None:
+                    latest_raw = poll_status.raw
+                    if poll_status.captures_ready:
+                        status = poll_status
+                        break
+                time.sleep(2)
+            if not status.captures_ready:
+                return Result(False, "Assistant needs you: import fresh Firefox service + Chrome pop token captures. I opened the phone import step and Xiaomi login. Run One Click Assist again after the import if the five-minute wait expires.\n\n" + opened + "\n\n" + latest_raw)
 
         self.step.emit("Starting the phone waiting service...")
         waiting = start_phone_waiting()
@@ -136,6 +153,9 @@ class Window(V2Window):
         self.assistant_button = QPushButton("One Click Assist", root)
         self.assistant_button.setObjectName("assistantButton")
         self.assistant_button.clicked.connect(self.run_one_click_assist)
+        self.assistant_art.hide()
+        self.assistant_bubble.hide()
+        self.assistant_button.hide()
         self._theme()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
@@ -145,6 +165,8 @@ class Window(V2Window):
     def _position_assistant(self) -> None:
         root = self.centralWidget()
         if not root or not hasattr(self, "assistant_art"):
+            return
+        if not self.assistant_button.isVisible():
             return
         width = root.width()
         height = root.height()

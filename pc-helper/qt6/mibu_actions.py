@@ -153,14 +153,38 @@ def check_device_ready() -> Result:
     devices = parse_devices(devices_result.message)
     if not devices:
         return Result(False, "No device detected. Connect USB cable, enable USB debugging, then accept the RSA prompt.")
-    online = [(serial, state) for serial, state in devices if state == "device"]
-    if len(online) == 1:
-        serial, state = online[0]
-    elif len(devices) > 1:
-        summary = ", ".join(f"{serial}:{state}" for serial, state in devices)
-        return Result(False, f"Multiple ADB devices are connected ({summary}). Leave only one authorized online phone connected, then retry.")
+    requested_serial = os.environ.get("MIBU_ADB_SERIAL", "").strip()
+    if requested_serial:
+        match = next(((serial, state) for serial, state in devices if serial == requested_serial), None)
+        if not match:
+            summary = ", ".join(f"{serial}:{state}" for serial, state in devices)
+            return Result(False, f"MIBU_ADB_SERIAL={requested_serial} was requested, but connected devices are: {summary}")
+        serial, state = match
     else:
-        serial, state = devices[0]
+        online = [(serial, state) for serial, state in devices if state == "device"]
+        if len(online) == 1:
+            serial, state = online[0]
+        elif len(online) > 1:
+            preferred: tuple[str, str] | None = None
+            details: list[str] = []
+            for candidate_serial, candidate_state in online:
+                model = run_tool(["-s", candidate_serial, "shell", "getprop", "ro.product.model"], timeout=10)
+                manufacturer = run_tool(["-s", candidate_serial, "shell", "getprop", "ro.product.manufacturer"], timeout=10)
+                descriptor = f"{candidate_serial}:{candidate_state}:{manufacturer.message.strip()}:{model.message.strip()}"
+                details.append(descriptor)
+                lowered = descriptor.lower()
+                if any(marker in lowered for marker in ("xiaomi", "redmi", "poco", "23076")):
+                    preferred = (candidate_serial, candidate_state)
+                    break
+            if preferred:
+                serial, state = preferred
+            else:
+                return Result(False, "Multiple online ADB devices are connected and no Xiaomi/Redmi/Poco phone could be selected automatically. Disconnect the extra device or set MIBU_ADB_SERIAL.\n" + "\n".join(details))
+        elif len(devices) > 1:
+            summary = ", ".join(f"{serial}:{state}" for serial, state in devices)
+            return Result(False, f"Multiple ADB devices are connected ({summary}). Authorize the Xiaomi phone and retry.")
+        else:
+            serial, state = devices[0]
     if state == "unauthorized":
         return Result(False, f"Device {serial} is unauthorized. On the phone, tick ‘Always allow from this computer’ and tap OK.")
     if state == "offline":
@@ -267,6 +291,19 @@ def launch_phone_app() -> Result:
     if result.ok and ("Status: ok" in result.message or "Activity:" in result.message):
         return Result(True, result.message)
     return Result(False, result.message or "Android did not confirm that MIBU opened.")
+
+
+def launch_token_import() -> Result:
+    ready = check_device_ready()
+    if not ready.ok:
+        return ready
+    installed = package_exists()
+    if not installed.ok:
+        return installed
+    result = run_tool(["shell", "am", "start", "-W", "-n", TOKEN_ENTRY], timeout=30)
+    if result.ok and ("Status: ok" in result.message or "Activity:" in result.message):
+        return Result(True, result.message)
+    return Result(False, result.message or "Android did not confirm that the MIBU token import screen opened.")
 
 
 def _valid_token(value: str) -> bool:

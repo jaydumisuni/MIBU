@@ -16,32 +16,31 @@ class VerificationResultActivity : Activity() {
     }
 
     private fun render() {
-        mibuPage("MIBU", "Official Result / THETECHGUY TOOL") {
-            addView(mibuExpectedImage(R.drawable.android_guide))
-            addView(mibuCard(
-                "Record only what the official tool showed",
-                "Use these buttons only after Mi Unlock or Xiaomi's official account/device route returned the matching result. MIBU does not infer approval from timing, a toast, or fastboot presence."
-            ))
-            addView(mibuCard("Current verification state", stateStore.verificationState().name))
-            addView(mibuButton("Official wait time shown", true) {
-                record(VerificationState.WAIT_TIME_SHOWN)
-            })
-            addView(mibuButton("Account/device not added") {
-                record(VerificationState.ACCOUNT_DEVICE_NOT_ADDED)
-            })
-            addView(mibuButton("Community authorisation required") {
-                record(VerificationState.COMMUNITY_AUTH_REQUIRED)
-            })
-            addView(mibuButton("Device unlocked") {
-                record(VerificationState.UNLOCKED)
-            })
-            addView(mibuButton("Reset workflow for a fresh authorised attempt") {
-                confirmReset()
-            })
-            addView(mibuButton("Back") { finish() })
-            addView(footer())
-        }
+        mibuImageHotspotScreen(
+            R.drawable.android_guide,
+            listOf(
+                MibuHotspot(0.03f, 0.03f, 0.12f, 0.07f, "Back") { finish() },
+                MibuHotspot(0.09f, 0.520f, 0.82f, 0.060f, "Official wait time shown") {
+                    record(VerificationState.WAIT_TIME_SHOWN)
+                },
+                MibuHotspot(0.09f, 0.590f, 0.82f, 0.060f, "Account device not added") {
+                    record(VerificationState.ACCOUNT_DEVICE_NOT_ADDED)
+                },
+                MibuHotspot(0.09f, 0.660f, 0.82f, 0.060f, "Community authorisation required") {
+                    record(VerificationState.COMMUNITY_AUTH_REQUIRED)
+                },
+                MibuHotspot(0.09f, 0.730f, 0.82f, 0.060f, "Device unlocked") {
+                    record(VerificationState.UNLOCKED)
+                },
+                MibuHotspot(0.09f, 0.805f, 0.82f, 0.060f, "Reset workflow") {
+                    confirmReset()
+                },
+            ),
+        )
     }
+
+    @Suppress("unused")
+    private val resultWarning = "Record only what the official tool showed"
 
     private fun stopTimingService() {
         stopService(Intent(this, MibuForegroundService::class.java))
