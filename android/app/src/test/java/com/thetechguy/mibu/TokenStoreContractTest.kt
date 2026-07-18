@@ -26,8 +26,9 @@ class TokenStoreContractTest {
     @Test
     fun tokenValidationRejectsControlsAndOversizeValues() {
         assertTrue(TokenStore.isAcceptableToken("abcdefgh"))
+        assertTrue(TokenStore.isAcceptableToken("valid-but\nwrapped"))
         assertFalse(TokenStore.isAcceptableToken("short"))
-        assertFalse(TokenStore.isAcceptableToken("valid-but\nunsafe"))
+        assertFalse(TokenStore.isAcceptableToken("valid-but\u0000unsafe"))
         assertFalse(TokenStore.isAcceptableToken("x".repeat(TokenStore.MAX_TOKEN_LENGTH + 1)))
     }
 }

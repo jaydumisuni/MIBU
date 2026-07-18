@@ -44,16 +44,21 @@ class DeviceParsingTests(unittest.TestCase):
         self.assertEqual([("ABC123", "fastboot")], mibu_actions.parse_fastboot_devices(output))
 
     def test_token_encoding_is_url_safe_and_reversible(self) -> None:
-        original = "abc+/= token value with symbols"
+        original = "abc+/=tokenvaluewithsymbols"
         encoded = mibu_actions._encode_token(original)
         self.assertNotIn("\n", encoded)
         decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
         self.assertEqual(original, decoded)
 
+    def test_token_encoding_compacts_wrapped_copies(self) -> None:
+        encoded = mibu_actions._encode_token("abc12345\nxyz67890")
+        decoded = base64.urlsafe_b64decode(encoded.encode("ascii")).decode("utf-8")
+        self.assertEqual("abc12345xyz67890", decoded)
+
     def test_token_validation_bounds_and_control_characters(self) -> None:
         self.assertTrue(mibu_actions._valid_token("abcdefgh"))
+        self.assertTrue(mibu_actions._valid_token("abcd\nefgh"))
         self.assertFalse(mibu_actions._valid_token("short"))
-        self.assertFalse(mibu_actions._valid_token("valid-but\nnot-safe"))
         self.assertFalse(mibu_actions._valid_token("x" * (mibu_actions.MAX_TOKEN_LENGTH + 1)))
 
 

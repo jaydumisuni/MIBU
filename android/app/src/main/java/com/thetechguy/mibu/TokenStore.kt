@@ -97,12 +97,12 @@ class TokenStore(context: Context) {
 
     fun getServiceToken(): String? {
         expireStaleCaptures()
-        return prefs.getString(KEY_SERVICE_TOKEN, null)
+        return normalizedStoredToken(KEY_SERVICE_TOKEN, KEY_SERVICE_CAPTURED_AT, KEY_LEGACY_SESSION)
     }
 
     fun getPopToken(): String? {
         expireStaleCaptures()
-        return prefs.getString(KEY_POP_TOKEN, null)
+        return normalizedStoredToken(KEY_POP_TOKEN, KEY_POP_CAPTURED_AT)
     }
 
     fun clear() {
@@ -129,8 +129,25 @@ class TokenStore(context: Context) {
         if (changed) edit.apply()
     }
 
+    private fun normalizedStoredToken(tokenKey: String, timestampKey: String, legacyKey: String? = null): String? {
+        val stored = prefs.getString(tokenKey, null) ?: return null
+        val compact = compactToken(stored)
+        if (!isAcceptableToken(compact)) {
+            val edit = prefs.edit().remove(tokenKey).remove(timestampKey)
+            if (legacyKey != null) edit.remove(legacyKey)
+            edit.apply()
+            return null
+        }
+        if (compact != stored) {
+            val edit = prefs.edit().putString(tokenKey, compact)
+            if (legacyKey != null) edit.putString(legacyKey, compact)
+            edit.apply()
+        }
+        return compact
+    }
+
     private fun normalizeToken(value: String): String {
-        val clean = value.trim()
+        val clean = compactToken(value)
         require(isAcceptableToken(clean)) { "Token capture is malformed or outside the accepted size range" }
         return clean
     }
@@ -145,8 +162,11 @@ class TokenStore(context: Context) {
         const val MAX_TOKEN_LENGTH = 8_192
         const val MAX_TOKEN_AGE_MS = 30L * 60L * 1000L
 
+        fun compactToken(value: String): String =
+            value.trim().filterNot { it.isWhitespace() }
+
         fun isAcceptableToken(value: String): Boolean {
-            val clean = value.trim()
+            val clean = compactToken(value)
             return clean.length in MIN_TOKEN_LENGTH..MAX_TOKEN_LENGTH && clean.none { it.isISOControl() }
         }
 

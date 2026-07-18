@@ -232,12 +232,16 @@ def launch_phone_app() -> Result:
 
 
 def _valid_token(value: str) -> bool:
-    clean = value.strip()
+    clean = _compact_token(value)
     return MIN_TOKEN_LENGTH <= len(clean) <= MAX_TOKEN_LENGTH and not any(ord(char) < 32 or ord(char) == 127 for char in clean)
 
 
+def _compact_token(value: str) -> str:
+    return "".join(value.strip().split())
+
+
 def _encode_token(value: str) -> str:
-    return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii")
+    return base64.urlsafe_b64encode(_compact_token(value).encode("utf-8")).decode("ascii")
 
 
 def _proof_nonce() -> str:
@@ -282,7 +286,7 @@ def _wait_for_log_marker(tag: str, marker: str, wait_seconds: int = 6, nonce: st
 
 
 def push_session_to_phone(token: str) -> Result:
-    token = token.strip()
+    token = _compact_token(token)
     if not _valid_token(token):
         return Result(False, f"Token/session must be {MIN_TOKEN_LENGTH}-{MAX_TOKEN_LENGTH} characters with no control characters.")
     ready = check_device_ready()
@@ -301,8 +305,8 @@ def push_session_to_phone(token: str) -> Result:
 
 
 def push_two_tokens_to_phone(service_token: str, pop_token: str) -> Result:
-    service_token = service_token.strip()
-    pop_token = pop_token.strip()
+    service_token = _compact_token(service_token)
+    pop_token = _compact_token(pop_token)
     if not _valid_token(service_token):
         return Result(False, f"Firefox/service token must be {MIN_TOKEN_LENGTH}-{MAX_TOKEN_LENGTH} characters with no control characters.")
     if not _valid_token(pop_token):
