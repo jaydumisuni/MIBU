@@ -34,15 +34,13 @@ class MainActivity : Activity() {
         }
     }
 
-    private lateinit var root: LinearLayout
-    private lateinit var statusCard: TextView
+    private lateinit var accountCard: TextView
+    private lateinit var sessionCard: TextView
     private lateinit var beijingCard: TextView
     private lateinit var localCard: TextView
     private lateinit var countdownCard: TextView
-    private lateinit var sessionCard: TextView
-    private lateinit var laneCard: TextView
-    private lateinit var verifyCard: TextView
-    private lateinit var communityCard: TextView
+    private lateinit var mobileDataCard: TextView
+    private lateinit var serviceCard: TextView
     private lateinit var startWaitingButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,233 +70,185 @@ class MainActivity : Activity() {
     }
 
     private fun buildUi() {
-        root = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(18), dp(52), dp(18), dp(22))
-            setBackgroundColor(Color.rgb(5, 9, 19))
+            setPadding(dp(20), dp(30), dp(20), dp(18))
+            setBackgroundColor(Color.rgb(3, 7, 16))
         }
-        val scroll = ScrollView(this)
-        scroll.addView(root)
-        setContentView(scroll)
+        setContentView(ScrollView(this).apply { addView(root) })
 
-        root.addView(headerBlock())
-        root.addView(heroBlock())
-        statusCard = statusTile("Account Status", "Checking...", "")
-        sessionCard = statusTile("Token Setup", "Waiting for import", "")
-        laneCard = statusTile("Waiting Engine", "Not armed", "Four timing-window lanes run silently in the background.")
-        root.addView(statusCard)
+        root.addView(ImageView(this).apply {
+            setImageResource(R.drawable.mibu_logo)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, fullWidth(dp(190), dp(4)))
+        root.addView(label("MIBU", 34f, Color.WHITE, true, Gravity.CENTER))
+        root.addView(label("THETECHGUY TOOL", 13f, muted(), false, Gravity.CENTER))
+
+        accountCard = neonRow("✓", "Account Status", "Checking", green())
+        sessionCard = neonRow("▣", "Session Imported", "Import from PC helper first", cyan())
+        root.addView(accountCard)
         root.addView(sessionCard)
-        root.addView(laneCard)
 
-        val timeRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        beijingCard = miniTile("Target Time (Beijing)", "-")
-        localCard = miniTile("Target Time (Local)", "-")
+        val timeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        beijingCard = miniPanel("Target Time (Beijing)", "--")
+        localCard = miniPanel("Target Time (Local)", "--")
         timeRow.addView(beijingCard, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, 0, dp(6), 0) })
         timeRow.addView(localCard, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(6), 0, 0, 0) })
         root.addView(timeRow)
 
-        countdownCard = statusTile("Time Remaining", "-- : -- : --", "HOURS   MINUTES   SECONDS")
-        verifyCard = statusTile("Verification", "Not started", "After the timing window is reached, verify with Mi Unlock Tool from PC Helper. Settings bind is fallback only.")
+        countdownCard = countdownPanel("-- : -- : --")
         root.addView(countdownCard)
-        root.addView(verifyCard)
-        root.addView(rowTile("Mobile Data Reminder", "Make sure Mobile Data is ON and Wi-Fi/WLAN is OFF.", "Required"))
-        communityCard = rowTile("Community Device Check", "For China-routed devices, confirm device/account status in Xiaomi Community if needed.", stateStore.communityState().name)
-        root.addView(communityCard)
+        mobileDataCard = neonRow("▮", "Mobile Data Reminder", "Mobile data is ON", green())
+        serviceCard = neonRow("◇", "Foreground Service", "Ready", cyan())
+        root.addView(mobileDataCard)
+        root.addView(serviceCard)
 
-        startWaitingButton = primaryButton("Start Waiting") { startActivity(Intent(this, StartWaitingActivity::class.java)) }
-        root.addView(startWaitingButton)
-        root.addView(secondaryButton("Import Firefox + Chrome tokens") { startActivity(Intent(this, TokenImportActivity::class.java)) })
-        root.addView(secondaryButton("Community Check") { startActivity(Intent(this, CommunityCheckActivity::class.java)) })
-        root.addView(secondaryButton("Open Logs") { startActivity(Intent(this, LogsActivity::class.java)) })
-        root.addView(secondaryButton("Instructions") { startActivity(Intent(this, InstructionsActivity::class.java)) })
-        root.addView(TextView(this).apply {
-            text = "By the THETECHGUY TOOL team"
-            textSize = 13f
-            setTextColor(Color.rgb(145, 160, 190))
-            gravity = Gravity.CENTER
-            setPadding(0, dp(18), 0, dp(8))
-        })
-    }
-
-    private fun headerBlock(): View = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER
-        setPadding(0, dp(8), 0, dp(12))
-        addView(ImageView(this@MainActivity).apply {
-            setImageResource(R.drawable.mibu_logo)
-            adjustViewBounds = true
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)))
-        addView(TextView(this@MainActivity).apply {
-            text = "MIBU"
-            textSize = 24f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-        })
-        addView(TextView(this@MainActivity).apply {
-            text = "THETECHGUY TOOL"
-            textSize = 11f
-            setTextColor(Color.rgb(145, 160, 190))
-            gravity = Gravity.CENTER
-        })
-    }
-
-    private fun heroBlock(): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(4), dp(4), dp(4), dp(10))
-            background = rounded(Color.rgb(8, 15, 30), dp(24), Color.rgb(32, 55, 90))
+        startWaitingButton = neonButton("▷  Start Waiting", true) {
+            startActivity(Intent(this, StartWaitingActivity::class.java))
         }
-        card.addView(ImageView(this).apply {
-            setImageResource(R.drawable.android_dashboard_waiting)
-            adjustViewBounds = true
-            scaleType = ImageView.ScaleType.CENTER_CROP
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(250)))
-        card.addView(TextView(this).apply {
-            text = "Phone-side helper for Xiaomi bootloader unlock timing."
-            textSize = 13f
-            gravity = Gravity.CENTER
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            setPadding(dp(12), dp(6), dp(12), 0)
+        root.addView(startWaitingButton)
+
+        val bottomRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        bottomRow.addView(neonButton("Open Logs", false) {
+            startActivity(Intent(this@MainActivity, LogsActivity::class.java))
+        }, LinearLayout.LayoutParams(0, dp(72), 1f).apply { setMargins(0, 0, dp(6), 0) })
+        bottomRow.addView(neonButton("Instructions", false) {
+            startActivity(Intent(this@MainActivity, InstructionsActivity::class.java))
+        }, LinearLayout.LayoutParams(0, dp(72), 1f).apply { setMargins(dp(6), 0, 0, 0) })
+        root.addView(bottomRow)
+
+        root.addView(neonButton("Import Firefox + Chrome Tokens", false) {
+            startActivity(Intent(this, TokenImportActivity::class.java))
         })
-        rootParams(card, dp(14))
-        return card
-    }
-
-    private fun statusTile(title: String, main: String, small: String) = TextView(this).apply {
-        text = formatBlock(title, main, small)
-        textSize = 12f
-        setTextColor(Color.WHITE)
-        setPadding(dp(18), dp(15), dp(18), dp(15))
-        background = rounded(Color.rgb(13, 20, 35), dp(16), Color.rgb(30, 40, 65))
-        rootParams(this, dp(12))
-    }
-
-    private fun miniTile(title: String, value: String) = TextView(this).apply {
-        text = "$title\n$value"
-        textSize = 12f
-        setTextColor(Color.WHITE)
-        setPadding(dp(14), dp(14), dp(14), dp(14))
-        background = rounded(Color.rgb(13, 20, 35), dp(16), Color.rgb(30, 40, 65))
-    }
-
-    private fun rowTile(title: String, desc: String, badge: String) = TextView(this).apply {
-        text = "$title\n$desc\n[$badge]"
-        textSize = 12f
-        setTextColor(Color.WHITE)
-        setPadding(dp(18), dp(14), dp(18), dp(14))
-        background = rounded(Color.rgb(13, 20, 35), dp(16), Color.rgb(30, 40, 65))
-        rootParams(this, dp(10))
-    }
-
-    private fun primaryButton(text: String, onClick: () -> Unit) = Button(this).apply {
-        this.text = text
-        textSize = 13f
-        setTextColor(Color.WHITE)
-        background = rounded(Color.rgb(30, 88, 255), dp(14), Color.rgb(75, 114, 255))
-        setOnClickListener { onClick() }
-        rootParams(this, dp(10))
-    }
-
-    private fun secondaryButton(text: String, onClick: () -> Unit) = Button(this).apply {
-        this.text = text
-        textSize = 13f
-        setTextColor(Color.WHITE)
-        background = rounded(Color.rgb(14, 23, 40), dp(14), Color.rgb(40, 66, 106))
-        setOnClickListener { onClick() }
-        rootParams(this, dp(10))
+        root.addView(neonButton("Community / Settings", false) {
+            startActivity(Intent(this, CommunityCheckActivity::class.java))
+        })
     }
 
     private fun refreshStatus() {
         val nowChina = ZonedDateTime.now(MibuLane.CHINA_ZONE)
         val verification = stateStore.reconcileTimingState(nowChina)
-        val persistedTarget = stateStore.waitingTargetMidnight()?.let {
+        val targetChina = stateStore.waitingTargetMidnight()?.let {
             MibuLane.defaultLanes().first().targetTimeForMidnight(it)
-        }
-        val targetChina = when {
-            persistedTarget != null -> persistedTarget
-            verification.isAuthoritativeResult() -> null
-            else -> MibuLane.defaultLanes().first().targetTime(nowChina)
-        }
+        } ?: if (verification.isAuthoritativeResult()) null else MibuLane.defaultLanes().first().targetTime(nowChina)
         val localTarget = targetChina?.withZoneSameInstant(ZoneId.systemDefault())
-        val duration = targetChina?.let { Duration.between(nowChina, it) }
-            ?.let { if (it.isNegative) Duration.ZERO else it }
-            ?: Duration.ZERO
-        val totalSeconds = duration.seconds.coerceAtLeast(0L)
+        val remaining = targetChina?.let { Duration.between(nowChina, it) }?.let { if (it.isNegative) Duration.ZERO else it } ?: Duration.ZERO
+        val totalSeconds = remaining.seconds.coerceAtLeast(0L)
         val hours = totalSeconds / 3600L
         val minutes = (totalSeconds % 3600L) / 60L
         val seconds = totalSeconds % 60L
         val fmtDate = DateTimeFormatter.ofPattern("MMM dd, yyyy")
         val fmtTime = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
+
         val tokenStatus = when {
-            tokenStore.hasRequiredCaptures() -> "Ready"
+            tokenStore.hasRequiredCaptures() -> "Eligible to send request"
             tokenStore.hasSession() -> "Partial setup"
-            else -> "Waiting for tokens"
+            else -> "Waiting for session/token"
         }
-        val reached = stateStore.lanes().count { it.status == LaneStatus.WINDOW_REACHED }
-        val engineStatus = when (verification) {
-            VerificationState.TIMING_WINDOW_REACHED,
-            VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Timing window reached"
-            VerificationState.WAITING_ARMED -> "Armed • $reached/4 windows reached"
-            else -> if (verification.isAuthoritativeResult()) "Result recorded" else "Not armed"
-        }
-
-        statusCard.text = formatBlock("Account Status", tokenStatus, "User logs in themselves. MIBU stores only explicit token/session imports.")
-        sessionCard.text = formatBlock("Token Setup", tokenStore.getSessionPreview(), "Firefox fills 1/3. Chrome fills 2/4.")
-        laneCard.text = formatBlock("Waiting Engine", engineStatus, "Details stay in Logs. The main screen remains one clean countdown.")
-        verifyCard.text = formatBlock("Verification", friendlyVerification(verification), verificationGuidance(verification))
-        communityCard.text = "Community Device Check\nFor China-routed devices, confirm device/account status in Xiaomi Community if needed.\n[${stateStore.communityState().name}]"
-
-        if (targetChina != null && localTarget != null) {
-            beijingCard.text = "Target Time (Beijing)\n${targetChina.format(fmtDate)}\n${targetChina.format(fmtTime)}\nGMT+8"
-            localCard.text = "Target Time (Local)\n${localTarget.format(fmtDate)}\n${localTarget.format(fmtTime)}\n${localTarget.zone.id}"
-        } else {
-            beijingCard.text = "Target Time (Beijing)\n$NO_ACTIVE_TARGET\nResult recorded"
-            localCard.text = "Target Time (Local)\n$NO_ACTIVE_TARGET\n${ZoneId.systemDefault().id}"
-        }
-
+        accountCard.text = rowText("✓", "Account Status", tokenStatus)
+        sessionCard.text = rowText("▣", "Session Imported", if (tokenStore.hasRequiredCaptures()) "From MIBU PC Tool" else "Import from PC helper first")
+        beijingCard.text = if (targetChina == null) "Target Time (Beijing)\nNo active target" else "Target Time (Beijing)\n${targetChina.format(fmtTime)}\n${targetChina.format(fmtDate)}"
+        localCard.text = if (localTarget == null) "Target Time (Local)\nNo active target" else "Target Time (Local)\n${localTarget.format(fmtTime)}\n${localTarget.format(fmtDate)}"
         countdownCard.text = when {
-            verification.isTimingComplete() ->
-                formatBlock("Timing Stage", "COMPLETE", "Continue with PC verification")
-            verification.isAuthoritativeResult() ->
-                formatBlock("Verification Result", friendlyVerification(verification), "No new countdown is active")
-            else ->
-                formatBlock("Time Remaining", "%02d : %02d : %02d".format(hours, minutes, seconds), "HOURS   MINUTES   SECONDS")
+            verification.isTimingComplete() -> "Time Remaining\nCOMPLETE"
+            verification.isAuthoritativeResult() -> "Verification\n${friendlyVerification(verification)}"
+            else -> "Time Remaining\n%02d : %02d : %02d\nHOURS   MINUTES   SECONDS".format(hours, minutes, seconds)
+        }
+        serviceCard.text = rowText("◇", "Foreground Service", if (verification == VerificationState.WAITING_ARMED) "Service is running" else friendlyVerification(verification))
+        startWaitingButton.text = when {
+            verification == VerificationState.WAITING_ARMED -> "▷  $RESUME_WAITING_LABEL"
+            verification.blocksNewWaitingCycle() -> "Result Recorded"
+            else -> "▷  Start Waiting"
+        }
+        startWaitingButton.contentDescription = startWaitingButton.text
+        startWaitingButton.isEnabled = !verification.blocksNewWaitingCycle()
+        serviceCard.contentDescription = verificationGuidance(verification)
+    }
+
+    private fun neonRow(icon: String, title: String, body: String, stroke: Int): TextView =
+        TextView(this).apply {
+            text = rowText(icon, title, body)
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+            background = rounded(Color.rgb(8, 14, 28), dp(18), stroke)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, dp(10), 0, 0)
+            }
         }
 
-        when {
-            verification == VerificationState.WAITING_ARMED -> {
-                startWaitingButton.isEnabled = true
-                startWaitingButton.text = "Resume Waiting"
-            }
-            verification.blocksNewWaitingCycle() -> {
-                startWaitingButton.isEnabled = false
-                startWaitingButton.text = if (verification == VerificationState.UNLOCKED) "Device Unlocked" else "Result Recorded"
-            }
-            else -> {
-                startWaitingButton.isEnabled = true
-                startWaitingButton.text = "Start Waiting"
+    private fun rowText(icon: String, title: String, body: String) = "$icon   $title\n     $body"
+
+    private fun miniPanel(title: String, value: String): TextView =
+        TextView(this).apply {
+            text = "$title\n$value"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = rounded(Color.rgb(11, 14, 30), dp(16), purple())
+        }
+
+    private fun countdownPanel(value: String): TextView =
+        TextView(this).apply {
+            text = "Time Remaining\n$value"
+            textSize = 25f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setPadding(dp(12), dp(18), dp(12), dp(18))
+            background = rounded(Color.rgb(8, 10, 26), dp(20), purple())
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, dp(12), 0, dp(2))
             }
         }
-    }
+
+    private fun neonButton(text: String, primary: Boolean, onClick: () -> Unit): Button =
+        Button(this).apply {
+            this.text = text
+            textSize = if (primary) 20f else 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            background = rounded(if (primary) Color.rgb(22, 18, 44) else Color.rgb(9, 13, 26), dp(18), if (primary) orange() else purple())
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (primary) dp(86) else dp(58)).apply {
+                setMargins(0, dp(12), 0, 0)
+            }
+        }
+
+    private fun label(textValue: String, size: Float, color: Int, bold: Boolean, gravityValue: Int): TextView =
+        TextView(this).apply {
+            text = textValue
+            textSize = size
+            setTextColor(color)
+            gravity = gravityValue
+            if (bold) typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        }
+
+    private fun fullWidth(height: Int, bottom: Int): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, height).apply { setMargins(0, 0, 0, bottom) }
+
+    private fun rounded(color: Int, radius: Int, stroke: Int): GradientDrawable =
+        GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); setStroke(dp(1), stroke) }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun muted() = Color.rgb(160, 168, 190)
+    private fun green() = Color.rgb(61, 255, 135)
+    private fun cyan() = Color.rgb(36, 178, 255)
+    private fun purple() = Color.rgb(168, 80, 255)
+    private fun orange() = Color.rgb(255, 122, 43)
 
     private fun friendlyVerification(state: VerificationState): String = when (state) {
         VerificationState.NOT_STARTED -> "Not started"
         VerificationState.WAITING_ARMED -> "Waiting armed"
         VerificationState.TIMING_WINDOW_REACHED -> "Timing window reached"
-        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Ready for Mi Unlock verification"
+        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Ready for Mi Unlock"
         VerificationState.WAIT_TIME_SHOWN -> "Official wait time shown"
         VerificationState.ACCOUNT_DEVICE_NOT_ADDED -> "Account/device not added"
         VerificationState.COMMUNITY_AUTH_REQUIRED -> "Community authorisation required"
         VerificationState.UNLOCKED -> "Unlocked"
-        VerificationState.UNKNOWN -> "Unknown — review Logs"
+        VerificationState.UNKNOWN -> "Unknown - review Logs"
     }
 
     private fun verificationGuidance(state: VerificationState): String = when (state) {
@@ -308,18 +258,11 @@ class MainActivity : Activity() {
         VerificationState.ACCOUNT_DEVICE_NOT_ADDED -> "Resolve the phone-side account/device association before retrying."
         VerificationState.COMMUNITY_AUTH_REQUIRED -> "Complete the Xiaomi Community authorisation route first."
         VerificationState.UNLOCKED -> "The authoritative result is already complete."
-        else -> "MIBU confirms timing state only. PC Helper and the official Mi Unlock Tool provide device verification."
+        else -> "No active target"
     }
-
-    private fun formatBlock(title: String, main: String, small: String) = if (small.isBlank()) "$title\n$main" else "$title\n$main\n$small"
-    private fun rounded(color: Int, radius: Int, stroke: Int) = GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); setStroke(dp(1), stroke) }
-    private fun rootParams(view: View, bottom: Int = 0) {
-        view.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 0, 0, bottom) }
-    }
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val NOTIFICATION_PERMISSION_REQUEST = 49
-        private const val NO_ACTIVE_TARGET = "No active target"
+        private const val RESUME_WAITING_LABEL = "Resume Waiting"
     }
 }
