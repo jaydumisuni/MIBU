@@ -14,6 +14,7 @@ class LogsActivity : Activity() {
         stateStore.reconcileTimingState()
         val target = stateStore.waitingTargetMidnight()
         mibuPage("MIBU", "Logs / THETECHGUY TOOL") {
+            addView(mibuExpectedImage(R.drawable.android_activity_logs))
             addView(mibuCard("Token setup", tokenStore.getSessionPreview()))
             addView(mibuCard("Four internal slots", tokenStore.getSlotPreview()))
             addView(mibuCard("Persisted target", target?.toString() ?: "No waiting target armed"))

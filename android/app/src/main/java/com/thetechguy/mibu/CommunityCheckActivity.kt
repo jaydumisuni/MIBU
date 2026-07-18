@@ -13,6 +13,7 @@ class CommunityCheckActivity : Activity() {
 
     private fun render() {
         mibuPage("MIBU", "Community Device Check / THETECHGUY TOOL") {
+            addView(mibuExpectedImage(R.drawable.android_settings))
             addView(mibuCard("Why this exists", "For China-routed or Community-routed Xiaomi devices, manually checking whether the same Xiaomi account/device appears in Xiaomi Community may be useful evidence. This is not treated as a guaranteed blocker."))
             addView(mibuCard("Current state", stateStore.communityState().name))
             addView(mibuCard("Manual check", "Open Xiaomi Community with the same Xiaomi account, then check My Devices / device area. Come back here and save what you saw."))

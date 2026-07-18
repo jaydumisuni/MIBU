@@ -67,6 +67,7 @@ class TokenImportActivity : Activity() {
 
     private fun showImported(title: String, message: String) {
         mibuPage("MIBU", "Session Imported / THETECHGUY TOOL") {
+            addView(mibuExpectedImage(R.drawable.android_account_session))
             addView(mibuCard(title, message))
             addView(mibuCard("Current slots", tokenStore.getSlotPreview()))
             addView(mibuButton("Open Dashboard", true) {
@@ -82,6 +83,7 @@ class TokenImportActivity : Activity() {
         lateinit var serviceInput: EditText
         lateinit var popInput: EditText
         mibuPage("MIBU", "Import Tokens / THETECHGUY TOOL") {
+            addView(mibuExpectedImage(R.drawable.android_welcome_import))
             addView(mibuCard("Two captures, four slots", "Paste the Firefox new_bbs_serviceToken once and the Chrome popRunToken once. MIBU fills slots 1/3 and 2/4 automatically. Both captures expire locally after 30 minutes. MIBU does not need your Xiaomi password."))
             serviceInput = tokenField("Firefox service token → slots 1 and 3")
             popInput = tokenField("Chrome pop token → slots 2 and 4")

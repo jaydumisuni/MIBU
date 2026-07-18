@@ -4,6 +4,7 @@ import base64
 import os
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,7 @@ PROOF_NONCE_EXTRA = "mibu_proof_nonce"
 EXPECTED_APP_VERSION = "0.2.0-dev"
 MIN_TOKEN_LENGTH = 8
 MAX_TOKEN_LENGTH = 8_192
+_SELECTED_SERIAL: str | None = None
 
 
 @dataclass
@@ -68,12 +70,23 @@ def fastboot_path() -> str | None:
     return shutil.which("fastboot")
 
 
+def _targets_device(parts: list[str]) -> bool:
+    if not parts:
+        return False
+    if "-s" in parts:
+        return False
+    return parts[0] not in {"devices", "version", "start-server", "kill-server", "reconnect"}
+
+
 def run_tool(parts: list[str], timeout: int = 45) -> Result:
     tool = adb_path()
     if not tool:
         return Result(False, "ADB not found. Install platform-tools, set MIBU_ADB, or bundle platform-tools beside MIBU PC Helper.")
+    command_parts = parts
+    if _SELECTED_SERIAL and _targets_device(parts):
+        command_parts = ["-s", _SELECTED_SERIAL] + parts
     try:
-        proc = subprocess.run([tool] + parts, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        proc = subprocess.run([tool] + command_parts, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
         return Result(proc.returncode == 0, proc.stdout.strip())
     except subprocess.TimeoutExpired as exc:
         return Result(False, f"ADB command timed out: {exc}")
@@ -133,16 +146,21 @@ def parse_package_version(dumpsys_output: str) -> str | None:
 
 
 def check_device_ready() -> Result:
+    global _SELECTED_SERIAL
     devices_result = list_devices()
     if not devices_result.ok:
         return devices_result
     devices = parse_devices(devices_result.message)
     if not devices:
         return Result(False, "No device detected. Connect USB cable, enable USB debugging, then accept the RSA prompt.")
-    if len(devices) > 1:
+    online = [(serial, state) for serial, state in devices if state == "device"]
+    if len(online) == 1:
+        serial, state = online[0]
+    elif len(devices) > 1:
         summary = ", ".join(f"{serial}:{state}" for serial, state in devices)
-        return Result(False, f"Multiple ADB devices are connected ({summary}). Leave only the phone being serviced connected, then retry.")
-    serial, state = devices[0]
+        return Result(False, f"Multiple ADB devices are connected ({summary}). Leave only one authorized online phone connected, then retry.")
+    else:
+        serial, state = devices[0]
     if state == "unauthorized":
         return Result(False, f"Device {serial} is unauthorized. On the phone, tick ‘Always allow from this computer’ and tap OK.")
     if state == "offline":
@@ -153,7 +171,27 @@ def check_device_ready() -> Result:
     adb_value = adb_state.message.strip() if adb_state.ok else "unknown"
     if adb_value != "1":
         return Result(False, f"Device {serial} is visible but Android reports adb_enabled={adb_value}. Re-enable USB debugging and retry.")
+    _SELECTED_SERIAL = serial
     return Result(True, f"Device online: {serial}\nADB state: {adb_value}")
+
+
+def run_adb_user_command(command: str) -> Result:
+    raw = command.strip()
+    if not raw:
+        return Result(False, "Type an ADB command first, for example: shell getprop ro.product.model")
+    try:
+        parts = shlex.split(raw, posix=False)
+    except ValueError as exc:
+        return Result(False, f"Command parse failed: {exc}")
+    if parts and Path(parts[0]).name.lower() in {"adb", "adb.exe"}:
+        parts = parts[1:]
+    if not parts:
+        return Result(False, "No ADB arguments were provided.")
+    if _targets_device(parts):
+        ready = check_device_ready()
+        if not ready.ok:
+            return ready
+    return run_tool(parts, timeout=120)
 
 
 def package_exists() -> Result:

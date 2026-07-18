@@ -7,6 +7,7 @@ class InstructionsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mibuPage("MIBU", "Instructions / THETECHGUY TOOL") {
+            addView(mibuExpectedImage(R.drawable.android_instructions))
             addView(mibuCard("Small disclaimer", "Bootloader unlocking can erase data, affect warranty/security features, and may stop services such as Find Device from working normally. Continue only if you understand the risk, own or are authorised to service the device, and have backed up important data."))
             addView(mibuCard("Phone preparation", "Use official HyperOS, insert a working SIM, add the Xiaomi account and Google account, enable Find Device / Find Hub, enable OEM unlocking and USB debugging, then accept the PC RSA prompt."))
             addView(mibuCard("Network", "Before the timed stage, turn Wi-Fi/WLAN off and use the working SIM's carrier/mobile data."))

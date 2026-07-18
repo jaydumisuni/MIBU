@@ -10,8 +10,8 @@
     <application
         android:theme="@style/AppTheme"
         android:label="MIBU"
-        android:icon="@drawable/ic_mibu"
-        android:roundIcon="@drawable/ic_mibu"
+        android:icon="@drawable/mibu_logo"
+        android:roundIcon="@drawable/mibu_logo"
         android:allowBackup="false"
         android:usesCleartextTraffic="false">
 

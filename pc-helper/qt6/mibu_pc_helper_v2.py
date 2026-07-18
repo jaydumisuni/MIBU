@@ -39,6 +39,7 @@ from mibu_actions import (
     push_session_to_phone,
     push_two_tokens_to_phone,
     reboot_to_fastboot,
+    run_adb_user_command,
     start_phone_waiting,
 )
 from ui_geometry import SCREENS, ScreenGeometry
@@ -213,6 +214,13 @@ class Window(QMainWindow):
         self.output.setObjectName("floatingOutput")
         self.output.setReadOnly(True)
         self.output.setMaximumBlockCount(250)
+        self.command_input = QLineEdit(root)
+        self.command_input.setObjectName("commandInput")
+        self.command_input.setPlaceholderText("ADB command, e.g. shell getprop ro.product.model")
+        self.command_input.returnPressed.connect(self.run_custom_adb_command)
+        self.command_button = QPushButton("Run", root)
+        self.command_button.setObjectName("commandButton")
+        self.command_button.clicked.connect(self.run_custom_adb_command)
         self.status = QLabel(root)
         self.status.setObjectName("floatingStatus")
         self.time_label = QLabel(root)
@@ -241,7 +249,9 @@ class Window(QMainWindow):
             button.setGeometry(int(root.width() * x), int(root.height() * y), int(root.width() * w), int(root.height() * h))
         self.status.setGeometry(int(root.width() * 0.083), int(root.height() * 0.382), int(root.width() * 0.834), int(root.height() * 0.055))
         self.time_label.setGeometry(int(root.width() * 0.083), int(root.height() * 0.705), int(root.width() * 0.834), int(root.height() * 0.045))
-        self.output.setGeometry(int(root.width() * 0.083), int(root.height() * 0.535), int(root.width() * 0.834), int(root.height() * 0.145))
+        self.output.setGeometry(int(root.width() * 0.083), int(root.height() * 0.535), int(root.width() * 0.834), int(root.height() * 0.092))
+        self.command_input.setGeometry(int(root.width() * 0.083), int(root.height() * 0.635), int(root.width() * 0.74), int(root.height() * 0.045))
+        self.command_button.setGeometry(int(root.width() * 0.835), int(root.height() * 0.635), int(root.width() * 0.082), int(root.height() * 0.045))
 
     def _theme(self) -> None:
         self.setStyleSheet("""
@@ -250,6 +260,9 @@ class Window(QMainWindow):
         #hotspot:hover { background:rgba(83,168,255,28); border:1px solid #53a8ff; border-radius:16px; color:rgba(0,0,0,0); }
         #hotspotActive { background:rgba(255,122,43,24); border:2px solid #ff7a2b; border-radius:16px; color:rgba(0,0,0,0); }
         #floatingOutput { background:rgba(6,11,21,210); border:1px solid #243b67; border-radius:12px; color:#d9e6fb; font-family:Consolas; font-size:11px; padding:8px; }
+        #commandInput { background:rgba(6,11,21,225); border:1px solid #334a75; border-radius:10px; color:#f5f7fb; padding:6px 10px; font-size:11px; }
+        #commandButton { background:rgba(18,28,48,230); border:1px solid #53a8ff; border-radius:10px; color:#ffffff; font-weight:700; }
+        #commandButton:hover { border:1px solid #ff7a2b; }
         #floatingStatus, #floatingTime, #dialogStatus { background:rgba(6,11,21,215); border:1px solid #243b67; border-radius:9px; color:#d9e6fb; padding:6px; font-size:11px; }
         """)
 
@@ -267,6 +280,12 @@ class Window(QMainWindow):
         self._log(format_checks(checks))
         if not all(item.ok for item in checks):
             self._log("Dependencies need attention before device actions.")
+
+    def run_custom_adb_command(self) -> None:
+        command = self.command_input.text().strip()
+        result = run_adb_user_command(command)
+        self._log(f"$ adb {command}\n{result.message}")
+        self._play(result.ok)
 
     def _update_time(self) -> None:
         target = next_target()

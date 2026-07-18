@@ -17,6 +17,7 @@ class VerificationResultActivity : Activity() {
 
     private fun render() {
         mibuPage("MIBU", "Official Result / THETECHGUY TOOL") {
+            addView(mibuExpectedImage(R.drawable.android_guide))
             addView(mibuCard(
                 "Record only what the official tool showed",
                 "Use these buttons only after Mi Unlock or Xiaomi's official account/device route returned the matching result. MIBU does not infer approval from timing, a toast, or fastboot presence."

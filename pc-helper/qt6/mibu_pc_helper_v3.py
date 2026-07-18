@@ -108,7 +108,7 @@ class Window(V2Window):
         # base module, so replace that one class with the reviewed v3 geometry.
         base_ui.WorkflowDialog = WorkflowDialog
         super().__init__()
-        self.setWindowIcon(QIcon(required_asset("mibu_app_icon.png")))
+        self.setWindowIcon(QIcon(find_asset("logo 1_transparent.png") or required_asset("mibu_app_icon.png")))
         self._assistant_phase = 0
         self._assistant_thread: QThread | None = None
         self._assistant_worker: AssistantWorker | None = None
@@ -303,7 +303,7 @@ class Window(V2Window):
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("MIBU PC Helper")
-    app.setWindowIcon(QIcon(required_asset("mibu_app_icon.png")))
+    app.setWindowIcon(QIcon(find_asset("logo 1_transparent.png") or required_asset("mibu_app_icon.png")))
     app.setFont(QFont("Segoe UI", 9))
     try:
         window = Window()

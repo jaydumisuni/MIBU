@@ -75,7 +75,7 @@ class MainActivity : Activity() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(22), dp(28), dp(22), dp(24))
+            setPadding(dp(18), dp(52), dp(18), dp(22))
             setBackgroundColor(Color.rgb(5, 9, 19))
         }
         val scroll = ScrollView(this)
@@ -128,16 +128,21 @@ class MainActivity : Activity() {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
         setPadding(0, dp(8), 0, dp(12))
+        addView(ImageView(this@MainActivity).apply {
+            setImageResource(R.drawable.mibu_logo)
+            adjustViewBounds = true
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)))
         addView(TextView(this@MainActivity).apply {
             text = "MIBU"
-            textSize = 40f
+            textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         })
         addView(TextView(this@MainActivity).apply {
             text = "THETECHGUY TOOL"
-            textSize = 13f
+            textSize = 11f
             setTextColor(Color.rgb(145, 160, 190))
             gravity = Gravity.CENTER
         })
@@ -147,17 +152,17 @@ class MainActivity : Activity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(10), dp(10), dp(10), dp(16))
+            setPadding(dp(4), dp(4), dp(4), dp(10))
             background = rounded(Color.rgb(8, 15, 30), dp(24), Color.rgb(32, 55, 90))
         }
         card.addView(ImageView(this).apply {
-            setImageResource(R.drawable.mibu_hero_art)
+            setImageResource(R.drawable.android_dashboard_waiting)
             adjustViewBounds = true
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220)))
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(250)))
         card.addView(TextView(this).apply {
-            text = "Mi Bootloader Unlock Helper\nOne live countdown. Four hidden timing windows. PC verification."
-            textSize = 18f
+            text = "Phone-side helper for Xiaomi bootloader unlock timing."
+            textSize = 13f
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
@@ -169,7 +174,7 @@ class MainActivity : Activity() {
 
     private fun statusTile(title: String, main: String, small: String) = TextView(this).apply {
         text = formatBlock(title, main, small)
-        textSize = 15f
+        textSize = 12f
         setTextColor(Color.WHITE)
         setPadding(dp(18), dp(15), dp(18), dp(15))
         background = rounded(Color.rgb(13, 20, 35), dp(16), Color.rgb(30, 40, 65))
@@ -178,7 +183,7 @@ class MainActivity : Activity() {
 
     private fun miniTile(title: String, value: String) = TextView(this).apply {
         text = "$title\n$value"
-        textSize = 14f
+        textSize = 12f
         setTextColor(Color.WHITE)
         setPadding(dp(14), dp(14), dp(14), dp(14))
         background = rounded(Color.rgb(13, 20, 35), dp(16), Color.rgb(30, 40, 65))
@@ -186,7 +191,7 @@ class MainActivity : Activity() {
 
     private fun rowTile(title: String, desc: String, badge: String) = TextView(this).apply {
         text = "$title\n$desc\n[$badge]"
-        textSize = 14f
+        textSize = 12f
         setTextColor(Color.WHITE)
         setPadding(dp(18), dp(14), dp(18), dp(14))
         background = rounded(Color.rgb(13, 20, 35), dp(16), Color.rgb(30, 40, 65))
@@ -195,7 +200,7 @@ class MainActivity : Activity() {
 
     private fun primaryButton(text: String, onClick: () -> Unit) = Button(this).apply {
         this.text = text
-        textSize = 16f
+        textSize = 13f
         setTextColor(Color.WHITE)
         background = rounded(Color.rgb(30, 88, 255), dp(14), Color.rgb(75, 114, 255))
         setOnClickListener { onClick() }
@@ -204,7 +209,7 @@ class MainActivity : Activity() {
 
     private fun secondaryButton(text: String, onClick: () -> Unit) = Button(this).apply {
         this.text = text
-        textSize = 15f
+        textSize = 13f
         setTextColor(Color.WHITE)
         background = rounded(Color.rgb(14, 23, 40), dp(14), Color.rgb(40, 66, 106))
         setOnClickListener { onClick() }
