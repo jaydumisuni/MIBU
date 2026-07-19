@@ -111,3 +111,4 @@ Connected-device and assistant correction - 2026-07-19
 - Android lint/unit tests/assembly pass; PC compilation, source reviews, and 33 behavior tests pass.
 - Final matching EXE SHA-256 for both runnable folders: `d2690e47869f8a0aa4d053a395a88d8ee5b238ec1e1244fdb14a158113957359`.
 - Final bundled APK SHA-256: `b7e156d60b15645656671af3a25f0e74467ca73b194c023bd8da7d26eb5a044d`.
+- Committed and pushed the packaged-assistant/device communication correction as `e1fda17` (`Fix packaged assistant and device communication`) to `origin/main`.
