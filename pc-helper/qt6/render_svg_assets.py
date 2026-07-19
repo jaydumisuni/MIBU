@@ -31,12 +31,24 @@ def render(svg_path: Path, png_path: Path, width: int, height: int, background: 
 
 
 def render_icon(asset_dir: Path) -> None:
+    approved_logo = asset_dir.parent / "logo 1_transparent.png"
     svg_path = asset_dir / "mibu_app_icon.svg"
     png_path = asset_dir / "mibu_app_icon.png"
     ico_path = asset_dir / "mibu_app_icon.ico"
-    if not svg_path.is_file():
-        raise FileNotFoundError(f"Required app icon SVG missing: {svg_path}")
-    render(svg_path, png_path, 512, 512, QColor(0, 0, 0, 0))
+    if approved_logo.is_file():
+        with Image.open(approved_logo) as logo:
+            logo = logo.convert("RGBA")
+            logo.thumbnail((512, 512), Image.Resampling.LANCZOS)
+            canvas = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+            x = (512 - logo.width) // 2
+            y = (512 - logo.height) // 2
+            canvas.alpha_composite(logo, (x, y))
+            canvas.save(png_path, "PNG")
+        print(f"Rendered approved logo -> {png_path.name} ({png_path.stat().st_size} bytes)")
+    else:
+        if not svg_path.is_file():
+            raise FileNotFoundError(f"Required app icon SVG missing: {svg_path}")
+        render(svg_path, png_path, 512, 512, QColor(0, 0, 0, 0))
     with Image.open(png_path) as source:
         source = source.convert("RGBA")
         source.save(
