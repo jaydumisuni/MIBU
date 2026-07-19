@@ -88,3 +88,26 @@ Follow-up work - 2026-07-19
 - Final phone verification remains pending because `adb devices -l` is empty. The code does not fabricate token captures or mark the timer armed without correlated proof from a connected phone.
 - Confirmed `origin/main` had not advanced beyond local base commit `e1f9c2e` before publishing.
 - Committed the complete live-workflow rebuild as `d365f98` (`Rebuild MIBU as live guided workflow`) and pushed it successfully to `https://github.com/jaydumisuni/MIBU` on `main`.
+
+Connected-device and assistant correction - 2026-07-19
+
+- Restarted the bundled ADB server and confirmed the connected Redmi Note 12R: serial `73e68d0e226c`, model `23076RA4BC`, device `sky`.
+- Extracted the embedded icon from both EXEs and proved they were byte-identical and both contained the approved neon MIBU logo. The blue icon in Explorer was stale Windows icon cache data.
+- Added an explicit Explorer icon-cache clear/refresh to packaging and visually captured the current release folder showing the approved neon MIBU EXE icon.
+- Found why the raw `pc-helper/qt6/dist` EXE did not open correctly: PyInstaller placed only the EXE and `_internal` there while assets, APK, and platform-tools were added only to the release copy.
+- Changed packaging so both `qt6/dist/MIBU-PC-Helper` and `release/MIBU-PC-Helper` receive `_internal`, `dist/MIBU.apk`, platform-tools, resources, and the checksum manifest.
+- Launched both completed EXE folders independently; both remained responsive with the correct MIBU title and no missing runtime files.
+- Added `CREATE_NO_WINDOW` to every ADB and fastboot subprocess so helper commands do not flash terminals.
+- Replaced ambiguous assistant keyword matching with tested intents. Added live handling for greetings, phone status, installed-app inventory, MIBU version, bundled install, and opening MIBU.
+- Added guaranteed chat replies with GUI exception handling and asynchronous ADB work so the app remains responsive.
+- Ran the packaged release through Windows UI Automation against the real phone and proved these exact chat requests:
+  - `hi` returned Xiaomi model, Android 15, HyperOS build, locked bootloader, installed MIBU version, and the APK's correlated status.
+  - `what apps are installed?` returned 56 user package names and included `com.thetechguy.mibu`.
+  - `is MIBU installed?` returned version `0.2.0-dev`.
+  - `install this` reinstalled, version-verified, and opened the bundled APK.
+  - `open MIBU` opened the app on the connected phone.
+- Corrected stale Android truth: the phone's `ro.boot.flash.locked=1` proved the bootloader is locked, so a persisted false `UNLOCKED` state is now reconciled to `UNKNOWN`.
+- Rebuilt, reinstalled, and queried the APK. Correlated protocol-2 status now reports `captures=NOT_READY`, `verification=UNKNOWN`, and all four lanes pending, matching current device/app state.
+- Android lint/unit tests/assembly pass; PC compilation, source reviews, and 33 behavior tests pass.
+- Final matching EXE SHA-256 for both runnable folders: `d2690e47869f8a0aa4d053a395a88d8ee5b238ec1e1244fdb14a158113957359`.
+- Final bundled APK SHA-256: `b7e156d60b15645656671af3a25f0e74467ca73b194c023bd8da7d26eb5a044d`.

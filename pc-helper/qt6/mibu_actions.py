@@ -87,7 +87,14 @@ def run_tool(parts: list[str], timeout: int = 45) -> Result:
     if _SELECTED_SERIAL and _targets_device(parts):
         command_parts = ["-s", _SELECTED_SERIAL] + parts
     try:
-        proc = subprocess.run([tool] + command_parts, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        proc = subprocess.run(
+            [tool] + command_parts,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
         return Result(proc.returncode == 0, proc.stdout.strip())
     except subprocess.TimeoutExpired as exc:
         return Result(False, f"ADB command timed out: {exc}")
@@ -100,7 +107,14 @@ def run_fastboot(parts: list[str], timeout: int = 45) -> Result:
     if not tool:
         return Result(False, "fastboot not found. Install Android platform-tools, set MIBU_FASTBOOT, or bundle platform-tools beside MIBU PC Helper.")
     try:
-        proc = subprocess.run([tool] + parts, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        proc = subprocess.run(
+            [tool] + parts,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
         return Result(proc.returncode == 0, proc.stdout.strip())
     except subprocess.TimeoutExpired as exc:
         return Result(False, f"fastboot command timed out: {exc}")
@@ -110,6 +124,18 @@ def run_fastboot(parts: list[str], timeout: int = 45) -> Result:
 
 def list_devices() -> Result:
     return run_tool(["devices"])
+
+
+def parse_installed_packages(output: str) -> list[str]:
+    packages: set[str] = set()
+    for line in output.splitlines():
+        clean = line.strip()
+        if not clean.startswith("package:"):
+            continue
+        package = clean.removeprefix("package:").strip()
+        if package and re.fullmatch(r"[A-Za-z0-9_.]+", package):
+            packages.add(package)
+    return sorted(packages, key=str.casefold)
 
 
 def parse_devices(devices_output: str) -> list[tuple[str, str]]:
@@ -198,6 +224,44 @@ def check_device_ready() -> Result:
         return Result(False, f"Device {serial} is visible but Android reports adb_enabled={adb_value}. Re-enable USB debugging and retry.")
     _SELECTED_SERIAL = serial
     return Result(True, f"Device online: {serial}\nADB state: {adb_value}")
+
+
+def phone_identity() -> Result:
+    ready = check_device_ready()
+    if not ready.ok:
+        return ready
+    properties = {
+        "Manufacturer": "ro.product.manufacturer",
+        "Model": "ro.product.model",
+        "Android": "ro.build.version.release",
+        "HyperOS build": "ro.build.version.incremental",
+        "Bootloader": "ro.boot.flash.locked",
+    }
+    values: dict[str, str] = {}
+    for label, prop in properties.items():
+        result = run_tool(["shell", "getprop", prop], timeout=10)
+        values[label] = result.message.strip() if result.ok and result.message.strip() else "unknown"
+    values["Bootloader"] = {"1": "locked", "0": "unlocked"}.get(values["Bootloader"], values["Bootloader"])
+    installed = installed_package_version()
+    values["MIBU"] = f"installed ({installed.message})" if installed.ok else "not installed"
+    return Result(True, "\n".join(f"{label}: {value}" for label, value in values.items()))
+
+
+def list_installed_apps(user_only: bool = True) -> Result:
+    ready = check_device_ready()
+    if not ready.ok:
+        return ready
+    parts = ["shell", "pm", "list", "packages"]
+    if user_only:
+        parts.append("-3")
+    result = run_tool(parts, timeout=45)
+    if not result.ok:
+        return result
+    packages = parse_installed_packages(result.message)
+    if not packages:
+        return Result(False, "Android returned no installed package names.")
+    kind = "user apps" if user_only else "apps"
+    return Result(True, f"{len(packages)} {kind} found:\n" + "\n".join(packages))
 
 
 def run_adb_user_command(command: str) -> Result:

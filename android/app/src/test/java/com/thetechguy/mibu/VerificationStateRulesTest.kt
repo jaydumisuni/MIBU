@@ -1,6 +1,7 @@
 package com.thetechguy.mibu
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,5 +33,12 @@ class VerificationStateRulesTest {
         )
         assertTrue(states.none { it.isAuthoritativeResult() })
         assertFalse(VerificationState.WAITING_ARMED.blocksNewWaitingCycle())
+    }
+
+    @Test
+    fun bootloaderPropertyParserUsesDeviceTruth() {
+        assertTrue(MibuStateStore.parseBootloaderLocked("1") == true)
+        assertTrue(MibuStateStore.parseBootloaderLocked("unlocked") == false)
+        assertNull(MibuStateStore.parseBootloaderLocked(""))
     }
 }

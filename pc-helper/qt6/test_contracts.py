@@ -31,6 +31,10 @@ class DeviceParsingTests(unittest.TestCase):
         output = "List of devices attached\nerror: protocol fault\nABC123\tdevice product:x\n"
         self.assertEqual([("ABC123", "device")], mibu_actions.parse_devices(output))
 
+    def test_installed_package_parser_filters_noise_and_duplicates(self) -> None:
+        output = "package:com.example.two\nnoise\npackage:com.example.one\npackage:com.example.two\n"
+        self.assertEqual(["com.example.one", "com.example.two"], mibu_actions.parse_installed_packages(output))
+
     def test_fastboot_parser_requires_real_device_rows(self) -> None:
         output = "< waiting for any device >\nABC123\tfastboot\nFinished. Total time: 0.001s\n"
         self.assertEqual([("ABC123", "fastboot")], mibu_actions.parse_fastboot_devices(output))
@@ -206,6 +210,23 @@ class TimingTests(unittest.TestCase):
         now = datetime(2026, 7, 12, 23, 59, 59, tzinfo=zone)
         target = mibu_runtime.next_target(now)
         self.assertEqual((13, 23, 59, 58, 600000), (target.day, target.hour, target.minute, target.second, target.microsecond))
+
+
+class AssistantIntentTests(unittest.TestCase):
+    def test_greeting_routes_to_live_phone_summary(self) -> None:
+        self.assertEqual("greeting", mibu_runtime.classify_assistant_intent("hi"))
+
+    def test_installed_apps_does_not_route_to_installer(self) -> None:
+        self.assertEqual("app_list", mibu_runtime.classify_assistant_intent("what apps are installed?"))
+
+    def test_install_this_routes_to_bundled_installer(self) -> None:
+        self.assertEqual("install_mibu", mibu_runtime.classify_assistant_intent("install this"))
+
+    def test_mibu_installed_routes_to_version_check(self) -> None:
+        self.assertEqual("mibu_installed", mibu_runtime.classify_assistant_intent("is MIBU installed?"))
+
+    def test_open_mibu_routes_to_phone_launch(self) -> None:
+        self.assertEqual("open_mibu", mibu_runtime.classify_assistant_intent("open MIBU"))
 
 
 if __name__ == "__main__":

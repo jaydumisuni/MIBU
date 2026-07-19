@@ -224,6 +224,24 @@ if ((Get-Content $ChecksumPath).Count -ne $ChecksumTargets.Count) {
     throw "Release checksum manifest count does not match the protected release-file count."
 }
 
-Start-Process -FilePath "$env:SystemRoot\System32\ie4uinit.exe" -ArgumentList "-show" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
-Write-Host "Release EXE, APK, platform-tools, live UI, approved icon and SHA-256 manifest verified." -ForegroundColor Green
+# Keep PyInstaller's normal dist path runnable too. This prevents a correct-icon
+# executable there from failing because only the release copy received assets.
+foreach ($folder in @("dist", "platform-tools", "resources")) {
+    Copy-Item (Join-Path $BundleApp $folder) (Join-Path $BuiltHelper $folder) -Recurse -Force
+}
+Copy-Item $ChecksumPath (Join-Path $BuiltHelper "SHA256SUMS.txt") -Force
+Assert-NonEmptyFile (Join-Path $BuiltHelper "dist\MIBU.apk") "PyInstaller runtime APK"
+Assert-NonEmptyFile (Join-Path $BuiltHelper "resources\live_ui\mibu_logo.png") "PyInstaller runtime branding"
+
+$IconRefresh = "$env:SystemRoot\System32\ie4uinit.exe"
+foreach ($argument in @("-ClearIconCache", "-show")) {
+    Start-Process -FilePath $IconRefresh -ArgumentList $argument -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
+}
+try {
+    $shell = New-Object -ComObject Shell.Application
+    @($shell.Windows()) | ForEach-Object { $_.Refresh() }
+} catch {
+    Write-Verbose "Explorer icon refresh was unavailable: $($_.Exception.Message)"
+}
+Write-Host "Both runnable EXE folders, APK, platform-tools, live UI, approved icon and SHA-256 manifest verified." -ForegroundColor Green
 Write-Host "Release folder: $BundleDir" -ForegroundColor Green

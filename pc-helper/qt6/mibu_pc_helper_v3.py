@@ -41,11 +41,13 @@ from mibu_actions import (
     check_device_ready,
     install_package,
     installed_package_version,
+    list_installed_apps,
     launch_phone_app,
     launch_mi_unlock_status,
     launch_token_import,
     launch_unlock_methods,
     push_two_tokens_to_phone,
+    phone_identity,
     run_adb_user_command,
     start_phone_waiting,
 )
@@ -56,6 +58,7 @@ from mibu_runtime import (
     find_asset,
     next_target,
     browser_path,
+    classify_assistant_intent,
     open_or_install_browser,
 )
 from mibu_status import PhoneStatus, query_phone_status
@@ -484,8 +487,14 @@ class AssistantOverlay(QFrame):
             return
         self.chat_input.clear()
         self.chat_history.appendPlainText(f"\nYou: {message}")
-        response = self.owner.handle_assistant_message(message)
-        self.chat_history.appendPlainText(f"MIBU: {response}")
+        try:
+            response = self.owner.handle_assistant_message(message)
+        except Exception as exc:  # pragma: no cover - GUI safety boundary
+            response = f"I could not handle that request: {exc}"
+        self.append_reply(response or "I received the message but no action was selected.")
+
+    def append_reply(self, message: str) -> None:
+        self.chat_history.appendPlainText(f"MIBU: {message.strip()}")
         bar = self.chat_history.verticalScrollBar()
         bar.setValue(bar.maximum())
 
@@ -940,42 +949,94 @@ class Window(QMainWindow):
 
     def handle_assistant_message(self, message: str) -> str:
         clean = " ".join(message.lower().split())
-        if clean.startswith("adb "):
+        intent = classify_assistant_intent(message)
+        if intent == "adb_command":
             command = message.strip()[4:].strip()
             if not command:
                 return "Add a command after adb, for example: adb shell getprop ro.product.model"
             self.command_input.setText(command)
             QTimer.singleShot(0, self.run_custom_adb_command)
             return "Running that ADB command in the app output area. No terminal window will open."
-        if "status" in clean or "what is happening" in clean:
-            return self.status.text().replace("    ", "; ")
-        if "four token" in clean or "4 token" in clean or "lane" in clean:
+        if intent in {"greeting", "phone_summary"}:
+            self.run_assistant_task(self._assistant_phone_summary)
+            return "Hi. I am checking the connected phone and asking the installed MIBU app for its live state."
+        if intent == "app_list":
+            self.run_assistant_task(list_installed_apps)
+            return "Checking Android now for the apps installed by the user..."
+        if intent == "mibu_installed":
+            self.run_assistant_task(self._assistant_mibu_version)
+            return "Checking the installed MIBU package and version..."
+        if intent == "install_mibu":
+            self.run_assistant_task(self._assistant_install_and_open, play_result=True)
+            return "Installing the bundled MIBU APK, verifying its version, and opening it on the phone..."
+        if intent == "open_mibu":
+            self.run_assistant_task(launch_phone_app, play_result=True)
+            return "Opening MIBU on the connected phone..."
+        if intent == "token_lanes":
             return "Two distinct captures feed four lanes: Firefox is reused for lanes 1 and 3; Chrome is reused for lanes 2 and 4."
-        if "manual" in clean or "guide" in clean or clean == "help":
+        if intent == "manual":
             QTimer.singleShot(0, self.open_local_guide)
             return "Opening the offline illustrated MIBU manual."
-        if "start waiting" in clean or "phone guide" in clean or "timer" in clean:
+        if intent == "phone_guide":
             QTimer.singleShot(0, self.show_phone_guide)
             return "Opening the phone handoff. I will verify the service after Start Waiting."
-        if "couldn't add" in clean or "couldnt add" in clean or "unlock status" in clean or "bind" in clean:
+        if intent == "unlock_methods":
             self.run_background(launch_unlock_methods, lambda value: self._log(value.message if isinstance(value, Result) else str(value)))
             return "Opening Mi Unlock & Binding on the phone. Use Xiaomi's exact result to choose official or recovery steps."
-        if "compatibility" in clean or "hypersploit" in clean or "hyperos build" in clean:
+        if intent == "compatibility":
             self.run_background(check_binding_recovery_compatibility, lambda value: self._log(value.message if isinstance(value, Result) else str(value)))
             return "Checking the phone's model, HyperOS build, security patch and Settings version without changing the phone."
-        if "token" in clean or "login" in clean or "browser" in clean or "session" in clean:
+        if intent == "token_handoff":
             QTimer.singleShot(0, self.show_login_token)
             return "Opening the explicit browser-session handoff. Firefox feeds lanes 1/3 and Chrome feeds lanes 2/4."
-        if "install" in clean or "apk" in clean:
-            QTimer.singleShot(0, self.show_install_apk)
-            return "Opening the live APK installer and verifier."
-        if "device" in clean or "adb" in clean or "connect" in clean or "usb" in clean:
-            QTimer.singleShot(0, self.show_device_check)
-            return "Opening Device Check to verify the cable, ADB state, and RSA authorization."
-        if "one click" in clean or "automatic" in clean or clean in {"start", "go", "run"}:
+        if intent == "device_check":
+            self.run_assistant_task(check_device_ready)
+            return "Checking the cable, ADB state, and RSA authorization without opening a terminal..."
+        if intent == "one_click":
             QTimer.singleShot(0, self.run_one_click_assist)
             return "Starting One-Click Assist. I will pause only for phone or browser approval you must provide."
-        return "I can check the device, install MIBU, open the session handoff, start the phone guide, report status, open the manual, or run an explicit adb command."
+        return "I heard you. Try: hi, what apps are installed, is MIBU installed, install this, open MIBU, phone status, start one click, or adb shell getprop ro.product.model."
+
+    def run_assistant_task(self, function: Callable[[], object], *, play_result: bool = False) -> None:
+        def complete(value: object) -> None:
+            result = value if isinstance(value, Result) else Result(False, str(value))
+            self.assistant.append_reply(result.message)
+            self._log(f"Assistant: {result.message}")
+            if play_result:
+                self._play(result.ok)
+            QTimer.singleShot(50, self.refresh_live_state)
+
+        self.run_background(function, complete)
+
+    def _assistant_mibu_version(self) -> Result:
+        result = installed_package_version()
+        if result.ok:
+            return Result(True, f"MIBU is installed on the phone. Version: {result.message}")
+        return result
+
+    def _assistant_install_and_open(self) -> Result:
+        apk_path = self._assistant_apk_path()
+        if not apk_path or not Path(apk_path).is_file():
+            return Result(False, "The bundled MIBU.apk is missing from this release.")
+        installed = install_package(apk_path)
+        if not installed.ok:
+            return installed
+        opened = launch_phone_app()
+        if not opened.ok:
+            return Result(False, f"{installed.message}\nInstalled successfully, but MIBU did not open: {opened.message}")
+        return Result(True, f"{installed.message}\nMIBU opened on the phone.")
+
+    def _assistant_phone_summary(self) -> Result:
+        identity = phone_identity()
+        if not identity.ok:
+            return identity
+        status_result, status = query_phone_status()
+        if not status_result.ok or status is None:
+            return Result(False, f"{identity.message}\nMIBU did not return live status: {status_result.message}")
+        return Result(
+            True,
+            f"{identity.message}\nMIBU response: captures={status.captures}; verification={status.verification}; community={status.community}; lanes={status.lanes}",
+        )
 
     def run_one_click_assist(self) -> None:
         if self._assistant_thread is not None:

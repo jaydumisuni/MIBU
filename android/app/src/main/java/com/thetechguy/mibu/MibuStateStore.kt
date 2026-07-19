@@ -23,8 +23,13 @@ class MibuStateStore(context: Context) {
 
     fun verificationState(): VerificationState {
         val raw = prefs.getString(KEY_VERIFY, VerificationState.NOT_STARTED.name)
-        return runCatching { VerificationState.valueOf(raw ?: VerificationState.NOT_STARTED.name) }
+        val stored = runCatching { VerificationState.valueOf(raw ?: VerificationState.NOT_STARTED.name) }
             .getOrDefault(VerificationState.NOT_STARTED)
+        if (stored == VerificationState.UNLOCKED && readBootloaderLocked() == true) {
+            prefs.edit().putString(KEY_VERIFY, VerificationState.UNKNOWN.name).apply()
+            return VerificationState.UNKNOWN
+        }
+        return stored
     }
 
     fun armWaiting(targetMidnight: ZonedDateTime) {
@@ -118,5 +123,20 @@ class MibuStateStore(context: Context) {
         private const val KEY_VERIFY = "verification_state"
         private const val KEY_TARGET_MIDNIGHT_EPOCH_MS = "target_midnight_epoch_ms"
         private fun laneKey(number: Int): String = "lane_${number}_status"
+
+        fun parseBootloaderLocked(raw: String): Boolean? = when (raw.trim().lowercase()) {
+            "1", "locked" -> true
+            "0", "unlocked" -> false
+            else -> null
+        }
+
+        private fun readBootloaderLocked(): Boolean? = runCatching {
+            val process = ProcessBuilder("/system/bin/getprop", "ro.boot.flash.locked")
+                .redirectErrorStream(true)
+                .start()
+            val raw = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            parseBootloaderLocked(raw)
+        }.getOrNull()
     }
 }
