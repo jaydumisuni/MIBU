@@ -77,6 +77,9 @@ class MainActivity : Activity() {
 
         root.addView(heroImage())
         root.addView(title("MIBU PC Helper", "THETECHGUY TOOL"))
+        root.addView(neonButton("Settings / Mobile Data") {
+            startActivity(Intent(this, CommunityCheckActivity::class.java))
+        })
 
         val statusRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val account = liveCard("Account Status", green())

@@ -356,10 +356,11 @@ class Window(V2Window):
         self.assistant_button = QPushButton("One Click Assist", root)
         self.assistant_button.setObjectName("assistantButton")
         self.assistant_button.clicked.connect(self.run_one_click_assist)
-        self.assistant_art.hide()
-        self.assistant_bubble.hide()
-        self.assistant_button.hide()
+        self.assistant_art.show()
+        self.assistant_bubble.show()
+        self.assistant_button.show()
         self._theme()
+        self._position_assistant()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         self._position_assistant()

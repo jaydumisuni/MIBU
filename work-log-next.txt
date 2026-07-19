@@ -33,3 +33,15 @@ MIBU work log - 2026-07-19
 - The optional audio files were not found in this repo path, so the release build could not bundle them:
   - TTG_v4_clean_connected_success.wav
   - TTG_v4_clean_speaker_turn_on.wav
+
+Follow-up work - 2026-07-19
+
+- Confirmed the PC launch error came from a stale `release.locked_20260719_075635` copy, not the current release folder.
+- Verified the current PC helper opens from `pc-helper/release/MIBU-PC-Helper/MIBU-PC-Helper.exe`.
+- Made the PC assistant visible by default so it stays floating on the helper UI.
+- Added a visible Android `Settings / Mobile Data` entry on the main phone screen.
+- Rebuilt the Android Settings/Community page as a live native screen instead of a screenshot hotspot.
+- Added Android buttons to open Mobile Data settings, Network settings, App settings, and record community route state.
+- Rebuilt Android successfully after these changes.
+- Rebuilt the PC release successfully after these changes.
+- ADB stopped seeing the phone during the final install attempt, so the final Settings button tap could not be verified on-device in this pass.
