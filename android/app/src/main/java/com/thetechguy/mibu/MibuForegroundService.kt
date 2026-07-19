@@ -18,6 +18,7 @@ import java.time.ZonedDateTime
 class MibuForegroundService : Service() {
     private val tokenStore by lazy { TokenStore(this) }
     private val stateStore by lazy { MibuStateStore(this) }
+    private val logStore by lazy { LogStore(this) }
     private val handler = Handler(Looper.getMainLooper())
     private val callbacks = mutableListOf<Runnable>()
     private var wakeLock: PowerManager.WakeLock? = null
@@ -46,6 +47,7 @@ class MibuForegroundService : Service() {
                 reconciled.isTimingComplete() -> {
                     updateNotification("Timing window reached • continue with PC verification")
                     Log.i(LOG_TAG, "WAITING_SERVICE_RECOVERED_COMPLETE state=${reconciled.name} reached=$reachedCount nonce=$proofNonce")
+                    logStore.add("Timing window already complete")
                     handler.postDelayed({ stopSelf() }, 15_000L)
                     START_NOT_STICKY
                 }
@@ -58,6 +60,7 @@ class MibuForegroundService : Service() {
 
                 !tokenStore.hasRequiredCaptures() -> {
                     Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_MISSING_CAPTURES nonce=$proofNonce")
+                    logStore.add("Waiting service stopped: browser captures are missing")
                     stateStore.setVerificationState(VerificationState.UNKNOWN)
                     stopSelf(startId)
                     START_NOT_STICKY
@@ -77,6 +80,7 @@ class MibuForegroundService : Service() {
                     val latestDelay = delays.values.maxOrNull() ?: 0L
                     if (latestDelay > tokenStore.millisRemaining()) {
                         Log.w(LOG_TAG, "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY latestDelayMs=$latestDelay nonce=$proofNonce")
+                        logStore.add("Waiting service stopped: captures expired before target")
                         stateStore.setVerificationState(VerificationState.UNKNOWN)
                         stopSelf(startId)
                         START_NOT_STICKY
@@ -92,12 +96,14 @@ class MibuForegroundService : Service() {
                             LOG_TAG,
                             "WAITING_SERVICE_ARMED targetMidnight=${targetMidnight.toInstant().toEpochMilli()} lanes=${armedLanes.joinToString(",") { it.number.toString() }} latestDelayMs=$latestDelay nonce=$proofNonce"
                         )
+                        logStore.add("Waiting service armed for ${armedLanes.size} timing windows")
                         START_NOT_STICKY
                     }
                 }
             }
         } catch (exc: Exception) {
             Log.e(LOG_TAG, "WAITING_SERVICE_FAILED nonce=$proofNonce", exc)
+            logStore.add("Waiting service failed: ${exc.message ?: "unknown error"}")
             val current = stateStore.verificationState()
             if (!current.isTimingComplete() && !current.isAuthoritativeResult()) {
                 stateStore.setVerificationState(VerificationState.UNKNOWN)
@@ -126,10 +132,12 @@ class MibuForegroundService : Service() {
             stateStore.setVerificationState(VerificationState.TIMING_WINDOW_REACHED)
             updateNotification("Timing window reached • continue with PC verification")
             Log.i(LOG_TAG, "WAITING_SERVICE_COMPLETE reached=$reachedCount nonce=$proofNonce")
+            logStore.add("All timing windows reached; continue with PC verification")
             handler.postDelayed({ stopSelf() }, 15_000L)
         } else {
             updateNotification("Waiting armed • $reachedCount/4 timing windows reached")
             Log.i(LOG_TAG, "WAITING_LANE_REACHED lane=$laneNumber reached=$reachedCount nonce=$proofNonce")
+            logStore.add("Timing lane $laneNumber reached ($reachedCount/4)")
         }
     }
 
@@ -181,7 +189,7 @@ class MibuForegroundService : Service() {
         return builder
             .setContentTitle("MIBU timing assistant")
             .setContentText(message)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_mibu)
             .setContentIntent(pending)
             .setOngoing(reachedCount < MibuLane.defaultLanes().size)
             .build()

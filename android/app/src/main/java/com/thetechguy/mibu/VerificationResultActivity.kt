@@ -9,6 +9,7 @@ import android.util.Log
 class VerificationResultActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
     private val stateStore by lazy { MibuStateStore(this) }
+    private val logStore by lazy { LogStore(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -16,27 +17,24 @@ class VerificationResultActivity : Activity() {
     }
 
     private fun render() {
-        mibuImageHotspotScreen(
-            R.drawable.android_guide,
-            listOf(
-                MibuHotspot(0.03f, 0.03f, 0.12f, 0.07f, "Back") { finish() },
-                MibuHotspot(0.09f, 0.520f, 0.82f, 0.060f, "Official wait time shown") {
-                    record(VerificationState.WAIT_TIME_SHOWN)
-                },
-                MibuHotspot(0.09f, 0.590f, 0.82f, 0.060f, "Account device not added") {
-                    record(VerificationState.ACCOUNT_DEVICE_NOT_ADDED)
-                },
-                MibuHotspot(0.09f, 0.660f, 0.82f, 0.060f, "Community authorisation required") {
-                    record(VerificationState.COMMUNITY_AUTH_REQUIRED)
-                },
-                MibuHotspot(0.09f, 0.730f, 0.82f, 0.060f, "Device unlocked") {
-                    record(VerificationState.UNLOCKED)
-                },
-                MibuHotspot(0.09f, 0.805f, 0.82f, 0.060f, "Reset workflow") {
-                    confirmReset()
-                },
-            ),
-        )
+        mibuScreen {
+            addView(mibuBrandHeader(onBack = { finish() }))
+            addView(mibuHeading("Official Result", "Record only what the official tool showed. Choosing a result stops the phone timer."))
+            addView(mibuAction(R.drawable.mibu_icon_clock, "Official wait time shown", "Keep the waiting period; do not restart", MibuColors.purple) {
+                record(VerificationState.WAIT_TIME_SHOWN)
+            }.root)
+            addView(mibuAction(R.drawable.mibu_icon_info, "Account/device not added", "Resolve the phone association before retrying", MibuColors.red) {
+                record(VerificationState.ACCOUNT_DEVICE_NOT_ADDED)
+            }.root)
+            addView(mibuAction(R.drawable.mibu_icon_account, "Community authorisation required", "Complete the official community route", MibuColors.orange) {
+                record(VerificationState.COMMUNITY_AUTH_REQUIRED)
+            }.root)
+            addView(mibuAction(R.drawable.mibu_icon_check, "Device unlocked", "Use only after official unlock confirmation", MibuColors.green) {
+                record(VerificationState.UNLOCKED)
+            }.root)
+            addView(mibuAction(R.drawable.mibu_icon_info, "Reset workflow", "Clear captures, target, lanes and recorded result", MibuColors.red) { confirmReset() }.root)
+            addView(footer())
+        }
     }
 
     @Suppress("unused")
@@ -49,8 +47,9 @@ class VerificationResultActivity : Activity() {
     private fun record(state: VerificationState) {
         stopTimingService()
         stateStore.completeVerification(state)
+        logStore.add("Official result recorded: ${state.name}")
         Log.i(LOG_TAG, "OFFICIAL_RESULT_RECORDED state=${state.name}")
-        startActivity(Intent(this, MainActivity::class.java))
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
         finish()
     }
 
@@ -63,8 +62,9 @@ class VerificationResultActivity : Activity() {
                 stopTimingService()
                 tokenStore.clear()
                 stateStore.resetWorkflow()
+                logStore.add("Workflow reset from official result screen")
                 Log.i(LOG_TAG, "WORKFLOW_RESET")
-                startActivity(Intent(this, MainActivity::class.java))
+                startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
                 finish()
             }
             .show()

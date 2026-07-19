@@ -51,7 +51,7 @@ The active helper is:
 pc-helper/qt6/mibu_pc_helper_v3.py
 ```
 
-Its four image-hotspot workflow is:
+Its compact live four-control workflow is:
 
 1. Device Check
 2. Install APK
@@ -60,6 +60,10 @@ Its four image-hotspot workflow is:
 
 The helper:
 
+- uses a frameless `760 x 560` window with custom minimize, maximize and close controls;
+- renders real Qt controls and status text rather than placing click regions over screenshots;
+- includes a floating MIBU assistant with One-Click Assist, local command chat and an illustrated offline manual;
+- detects or installs Firefox and Chrome and keeps the explicit session handoff inside the UI;
 - prioritises platform-tools bundled with the release;
 - requires exactly one normal online ADB device;
 - distinguishes missing, unauthorised, offline and unsupported ADB states;
@@ -80,6 +84,7 @@ The helper:
 - accepts early, correlated rejection markers instead of timing out ambiguously;
 - refuses fastboot handoff until Android reports timing completion;
 - parses only real fastboot-device rows and rejects multiple-device ambiguity;
+- provides a read-only HyperOS/Settings build report before any legacy binding-recovery method is considered;
 - reboots to bootloader, checks available device/unlocked information and hands off to the official Mi Unlock Tool.
 
 ## Guardrails
@@ -118,13 +123,13 @@ The build script:
 2. runs Android lint, unit tests and APK assembly when an APK must be built;
 3. runs the THETECHGUY source-contract review;
 4. validates the restored Android expected-UI baseline;
-5. validates shared PC artwork/hotspot geometry;
-6. renders the five required hotspot screens and branded application icons;
+5. generates deterministic reusable assets from the approved MIBU logo and references;
+6. validates the compact live UI, assistant, dialogs, manual and branded application icons;
 7. discovers and runs every PC helper unit test;
 8. performs an offscreen v3 import/version proof check;
 9. removes or safely renames stale locked build/release folders;
 10. creates a clean PyInstaller build;
-11. bundles the APK, ADB, fastboot, Windows platform-tool DLLs and visual evidence;
+11. bundles the APK, ADB, fastboot, Windows platform-tool DLLs, live UI assets and offline guide;
 12. writes `SHA256SUMS.txt` for the protected release files;
 13. fails rather than publishing a partial release.
 
@@ -141,16 +146,16 @@ pc-helper/release/MIBU-PC-Helper/
 │   ├── fastboot.exe
 │   ├── AdbWinApi.dll
 │   └── AdbWinUsbApi.dll
-└── resources/expected ui/
-    ├── pc/
-    │   ├── 01_pc_main_four_button_workflow.png
-    │   ├── 02_popup_device_check_guide.png
-    │   ├── 03_popup_install_apk.png
-    │   ├── 04_popup_login_get_token.png
-    │   ├── 05_popup_phone_guide.png
-    │   ├── mibu_app_icon.png
-    │   └── mibu_app_icon.ico
-    └── android/
+└── resources/
+    ├── logo.png
+    ├── guide/index.html
+    ├── live_ui/
+    │   ├── mibu_logo.png
+    │   ├── mibu_hood.png
+    │   ├── mibu_app_icon.ico
+    │   ├── firefox.png
+    │   └── chrome.png
+    └── expected ui/android/
         ├── approved_android_ui_baseline_sheet.svg
         └── README.md
 ```
@@ -168,8 +173,7 @@ gradle :android:app:lintDebug :android:app:testDebugUnitTest :android:app:assemb
 PC Helper:
 
 ```powershell
-python pc-helper\qt6\validate_ui_contract.py
-python pc-helper\qt6\render_svg_assets.py
+python tools\extract_live_ui_assets.py
 cd pc-helper\qt6
 python -m unittest discover -v
 python mibu_pc_helper_v3.py
@@ -186,9 +190,9 @@ GitHub Actions is defined to check:
 - nonce-correlated proof handling;
 - version-aware APK update behaviour;
 - ADB and fastboot parsing;
-- image-hotspot geometry and visible close-hitbox coverage;
-- deterministic SVG-to-PNG/ICO rendering;
-- offscreen Qt v3 construction;
+- live dialog close and custom window-control wiring;
+- deterministic approved-logo PNG/ICO extraction;
+- offscreen compact Qt construction and assistant-state sizing;
 - complete Windows release contents and checksum manifest.
 
 ## Proof boundary

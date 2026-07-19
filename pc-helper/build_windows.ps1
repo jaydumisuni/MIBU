@@ -37,6 +37,7 @@ function Resolve-Gradle {
     if ($command) { return $command.Source }
     foreach ($candidate in @(
         "D:\mibu-build-tools\gradle\bin\gradle.bat",
+        "D:\mibu-build-tools\gradle\gradle-8.10\bin\gradle.bat",
         "D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat",
         (Join-Path $Root "gradlew.bat")
     )) {
@@ -97,33 +98,32 @@ foreach ($requiredTool in $RequiredPlatformTools) {
 }
 
 Write-Host "Running source review and validating deterministic branded UI assets..." -ForegroundColor Cyan
+python (Join-Path $Root "tools\extract_live_ui_assets.py")
+if ($LASTEXITCODE -ne 0) { throw "Live MIBU asset extraction failed with exit code $LASTEXITCODE" }
 python (Join-Path $Root "tools\review_contracts.py")
 if ($LASTEXITCODE -ne 0) { throw "THETECHGUY source-contract review failed with exit code $LASTEXITCODE" }
 python (Join-Path $Root "tools\review_proof_v2.py")
 if ($LASTEXITCODE -ne 0) { throw "MIBU proof-v2 review failed with exit code $LASTEXITCODE" }
 python (Join-Path $Root "tools\validate_android_ui_baseline.py")
 if ($LASTEXITCODE -ne 0) { throw "Android expected-UI baseline validation failed with exit code $LASTEXITCODE" }
-python (Join-Path $HelperDir "validate_ui_contract.py")
-if ($LASTEXITCODE -ne 0) { throw "UI contract validation failed with exit code $LASTEXITCODE" }
-python (Join-Path $HelperDir "render_svg_assets.py")
-if ($LASTEXITCODE -ne 0) { throw "UI asset rendering failed with exit code $LASTEXITCODE" }
-
 $RequiredUi = @(
-    (Join-Path $Root "resources\expected ui\pc\01_pc_main_four_button_workflow.png"),
-    (Join-Path $Root "resources\expected ui\pc\02_popup_device_check_guide.png"),
-    (Join-Path $Root "resources\expected ui\pc\03_popup_install_apk.png"),
-    (Join-Path $Root "resources\expected ui\pc\04_popup_login_get_token.png"),
-    (Join-Path $Root "resources\expected ui\pc\05_popup_phone_guide.png"),
-    (Join-Path $Root "resources\expected ui\pc\mibu_app_icon.png"),
-    (Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico"),
+    (Join-Path $Root "resources\logo.png"),
+    (Join-Path $Root "resources\live_ui\mibu_logo.png"),
+    (Join-Path $Root "resources\live_ui\mibu_hood.png"),
+    (Join-Path $Root "resources\live_ui\mibu_app_icon.ico"),
+    (Join-Path $Root "resources\live_ui\firefox.png"),
+    (Join-Path $Root "resources\live_ui\chrome.png"),
+    (Join-Path $Root "resources\guide\index.html"),
     (Join-Path $Root "resources\expected ui\android\approved_android_ui_baseline_sheet.svg"),
     (Join-Path $Root "resources\expected ui\android\README.md")
 )
 foreach ($asset in $RequiredUi) {
     Assert-NonEmptyFile $asset "Required branded UI asset"
 }
-$IconPath = Join-Path $Root "resources\expected ui\pc\mibu_app_icon.ico"
-Write-Host "PC hotspot UI, Android approved baseline and application icon verified." -ForegroundColor Green
+$IconPath = Join-Path $Root "resources\live_ui\mibu_app_icon.ico"
+$VersionPath = Join-Path $HelperDir "version_info.txt"
+Assert-NonEmptyFile $VersionPath "Windows version resource"
+Write-Host "Live PC UI, Android baseline, offline guide and approved application icon verified." -ForegroundColor Green
 
 $env:QT_QPA_PLATFORM = "offscreen"
 Push-Location $HelperDir
@@ -144,7 +144,7 @@ New-Item -ItemType Directory -Path $BundleDir | Out-Null
 
 Push-Location $HelperDir
 try {
-    python -m PyInstaller --clean --noconfirm --windowed --name "MIBU-PC-Helper" --icon $IconPath --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v3.py"
+    python -m PyInstaller --clean --noconfirm --windowed --name "MIBU-PC-Helper" --icon $IconPath --version-file $VersionPath --hidden-import PySide6.QtMultimedia "mibu_pc_helper_v3.py"
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 } finally {
     Pop-Location
@@ -224,5 +224,6 @@ if ((Get-Content $ChecksumPath).Count -ne $ChecksumTargets.Count) {
     throw "Release checksum manifest count does not match the protected release-file count."
 }
 
-Write-Host "Release EXE, APK, platform-tools, UI evidence and SHA-256 manifest verified." -ForegroundColor Green
+Start-Process -FilePath "$env:SystemRoot\System32\ie4uinit.exe" -ArgumentList "-show" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
+Write-Host "Release EXE, APK, platform-tools, live UI, approved icon and SHA-256 manifest verified." -ForegroundColor Green
 Write-Host "Release folder: $BundleDir" -ForegroundColor Green

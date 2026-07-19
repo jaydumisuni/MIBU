@@ -45,3 +45,44 @@ Follow-up work - 2026-07-19
 - Rebuilt Android successfully after these changes.
 - Rebuilt the PC release successfully after these changes.
 - ADB stopped seeing the phone during the final install attempt, so the final Settings button tap could not be verified on-device in this pass.
+2026-07-19 - Compact live-UI rebuild audit started
+- Re-opened and compared all five PC mockups and all seven Android mockups at original resolution.
+- Captured the real packaged PC window: 1134x758 including the native Windows title bar; content was clipped and the assistant covered the heading/actions.
+- Captured the connected Xiaomi phone: the app was rotating to 2460x1080 landscape and the 270dp screenshot-derived hero pushed live controls off-screen.
+- Verified the current EXE embeds the approved neon MIBU logo; the old blue icon shown by Explorer is stale shell cache, not the current EXE resource.
+- Verified ADB device 73e68d0e226c / Xiaomi 23076RA4BC is online.
+- Added a deterministic asset extractor that separates the approved logo, hood artwork, and neon action icons from mockup backgrounds. These become transparent visual components; text, values, status, and buttons remain live.
+
+2026-07-19 - Live application completion pass
+- Replaced the obsolete screenshot/hotspot Qt dependency with `mibu_runtime.py`; removed the old final/UI/v2/hotspot geometry/render/validator sources.
+- Set the active PC window to a compact frameless 760 x 560 layout with a custom draggable title bar, working minimize/maximize/restore/close controls, live four-step cards, live output, and an ADB command field.
+- Added the floating MIBU assistant with a visible Need help bubble, expandable hood artwork, chest START control for One-Click Assist, close control, no-model local command chat, hidden chat scrollbar, and offline manual action.
+- Added live neon active-button shadows and replaced every popup screenshot with a real Qt dialog and real clickable close/action controls.
+- Reworked Login & Get Token to use Firefox for lanes 1/3 and Chrome for lanes 2/4, including the installed browser icons and explicit user-approved capture fields.
+- Added the branded offline HTML guide at `resources/guide/index.html` with workflow screenshots, the two-capture/four-lane map, Android handoff instructions, recovery steps, THETECHGUY branding, and the source guide link.
+- Generated reusable PC/Android logo, hood, wordmark, icon, and multi-resolution ICO assets from the approved `resources/logo.png` source.
+- Updated Windows packaging to use the approved live ICO, version metadata, AppUserModelID, live assets, offline guide, APK and platform-tools; removed obsolete screenshot rendering from release and CI.
+- Added optional success/failure WAV playback with a failure-beep fallback. The two named WAV files are currently absent from D:\projects, so the build logs a warning instead of fabricating audio.
+- Rebuilt Android screens as live native layouts and added the Guide and Mi Unlock & Binding screens, system-bar insets, adaptive launcher icon, portrait handling, dynamic network/service/session/timer state, and neon primary controls.
+- Added three Mi Unlock paths: official Xiaomi status, Couldn't add binding recovery, and explicit legacy compatibility review. Legacy recovery is never run by One Click.
+- Inspected HyperSploit source and documented its actual behavior: it captures Xiaomi Settings bind request data, rewrites a ROM marker and submits applyBind; optional paths downgrade/replace the system Settings package. MIBU only adds a read-only compatibility report and does not silently replace Settings.
+- Read the connected phone's real compatibility values: Xiaomi 23076RA4BC / sky, HyperOS OS2.0.204.0.VMWCNXM, security patch 2025-07-01, Settings version 15.
+- Android lint, Android unit tests, APK assembly, both source reviews, Python compilation and 27 discovered PC behavior tests passed.
+- Installed APK version 0.2.0-dev successfully and captured the real live Android dashboard on the connected phone.
+- Captured and inspected the compact PC main UI, expanded assistant, assistant chat, Device Check, Install APK, Login & Get Token, and Phone Guide dialogs.
+- Proved every tested dialog close control destroys the dialog while the PC app remains responsive.
+- Proved custom maximize changes the PC window to 1920 x 1020 and restore returns it to 950 x 700 physical pixels at 125% display scaling.
+- Replaced the Android Start Waiting crop-derived play icon with a clean native vector icon after the physical-device screenshot exposed the crop edge.
+- The Redmi USB/ADB connection dropped during the remaining Android screen/countdown capture; final install and countdown proof continue after the device reconnects.
+- Removed the stale Brave dependency check so system readiness now requires only the actual Firefox and Chrome two-capture workflow.
+- Built and launched the packaged Windows EXE successfully; version metadata reports 0.2.0, no Python DLL error occurred, and Windows extracted the approved neon MIBU icon.
+- Audited all staged paths for embedded credentials, API keys, private keys, and token literals; no sensitive material was found.
+- Removed the superseded command-line PC helper and unused Android screenshot/hero drawables after proving the live app no longer references them. The approved mockups remain only under `resources/expected ui` as design/manual references.
+- Confirmed only the clean native `mibu_icon_play_clean.xml` remains as the Android Start Waiting icon.
+- Final release SHA-256 before the cleanup rebuild: EXE `7aabb01b7b3e4030867eebbee54ad029a07b3deb9531ac3ad11f4fcd0f9c34a1`; APK `818307b0337244d4c96d2df3375f79e8677704ced841deb7e090ffc9f69d1ae7`.
+- Rechecked ADB and Windows PnP during final verification; the Redmi is still physically absent, so no new phone-side state was modified in this pass.
+- After legacy-resource cleanup, reran Android lint, Android unit tests, and debug APK assembly: `BUILD SUCCESSFUL` with only the existing Android system-bar deprecation warnings.
+- Rebuilt the Windows release from that exact APK. The bundled `dist/MIBU.apk` and `android/app/build/outputs/apk/debug/app-debug.apk` SHA-256 hashes match exactly.
+- Final release SHA-256: EXE `8b408c045805fd90f53b12150178b4849bac351a8bd51b4d8fc9cc0a4618115a`; APK `78ef46630e696b4e888835e93b92b3272520b06b51553a12cbed95e8076d58c8`.
+- Launched the final packaged EXE from the release folder. It remained responsive, exposed a nonzero Windows handle, showed `MIBU PC Helper - THETECHGUY TOOL`, and reported file/product version `0.2.0`.
+- Final phone verification remains pending because `adb devices -l` is empty. The code does not fabricate token captures or mark the timer armed without correlated proof from a connected phone.

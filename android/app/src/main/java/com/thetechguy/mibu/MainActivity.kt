@@ -2,21 +2,21 @@ package com.thetechguy.mibu
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.widget.Button
-import android.widget.ImageView
+import android.view.View
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.time.Duration
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -25,32 +25,36 @@ import java.time.format.DateTimeFormatter
 class MainActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
     private val stateStore by lazy { MibuStateStore(this) }
+    private val logStore by lazy { LogStore(this) }
     private val uiHandler = Handler(Looper.getMainLooper())
     private val ticker = object : Runnable {
         override fun run() {
-            if (::accountValue.isInitialized) refreshStatus()
+            if (::countdownValue.isInitialized) refreshStatus()
             uiHandler.postDelayed(this, 1000L)
         }
     }
 
     private lateinit var accountValue: TextView
+    private lateinit var accountBadge: TextView
     private lateinit var sessionValue: TextView
     private lateinit var beijingValue: TextView
     private lateinit var localValue: TextView
     private lateinit var countdownValue: TextView
+    private lateinit var mobileValue: TextView
     private lateinit var serviceValue: TextView
-    private lateinit var startWaitingButton: Button
+    private lateinit var serviceBadge: TextView
+    private lateinit var startWaitingRoot: LinearLayout
+    private lateinit var startWaitingTitle: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestNotificationPermissionIfNeeded()
         buildUi()
-        refreshStatus()
     }
 
     override fun onResume() {
         super.onResume()
         uiHandler.removeCallbacks(ticker)
+        if (::countdownValue.isInitialized) refreshStatus()
         uiHandler.post(ticker)
     }
 
@@ -59,71 +63,125 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
-    private fun requestNotificationPermissionIfNeeded() {
+    private fun buildUi() {
+        val verification = stateStore.reconcileTimingState()
+        if (!tokenStore.hasRequiredCaptures() && verification == VerificationState.NOT_STARTED) {
+            buildWelcome()
+        } else {
+            buildDashboard()
+            refreshStatus()
+        }
+    }
+
+    private fun buildWelcome() {
+        mibuScreen {
+            addView(mibuBrandHeader(onSettings = { openSettings() }, large = true))
+            addView(mibuHeading("Welcome to MIBU", "The phone app receives the approved session from the PC helper, then owns the countdown."))
+            addView(mibuAction(R.drawable.mibu_icon_session, "Import session from PC", "Open the secure two-capture handoff", MibuColors.blue, true) {
+                logStore.add("Session import opened")
+                startActivity(Intent(this@MainActivity, TokenImportActivity::class.java))
+            }.root)
+            addView(mibuAction(R.drawable.mibu_icon_check, "Check device status", "Review account, network and waiting state", MibuColors.cyan) {
+                openSettings()
+            }.root)
+            addView(mibuAction(R.drawable.mibu_icon_guide, "View guide", "Follow the complete PC and phone workflow", MibuColors.purple) {
+                startActivity(Intent(this@MainActivity, GuideActivity::class.java))
+            }.root)
+            addView(footer())
+        }
+    }
+
+    private fun buildDashboard() {
+        mibuScreen {
+            addView(mibuBrandHeader(onSettings = { openSettings() }))
+
+            val account = mibuLiveRow(R.drawable.mibu_icon_check, "Account Status", "Checking...", MibuColors.green, onClick = {
+                startActivity(Intent(this@MainActivity, TokenImportActivity::class.java))
+            })
+            accountValue = account.value
+            accountBadge = account.badge
+            addView(account.root)
+
+            val session = mibuLiveRow(R.drawable.mibu_icon_session, "Session Imported", "Checking...", MibuColors.blue, onClick = {
+                startActivity(Intent(this@MainActivity, TokenImportActivity::class.java))
+            })
+            sessionValue = session.value
+            addView(session.root)
+
+            val times = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
+            val beijing = mibuTimeCard("Target Time (Beijing)", "--:--:--", "CST", MibuColors.orange)
+            val local = mibuTimeCard("Target Time (Local)", "--:--:--", ZoneId.systemDefault().id, MibuColors.purple)
+            beijingValue = beijing.second
+            localValue = local.second
+            times.addView(beijing.first, LinearLayout.LayoutParams(0, dp(100), 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
+            times.addView(local.first, LinearLayout.LayoutParams(0, dp(100), 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+            addView(times)
+
+            val countdown = mibuCountdown()
+            countdownValue = countdown.second
+            addView(countdown.first)
+
+            val mobile = mibuLiveRow(R.drawable.mibu_icon_signal, "Mobile Data Reminder", "Checking network...", MibuColors.green, onClick = {
+                openSettings()
+            })
+            mobileValue = mobile.value
+            addView(mobile.root)
+
+            val service = mibuLiveRow(R.drawable.mibu_icon_shield, "Foreground Service", "Checking...", MibuColors.blue)
+            serviceValue = service.value
+            serviceBadge = service.badge
+            addView(service.root)
+
+            val start = mibuAction(R.drawable.mibu_icon_play_clean, "Start Waiting", "Arm or resume the phone-side countdown", MibuColors.orange, true) {
+                beginWaiting()
+            }
+            startWaitingRoot = start.root
+            startWaitingTitle = start.title
+            addView(start.root)
+
+            val bottom = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
+            val logs = mibuAction(R.drawable.mibu_icon_logs, "Open Logs", "Activity", MibuColors.purple) {
+                startActivity(Intent(this@MainActivity, LogsActivity::class.java))
+            }.root
+            val instructions = mibuAction(R.drawable.mibu_icon_info, "Instructions", "Guide", MibuColors.blue) {
+                startActivity(Intent(this@MainActivity, InstructionsActivity::class.java))
+            }.root
+            bottom.addView(logs, LinearLayout.LayoutParams(0, dp(62), 1f).apply { setMargins(0, 0, dp(4), 0) })
+            bottom.addView(instructions, LinearLayout.LayoutParams(0, dp(62), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+            addView(bottom)
+            addView(footer())
+        }
+    }
+
+    private fun beginWaiting() {
+        if (!requestNotificationPermissionIfNeeded()) return
+        logStore.add("Start Waiting tapped")
+        startActivity(Intent(this, StartWaitingActivity::class.java))
+    }
+
+    private fun requestNotificationPermissionIfNeeded(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+            return false
+        }
+        return true
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                beginWaiting()
+            } else {
+                Toast.makeText(this, "Notification access is needed to keep waiting visible in the background.", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
-    private fun buildUi() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(22), dp(18), dp(18))
-            setBackgroundColor(Color.rgb(4, 6, 17))
-        }
-        setContentView(ScrollView(this).apply { addView(root) })
-
-        root.addView(heroImage())
-        root.addView(title("MIBU PC Helper", "THETECHGUY TOOL"))
-        root.addView(neonButton("Settings / Mobile Data") {
-            startActivity(Intent(this, CommunityCheckActivity::class.java))
-        })
-
-        val statusRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val account = liveCard("Account Status", green())
-        accountValue = account.second
-        val session = liveCard("Session Imported", cyan())
-        sessionValue = session.second
-        statusRow.addView(account.first)
-        statusRow.addView(session.first)
-        root.addView(statusRow)
-
-        val timeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val beijing = liveCard("Target Time (Beijing)", orange())
-        val local = liveCard("Target Time (Local)", purple())
-        beijingValue = beijing.second
-        localValue = local.second
-        timeRow.addView(beijing.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(0, 0, dp(6), 0) })
-        timeRow.addView(local.first, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(dp(6), 0, 0, 0) })
-        root.addView(timeRow)
-
-        val countdown = liveCard("Time Remaining", purple(), large = true)
-        countdownValue = countdown.second
-        root.addView(countdown.first)
-
-        val service = liveCard("Foreground Service", cyan())
-        serviceValue = service.second
-        root.addView(service.first)
-
-        startWaitingButton = neonButton("Start Waiting", true) {
-            startActivity(Intent(this, StartWaitingActivity::class.java))
-        }
-        root.addView(startWaitingButton)
-
-        val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        buttons.addView(neonButton("Open Logs") {
-            startActivity(Intent(this@MainActivity, LogsActivity::class.java))
-        }, LinearLayout.LayoutParams(0, dp(58), 1f).apply { setMargins(0, 0, dp(6), 0) })
-        buttons.addView(neonButton("Instructions") {
-            startActivity(Intent(this@MainActivity, InstructionsActivity::class.java))
-        }, LinearLayout.LayoutParams(0, dp(58), 1f).apply { setMargins(dp(6), 0, 0, 0) })
-        root.addView(buttons)
-
-        root.addView(neonButton("Import Session From PC") {
-            startActivity(Intent(this, TokenImportActivity::class.java))
-        })
+    private fun openSettings() {
+        startActivity(Intent(this, CommunityCheckActivity::class.java))
     }
 
     private fun refreshStatus() {
@@ -133,114 +191,60 @@ class MainActivity : Activity() {
             MibuLane.defaultLanes().first().targetTimeForMidnight(it)
         } ?: if (verification.isAuthoritativeResult()) null else MibuLane.defaultLanes().first().targetTime(nowChina)
         val localTarget = targetChina?.withZoneSameInstant(ZoneId.systemDefault())
-        val remaining = targetChina?.let { Duration.between(nowChina, it) }?.let { if (it.isNegative) Duration.ZERO else it } ?: Duration.ZERO
+        val remaining = targetChina?.let { Duration.between(nowChina, it) }
+            ?.let { if (it.isNegative) Duration.ZERO else it } ?: Duration.ZERO
         val totalSeconds = remaining.seconds.coerceAtLeast(0L)
         val hours = totalSeconds / 3600L
         val minutes = (totalSeconds % 3600L) / 60L
         val seconds = totalSeconds % 60L
-        val fmtDate = DateTimeFormatter.ofPattern("MMM dd, yyyy")
-        val fmtTime = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
+        val time = DateTimeFormatter.ofPattern("HH:mm:ss")
 
         accountValue.text = when {
             tokenStore.hasRequiredCaptures() -> "Eligible to send request"
-            tokenStore.hasSession() -> "Partial setup"
-            else -> "Waiting for session/token"
+            tokenStore.hasSession() -> "Partial setup - second capture needed"
+            verification.isAuthoritativeResult() -> friendlyVerification(verification)
+            else -> "Waiting for approved session"
         }
-        sessionValue.text = if (tokenStore.hasRequiredCaptures()) "From MIBU PC Tool" else "Import from PC helper first"
-        beijingValue.text = if (targetChina == null) "No active target" else "${targetChina.format(fmtTime)}\n${targetChina.format(fmtDate)}"
-        localValue.text = if (localTarget == null) "No active target" else "${localTarget.format(fmtTime)}\n${localTarget.format(fmtDate)}"
+        accountBadge.text = when {
+            tokenStore.hasRequiredCaptures() -> "READY"
+            verification.isAuthoritativeResult() -> "RESULT"
+            else -> "WAITING"
+        }
+        accountBadge.visibility = View.VISIBLE
+        sessionValue.text = if (tokenStore.hasRequiredCaptures()) "From MIBU PC Tool" else "Import from PC helper"
+        beijingValue.text = targetChina?.format(time) ?: "--:--:--"
+        localValue.text = localTarget?.format(time) ?: "--:--:--"
         countdownValue.text = when {
             verification.isTimingComplete() -> "COMPLETE"
-            verification.isAuthoritativeResult() -> friendlyVerification(verification)
-            else -> "%02d : %02d : %02d\nHOURS  MINUTES  SECONDS".format(hours, minutes, seconds)
+            verification.isAuthoritativeResult() -> friendlyVerification(verification).uppercase()
+            else -> "%02d : %02d : %02d".format(hours, minutes, seconds)
         }
-        serviceValue.text = if (verification == VerificationState.WAITING_ARMED) "Service is running" else friendlyVerification(verification)
-        startWaitingButton.text = when {
+        mobileValue.text = if (isCellularActive()) "Mobile data is active" else "Open network settings to confirm mobile data"
+        val running = isWaitingServiceRunning()
+        serviceValue.text = if (running) "Service is running" else friendlyVerification(verification)
+        serviceBadge.text = if (running) "RUNNING" else "IDLE"
+        serviceBadge.visibility = View.VISIBLE
+        startWaitingTitle.text = when {
             verification == VerificationState.WAITING_ARMED -> "Resume Waiting"
             verification.blocksNewWaitingCycle() -> "Result Recorded"
             else -> "Start Waiting"
         }
-        startWaitingButton.isEnabled = !verification.blocksNewWaitingCycle()
+        startWaitingRoot.isEnabled = !verification.blocksNewWaitingCycle()
+        startWaitingRoot.alpha = if (startWaitingRoot.isEnabled) 1f else 0.55f
         serviceValue.contentDescription = verificationGuidance(verification)
     }
 
-    private fun heroImage(): ImageView =
-        ImageView(this).apply {
-            setImageResource(R.drawable.mibu_hood_hero)
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            background = rounded(Color.rgb(8, 12, 30), dp(22), Color.rgb(40, 62, 102))
-            clipToOutline = true
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(270)).apply { setMargins(0, 0, 0, dp(14)) }
-        }
-
-    private fun title(primary: String, secondary: String): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            addView(TextView(this@MainActivity).apply {
-                text = primary
-                textSize = 30f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER
-                includeFontPadding = false
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = secondary
-                textSize = 13f
-                setTextColor(Color.rgb(166, 177, 205))
-                gravity = Gravity.CENTER
-                letterSpacing = 0.08f
-            })
-        }
-
-    private fun liveCard(label: String, stroke: Int, large: Boolean = false): Pair<LinearLayout, TextView> {
-        val value = TextView(this).apply {
-            text = "--"
-            textSize = if (large) 29f else 17f
-            typeface = if (large) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            setTextColor(Color.WHITE)
-            gravity = if (large) Gravity.CENTER else Gravity.START
-        }
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(14), dp(18), dp(14))
-            background = rounded(Color.rgb(10, 15, 32), dp(18), stroke)
-            addView(TextView(this@MainActivity).apply {
-                text = label
-                textSize = 13f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.rgb(180, 190, 215))
-            })
-            addView(value)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, dp(10), 0, 0)
-            }
-        }
-        return card to value
+    private fun isCellularActive(): Boolean {
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val network = connectivity.activeNetwork ?: return false
+        return connectivity.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
     }
 
-    private fun neonButton(textValue: String, primary: Boolean = false, onClick: () -> Unit): Button =
-        Button(this).apply {
-            text = textValue
-            textSize = if (primary) 18f else 14f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            background = rounded(if (primary) Color.rgb(23, 20, 48) else Color.rgb(10, 15, 32), dp(18), if (primary) orange() else Color.rgb(55, 78, 122))
-            setOnClickListener { onClick() }
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, if (primary) dp(70) else dp(58)).apply {
-                setMargins(0, dp(12), 0, 0)
-            }
-        }
-
-    private fun rounded(color: Int, radius: Int, stroke: Int): GradientDrawable =
-        GradientDrawable().apply { setColor(color); cornerRadius = radius.toFloat(); setStroke(dp(1), stroke) }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-    private fun green() = Color.rgb(61, 255, 135)
-    private fun cyan() = Color.rgb(36, 178, 255)
-    private fun purple() = Color.rgb(176, 83, 255)
-    private fun orange() = Color.rgb(255, 122, 43)
+    @Suppress("DEPRECATION")
+    private fun isWaitingServiceRunning(): Boolean {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return manager.getRunningServices(Int.MAX_VALUE).any { it.service.className == MibuForegroundService::class.java.name }
+    }
 
     private fun friendlyVerification(state: VerificationState): String = when (state) {
         VerificationState.NOT_STARTED -> "Not started"

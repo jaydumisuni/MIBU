@@ -58,7 +58,7 @@ The active entrypoint is:
 pc-helper/qt6/mibu_pc_helper_v3.py
 ```
 
-The image-hotspot workflow remains:
+The live four-control workflow is:
 
 1. Device Check
 2. Install APK
@@ -135,7 +135,7 @@ This prevents an old successful log line from proving a new operation and avoids
 
 ### PC UI
 
-Source-controlled SVG artwork is rendered deterministically to PNG. `ui_geometry.py` is the shared source of truth for artwork and click rectangles. The visible popup close artwork must be fully contained by its hotspot.
+Approved raster references are converted into reusable logo, character and icon assets. Qt and Android render real controls and dynamic text around those assets; popup close controls are real buttons, not image hotspots.
 
 ### Android UI baseline
 
@@ -164,7 +164,7 @@ resources/expected ui/android/approved_android_ui_baseline_sheet.svg
 resources/expected ui/android/README.md
 ```
 
-The build performs source review, Android-baseline validation, hotspot validation, all discovered PC tests and a clean PyInstaller build. It then hashes the protected release files. A missing APK, tool, UI asset or checksum manifest is a build failure.
+The build performs source review, Android-baseline validation, live-asset generation, all discovered PC tests and a clean PyInstaller build. It then hashes the protected release files. A missing APK, tool, UI asset or checksum manifest is a build failure.
 
 Approved audio remains optional; absent audio is reported rather than fabricated.
 
@@ -179,7 +179,7 @@ Static review and CI are designed to prove:
 - nonce-correlated proof handling;
 - version-aware installation;
 - ADB/fastboot parsing;
-- image-hotspot geometry and deterministic rendering;
+- compact live-widget construction, dialog controls and deterministic branded assets;
 - release composition and SHA-256 manifest generation.
 
 A physical-device run remains necessary to prove external facts:

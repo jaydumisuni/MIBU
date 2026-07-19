@@ -9,7 +9,7 @@ cd MIBU
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r pc-helper\qt6\requirements.txt
-python pc-helper\qt6\mibu_pc_helper_ui.py
+python pc-helper\qt6\mibu_pc_helper_v3.py
 ```
 
 ## Later packaging direction

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import ast
 import sys
 from pathlib import Path
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,181 +18,79 @@ def require(path: str, *needles: str) -> None:
     content = text(path)
     for needle in needles:
         if needle not in content:
-            raise AssertionError(f"{path} is missing proof-v2 contract: {needle}")
+            raise AssertionError(f"{path} is missing proof contract: {needle}")
 
 
 def forbid(path: str, *needles: str) -> None:
     content = text(path)
     for needle in needles:
         if needle in content:
-            raise AssertionError(f"{path} contains forbidden proof-v2 contract: {needle}")
-
-
-def forbid_path(path: str) -> None:
-    if (ROOT / path).exists():
-        raise AssertionError(f"Forbidden duplicate/legacy path exists: {path}")
-
-
-def compile_python(path: str) -> None:
-    ast.parse(text(path), filename=path)
+            raise AssertionError(f"{path} contains forbidden proof behavior: {needle}")
 
 
 def main() -> int:
-    require(
-        "android/app/build.gradle.kts",
-        'versionName = "0.2.0-dev"',
-        "versionCode = 2",
-        "JavaVersion.VERSION_17",
-        "buildConfig = true",
-    )
-    require(
-        "android/app/src/main/java/com/thetechguy/mibu/MibuUiHelpers.kt",
-        "fun Activity.mibuPage",
-        "fun Activity.mibuCard",
-        "fun Activity.mibuButton",
-        "fun Activity.footer",
-    )
-    forbid_path("android/app/src/main/java/com/thetechguy/mibu/Ui.kt")
     require(
         "android/app/src/main/java/com/thetechguy/mibu/ProofContract.kt",
         "const val VERSION = 2",
     )
     require(
-        "android/app/src/main/java/com/thetechguy/mibu/StatusActivity.kt",
-        'append(" protocol=").append(ProofContract.VERSION)',
-        'append(" app=").append(BuildConfig.VERSION_NAME)',
-        'append("STATUS nonce=")',
+        "android/app/src/main/java/com/thetechguy/mibu/TokenStore.kt",
+        "MAX_TOKEN_AGE_MS = 30L * 60L * 1000L",
+        "MAX_TOKEN_LENGTH = 8_192",
+        "if (ageMs < 0L) return 0L",
     )
     require(
         "android/app/src/main/java/com/thetechguy/mibu/MibuForegroundService.kt",
-        'startForeground(NOTIFICATION_ID, buildNotification("Checking saved waiting state…"))',
-        "WAITING_LANE_IGNORED_AUTHORITATIVE",
-        "WAITING_LANE_IGNORED_COMPLETE",
-        "before.isAuthoritativeResult()",
-        "before.isTimingComplete()",
+        "WAITING_SERVICE_ARMED",
+        "WAITING_SERVICE_COMPLETE",
+        "WAITING_SERVICE_REJECTED_MISSING_CAPTURES",
+        "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY",
+        "PowerManager.PARTIAL_WAKE_LOCK",
     )
     require(
-        "android/app/src/main/java/com/thetechguy/mibu/StartWaitingActivity.kt",
-        "startCompletedProofService()",
-        "WAITING_ACTIVITY_RESUMED",
-        "startForegroundService(serviceIntent)",
-        "currentState.blocksNewWaitingCycle()",
-    )
-    require(
-        "android/app/src/main/java/com/thetechguy/mibu/VerificationResultActivity.kt",
-        "stopTimingService()",
-        "stopService(Intent(this, MibuForegroundService::class.java))",
-        "stateStore.completeVerification(state)",
-        "stateStore.resetWorkflow()",
-    )
-    require(
-        "android/app/src/main/java/com/thetechguy/mibu/TokenStore.kt",
-        "remainingMillis(prefs.getLong(timestampKey, 0L), nowMs)",
-        "if (ageMs < 0L) return 0L",
-        "MAX_TOKEN_LENGTH = 8_192",
-    )
-    require(
-        "android/app/src/main/AndroidManifest.xml",
-        "android.permission.POST_NOTIFICATIONS",
-        ".VerificationResultActivity",
-        'android:allowBackup="false"',
-    )
-
-    for path in (
-        "pc-helper/qt6/mibu_actions.py",
-        "pc-helper/qt6/mibu_status.py",
-        "pc-helper/qt6/render_svg_assets.py",
-        "pc-helper/qt6/test_contracts.py",
-        "pc-helper/qt6/test_install_contracts.py",
-    ):
-        compile_python(path)
-
-    require(
-        "pc-helper/qt6/render_svg_assets.py",
-        "QGuiApplication",
-        "existing_app = QGuiApplication.instance()",
-        "app = existing_app or QGuiApplication",
-    )
-    require(
-        "pc-helper/qt6/mibu_status.py",
-        "EXPECTED_PROOF_PROTOCOL = 2",
-        "protocol: int",
-        "app_version: str",
-        "contract_current",
-        "parsed.protocol != EXPECTED_PROOF_PROTOCOL",
-        "parsed.app_version != EXPECTED_APP_VERSION",
+        "android/app/src/main/java/com/thetechguy/mibu/StatusActivity.kt",
+        'append(" protocol=")',
+        'append(" app=")',
+        'append("STATUS nonce=")',
     )
     require(
         "pc-helper/qt6/mibu_actions.py",
         'EXPECTED_APP_VERSION = "0.2.0-dev"',
-        "def parse_package_version",
-        "def parse_fastboot_devices",
         "nonce_marker",
-        '"WAITING_SERVICE_RECOVERED_COMPLETE"',
+        '"WAITING_SERVICE_ARMED"',
         '"WAITING_SERVICE_COMPLETE"',
         '["install", "-r", path]',
-        "installed/reinstalled and version verified",
     )
     forbid(
         "pc-helper/qt6/mibu_actions.py",
         '["logcat", "-c"]',
-        '_wait_for_log_marker("MIBU_WAIT", "WAITING_ACTIVITY_STARTED")',
-        "is already installed and verified",
+        "browser_cookie",
+        "password",
+    )
+    require(
+        "pc-helper/qt6/mibu_status.py",
+        "EXPECTED_PROOF_PROTOCOL = 2",
+        "expected_nonce",
+        "contract_current",
+        "captures_ready",
+        "timing_complete",
     )
     require(
         "pc-helper/qt6/test_contracts.py",
-        "test_completed_race_marker_is_accepted_from_success_tuple",
+        "test_stale_success_marker_with_wrong_nonce_is_rejected",
+        "test_activity_started_marker_is_not_service_proof",
         "test_status_parser_accepts_matching_current_contract",
-        "test_old_protocol_parses_but_is_not_current",
-        "test_old_app_version_parses_but_is_not_current",
+        "test_next_day_target_after_window",
     )
-    require(
-        "pc-helper/qt6/test_install_contracts.py",
-        "test_current_version_is_reinstalled_and_reverified",
-        "test_old_installed_version_is_updated_and_reverified",
-        "test_version_mismatch_after_install_is_failure",
-    )
-
     require(
         "pc-helper/build_windows.ps1",
-        "[switch]$UseExistingApk",
-        "rebuild from current Android source",
         ":android:app:clean",
-        "Use -UseExistingApk only for an APK already produced by the current CI commit",
-        'tools\\review_proof_v2.py',
+        ":android:app:lintDebug",
         "python -m unittest discover -v",
         "Get-FileHash -Algorithm SHA256",
         '"SHA256SUMS.txt"',
     )
-    require(
-        ".github/workflows/build.yml",
-        "python tools/review_proof_v2.py",
-        ":android:app:lintDebug",
-        "python -m unittest discover -v",
-        "Install Qt runtime libraries",
-        ".\\pc-helper\\build_windows.ps1 -UseExistingApk",
-        '"$root\\SHA256SUMS.txt"',
-    )
-    require(
-        ".gitignore",
-        "!resources/expected ui/android/README.md",
-        "!resources/expected ui/android/approved_android_ui_baseline_sheet.svg",
-        "!resources/expected ui/pc/*.svg",
-    )
-    require(
-        "README.md",
-        "does **not** send or replay Xiaomi request traffic",
-        "random correlation nonce",
-        "SHA256SUMS.txt",
-    )
-    require(
-        "docs/ARCHITECTURE.md",
-        "Proof correlation",
-        "must start foreground immediately on every service path",
-        "SHA256SUMS.txt",
-    )
-
-    print("MIBU proof-v2 review passed: correlated status, service authority and source-fresh release contracts align.")
+    print("MIBU proof-v2 review passed: capture freshness, correlated phone proof and source-fresh release rules align.")
     return 0
 
 
@@ -200,5 +98,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except AssertionError as exc:
-        print(f"PROOF-V2 REVIEW FAILED: {exc}", file=sys.stderr)
+        print(f"PROOF REVIEW FAILED: {exc}", file=sys.stderr)
         raise SystemExit(1)

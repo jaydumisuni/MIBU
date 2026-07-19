@@ -109,7 +109,7 @@ The user does not perform four logins.
 
 ## Visual rule
 
-The PC helper is one image-hotspot application with four main actions and four matching popup screens. The orange outline is applied dynamically to the button the user clicks; it is not baked into the artwork.
+The PC helper uses real Qt controls and live status text with approved logo, character and icon assets recovered from the mockups. The orange, purple and blue glow follows the active control dynamically. Dialog close buttons and all action buttons are functional widgets, not screenshot hotspots.
 
 The Android dashboard shows one countdown. Individual timing-window detail belongs in Logs, not on the main screen.
 

@@ -67,13 +67,6 @@ def _browser_candidates(name: str) -> list[Path]:
             Path(shutil.which("firefox") or ""),
             Path(shutil.which("firefox.exe") or ""),
         ]
-    if name == "brave":
-        return [
-            local / "BraveSoftware" / "Brave-Browser" / "Application" / "brave.exe",
-            *(root / "BraveSoftware" / "Brave-Browser" / "Application" / "brave.exe" for root in program_files),
-            Path(shutil.which("brave") or ""),
-            Path(shutil.which("brave.exe") or ""),
-        ]
     return []
 
 
@@ -97,7 +90,6 @@ def run_all_checks() -> list[CheckItem]:
         fastboot_check(),
         browser_check("Chrome browser", "chrome"),
         browser_check("Firefox browser", "firefox"),
-        browser_check("Brave browser", "brave"),
     ]
 
 

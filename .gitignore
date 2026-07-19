@@ -24,6 +24,7 @@ visual-polish-log.txt
 visual-audit-log.txt
 mibu-current-phone.png
 pc-helper/release.locked_*/
+test-evidence/
 
 # Ignore unapproved/local binary resources by default. Canonical UI source,
 # provenance and placeholders are explicitly source-controlled below.
@@ -41,6 +42,14 @@ resources/**
 !resources/expected ui/pc/*.svg
 !resources/branding/
 !resources/branding/.gitkeep
+!resources/logo.png
+!resources/live_ui/
+!resources/live_ui/**
+!resources/guide/
+!resources/guide/**
+!resources/expected ui/*.png
+!resources/expected ui/*.wav
+!resources/expected ui/android/*.png
 
 # Local scripts/test dumps
 script/

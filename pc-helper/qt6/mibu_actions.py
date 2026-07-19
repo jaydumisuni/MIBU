@@ -16,6 +16,7 @@ APP_PACKAGE = "com.thetechguy.mibu"
 APP_ENTRY = "com.thetechguy.mibu/.MainActivity"
 TOKEN_ENTRY = "com.thetechguy.mibu/.TokenImportActivity"
 WAIT_ENTRY = "com.thetechguy.mibu/.StartWaitingActivity"
+UNLOCK_METHODS_ENTRY = "com.thetechguy.mibu/.UnlockMethodsActivity"
 REMOTE_APK = "/sdcard/Download/MIBU.apk"
 PROOF_NONCE_EXTRA = "mibu_proof_nonce"
 EXPECTED_APP_VERSION = "0.2.0-dev"
@@ -289,7 +290,7 @@ def launch_phone_app() -> Result:
         return installed
     result = run_tool(["shell", "am", "start", "-W", "-n", APP_ENTRY], timeout=30)
     if result.ok and ("Status: ok" in result.message or "Activity:" in result.message):
-        return Result(True, result.message)
+        return Result(True, "MIBU opened on the connected phone.")
     return Result(False, result.message or "Android did not confirm that MIBU opened.")
 
 
@@ -302,8 +303,76 @@ def launch_token_import() -> Result:
         return installed
     result = run_tool(["shell", "am", "start", "-W", "-n", TOKEN_ENTRY], timeout=30)
     if result.ok and ("Status: ok" in result.message or "Activity:" in result.message):
-        return Result(True, result.message)
+        return Result(True, "MIBU opened the secure session-import screen on the phone.")
     return Result(False, result.message or "Android did not confirm that the MIBU token import screen opened.")
+
+
+def launch_unlock_methods() -> Result:
+    ready = check_device_ready()
+    if not ready.ok:
+        return ready
+    installed = package_exists()
+    if not installed.ok:
+        return installed
+    result = run_tool(["shell", "am", "start", "-W", "-n", UNLOCK_METHODS_ENTRY], timeout=30)
+    if result.ok and ("Status: ok" in result.message or "Activity:" in result.message):
+        return Result(True, "MIBU opened Mi Unlock & Binding methods on the phone.")
+    return Result(False, result.message or "Android did not confirm that the binding methods opened.")
+
+
+def launch_mi_unlock_status() -> Result:
+    ready = check_device_ready()
+    if not ready.ok:
+        return ready
+    direct = run_tool([
+        "shell", "am", "start", "-W", "-n",
+        "com.android.settings/com.android.settings.MiuiUnlockStatusActivity",
+    ], timeout=30)
+    if direct.ok and "Error type 3" not in direct.message and "SecurityException" not in direct.message:
+        return Result(True, "Xiaomi Mi Unlock Status opened. Tap Add account and device, then record the exact Xiaomi result.")
+    fallback = run_tool(["shell", "am", "start", "-W", "-a", "android.settings.APPLICATION_DEVELOPMENT_SETTINGS"], timeout=30)
+    if fallback.ok:
+        return Result(True, "Developer options opened. Select Mi Unlock status, then tap Add account and device.")
+    return Result(False, "This Settings build did not expose Mi Unlock Status over ADB. Open Developer options > Mi Unlock status manually.")
+
+
+def check_binding_recovery_compatibility() -> Result:
+    """Collect a read-only build report before offering any legacy recovery method."""
+    ready = check_device_ready()
+    if not ready.ok:
+        return ready
+
+    properties = {
+        "Model": "ro.product.model",
+        "Device": "ro.product.device",
+        "Android": "ro.build.version.release",
+        "Security patch": "ro.build.version.security_patch",
+        "Incremental build": "ro.build.version.incremental",
+        "Region": "ro.miui.region",
+    }
+    report: list[str] = []
+    for label, prop in properties.items():
+        value = run_tool(["shell", "getprop", prop], timeout=15)
+        report.append(f"{label}: {value.message.strip() or 'unknown'}" if value.ok else f"{label}: unavailable")
+
+    settings = run_tool(["shell", "dumpsys", "package", "com.android.settings"], timeout=30)
+    settings_version = "unknown"
+    if settings.ok:
+        for line in settings.message.splitlines():
+            clean = line.strip()
+            if clean.startswith("versionName="):
+                settings_version = clean.split("=", 1)[1].strip() or "unknown"
+                break
+    report.append(f"Settings version: {settings_version}")
+    report.extend(
+        [
+            "",
+            "Compatibility result: manual review required.",
+            "Legacy binding recovery is not enabled by One Click and no system package was changed.",
+            "Use the official Mi Unlock Status first; recovery is only for a real Couldn't add result on a supported build.",
+        ]
+    )
+    return Result(True, "\n".join(report))
 
 
 def _valid_token(value: str) -> bool:

@@ -73,10 +73,7 @@ jobs:
           python -m py_compile pc-helper/qt6/mibu_actions.py
           python -m py_compile pc-helper/qt6/mibu_status.py
           python -m py_compile pc-helper/qt6/dependency_check.py
-          python -m py_compile pc-helper/qt6/ui_geometry.py
-          python -m py_compile pc-helper/qt6/render_svg_assets.py
-          python -m py_compile pc-helper/qt6/validate_ui_contract.py
-          python -m py_compile pc-helper/qt6/mibu_pc_helper_v2.py
+          python -m py_compile pc-helper/qt6/mibu_runtime.py
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v3.py
           python -m py_compile pc-helper/qt6/test_contracts.py
           python -m py_compile pc-helper/qt6/test_install_contracts.py
@@ -88,22 +85,19 @@ jobs:
         run: python -m unittest discover -v
       - name: Validate restored Android expected UI
         run: python tools/validate_android_ui_baseline.py
-      - name: Validate hotspot artwork against shared click contract
-        run: python pc-helper/qt6/validate_ui_contract.py
-      - name: Render required hotspot and icon assets
-        run: python pc-helper/qt6/render_svg_assets.py
-      - name: Verify all rendered assets and approved Android baseline
+      - name: Generate and verify live UI assets
         run: |
-          test -s "resources/expected ui/pc/01_pc_main_four_button_workflow.png"
-          test -s "resources/expected ui/pc/02_popup_device_check_guide.png"
-          test -s "resources/expected ui/pc/03_popup_install_apk.png"
-          test -s "resources/expected ui/pc/04_popup_login_get_token.png"
-          test -s "resources/expected ui/pc/05_popup_phone_guide.png"
-          test -s "resources/expected ui/pc/mibu_app_icon.png"
-          test -s "resources/expected ui/pc/mibu_app_icon.ico"
+          python tools/extract_live_ui_assets.py
+          test -s "resources/logo.png"
+          test -s "resources/live_ui/mibu_logo.png"
+          test -s "resources/live_ui/mibu_hood.png"
+          test -s "resources/live_ui/mibu_app_icon.ico"
+          test -s "resources/live_ui/firefox.png"
+          test -s "resources/live_ui/chrome.png"
+          test -s "resources/guide/index.html"
           test -s "resources/expected ui/android/approved_android_ui_baseline_sheet.svg"
           test -s "resources/expected ui/android/README.md"
-      - name: Qt v3 construction, geometry, icon and time math smoke test
+      - name: Qt live construction, controls, assistant and time smoke test
         run: |
           python - <<'PY'
           import os, sys
@@ -111,23 +105,26 @@ jobs:
           sys.path.insert(0, 'pc-helper/qt6')
           from PySide6.QtWidgets import QApplication
           import mibu_actions
-          import mibu_pc_helper_v2 as base
+          import mibu_runtime as runtime
           import mibu_pc_helper_v3 as mibu
-          from ui_geometry import SCREENS
-          target = base.next_target()
+          target = runtime.next_target()
           assert target.tzinfo is not None
           assert (target.hour, target.minute, target.second, target.microsecond) == (23, 59, 58, 600000)
           assert mibu_actions.EXPECTED_APP_VERSION == '0.2.0-dev'
           app = QApplication([])
           window = mibu.Window()
-          assert set(window.buttons) == set(SCREENS['main'].hotspots)
-          assert window.main_image.endswith(SCREENS['main'].png)
+          assert set(window.buttons) == {'Device Check', 'Install APK', 'Login & Get Token', 'Phone Guide'}
           assert not window.windowIcon().isNull()
-          assert window.minimumWidth() >= 900
-          assert window.minimumHeight() >= 600
+          assert (window.width(), window.height()) == (760, 560)
+          assert (window.minimumWidth(), window.minimumHeight()) == (720, 520)
+          assert (window.assistant.width(), window.assistant.height()) == (146, 58)
+          window.assistant.expand()
+          assert (window.assistant.width(), window.assistant.height()) == (280, 326)
+          window.assistant.toggle_chat()
+          assert (window.assistant.width(), window.assistant.height()) == (280, 470)
           window.close()
           app.quit()
-          print('Qt v3 construction, geometry, icon, version and timing proof passed')
+          print('Qt live controls, assistant, icon, version and timing proof passed')
           PY
       - name: CLI time smoke test
         run: python pc-helper/mibu_pc_helper.py time
@@ -163,13 +160,13 @@ jobs:
             "$root\platform-tools\fastboot.exe",
             "$root\platform-tools\AdbWinApi.dll",
             "$root\platform-tools\AdbWinUsbApi.dll",
-            "$root\resources\expected ui\pc\01_pc_main_four_button_workflow.png",
-            "$root\resources\expected ui\pc\02_popup_device_check_guide.png",
-            "$root\resources\expected ui\pc\03_popup_install_apk.png",
-            "$root\resources\expected ui\pc\04_popup_login_get_token.png",
-            "$root\resources\expected ui\pc\05_popup_phone_guide.png",
-            "$root\resources\expected ui\pc\mibu_app_icon.png",
-            "$root\resources\expected ui\pc\mibu_app_icon.ico",
+            "$root\resources\logo.png",
+            "$root\resources\live_ui\mibu_logo.png",
+            "$root\resources\live_ui\mibu_hood.png",
+            "$root\resources\live_ui\mibu_app_icon.ico",
+            "$root\resources\live_ui\firefox.png",
+            "$root\resources\live_ui\chrome.png",
+            "$root\resources\guide\index.html",
             "$root\resources\expected ui\android\approved_android_ui_baseline_sheet.svg",
             "$root\resources\expected ui\android\README.md",
             "$root\SHA256SUMS.txt"

@@ -12,6 +12,7 @@ import java.time.ZonedDateTime
 class StartWaitingActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
     private val stateStore by lazy { MibuStateStore(this) }
+    private val logStore by lazy { LogStore(this) }
     private val proofNonce by lazy { ProofNonce.from(intent) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,6 +22,7 @@ class StartWaitingActivity : Activity() {
         val currentState = stateStore.reconcileTimingState(nowChina)
         if (currentState.blocksNewWaitingCycle()) {
             Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${currentState.name} nonce=$proofNonce")
+            logStore.add("Start Waiting skipped: ${currentState.name}")
             if (currentState.isTimingComplete()) {
                 startCompletedProofService()
             }
@@ -31,6 +33,7 @@ class StartWaitingActivity : Activity() {
 
         if (!tokenStore.hasRequiredCaptures()) {
             Log.w(LOG_TAG, "WAITING_REJECTED_MISSING_CAPTURES nonce=$proofNonce")
+            logStore.add("Start Waiting needs two fresh browser captures")
             Toast.makeText(this, "Waiting was not armed. Import fresh Firefox and Chrome token captures first.", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, TokenImportActivity::class.java))
             finish()
@@ -72,6 +75,7 @@ class StartWaitingActivity : Activity() {
             val waitMinutes = (waitMs + 59_999L) / 60_000L
             val freshMinutes = tokenStore.minutesRemaining()
             Log.w(LOG_TAG, "WAITING_REJECTED_TOKEN_EXPIRY waitMs=$waitMs freshnessMs=$freshnessMs nonce=$proofNonce")
+            logStore.add("Start Waiting paused: captures expire before target window")
             Toast.makeText(
                 this,
                 "Tokens will expire before the timing window. Window is about $waitMinutes min away; tokens have about $freshMinutes min left. Capture fresh tokens closer to Beijing midnight.",
@@ -90,6 +94,7 @@ class StartWaitingActivity : Activity() {
             startWaitingService()
             val marker = if (resuming) "WAITING_ACTIVITY_RESUMED" else "WAITING_ACTIVITY_STARTED"
             Log.i(LOG_TAG, "$marker targetMidnight=${targetMidnight.toInstant().toEpochMilli()} nonce=$proofNonce")
+            logStore.add(if (resuming) "Waiting service resumed" else "Waiting service armed")
             Toast.makeText(
                 this,
                 if (resuming) "MIBU is resuming the saved waiting service without resetting reached windows."
@@ -102,6 +107,7 @@ class StartWaitingActivity : Activity() {
                 stateStore.clearWaitingTarget()
             }
             Log.e(LOG_TAG, "WAITING_START_FAILED nonce=$proofNonce", exc)
+            logStore.add("Waiting service failed: ${exc.message ?: "unknown error"}")
             Toast.makeText(this, "Could not start waiting service: ${exc.message}", Toast.LENGTH_LONG).show()
         }
 

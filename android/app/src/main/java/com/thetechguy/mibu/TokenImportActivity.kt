@@ -13,13 +13,12 @@ import android.util.Log
 import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 
 class TokenImportActivity : Activity() {
     private val tokenStore by lazy { TokenStore(this) }
+    private val logStore by lazy { LogStore(this) }
     private val proofNonce by lazy { ProofNonce.from(intent) }
     private lateinit var serviceInput: EditText
     private lateinit var popInput: EditText
@@ -37,6 +36,7 @@ class TokenImportActivity : Activity() {
 
         if (TokenStore.isAcceptableToken(serviceToken) && TokenStore.isAcceptableToken(popToken)) {
             tokenStore.saveCaptures(serviceToken, popToken)
+            logStore.add("Two approved browser captures imported from PC")
             Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED nonce=$proofNonce")
             showImported("Two captures imported")
             return
@@ -44,6 +44,7 @@ class TokenImportActivity : Activity() {
 
         if (TokenStore.isAcceptableToken(pushedToken)) {
             tokenStore.saveSession(pushedToken)
+            logStore.add("Service capture imported from PC; second capture still required")
             Log.i(LOG_TAG, "SERVICE_CAPTURE_IMPORTED nonce=$proofNonce")
             showImported("Service token imported")
             return
@@ -93,31 +94,12 @@ class TokenImportActivity : Activity() {
     }
 
     private fun buildShell(title: String, build: (LinearLayout) -> Unit) {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(22), dp(18), dp(18))
-            setBackgroundColor(Color.rgb(4, 6, 17))
+        mibuScreen {
+            addView(mibuBrandHeader(onBack = { finish() }))
+            addView(mibuHeading(title, "Secure, explicit handoff from MIBU PC Helper."))
+            build(this)
+            addView(footer())
         }
-        setContentView(ScrollView(this).apply { addView(root) })
-        root.addView(ImageView(this).apply {
-            setImageResource(R.drawable.mibu_welcome_hero)
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            background = rounded(Color.rgb(8, 12, 30), dp(22), Color.rgb(40, 62, 102))
-        }, fullWidth(dp(14)).apply { height = dp(340) })
-        root.addView(TextView(this).apply {
-            text = title
-            textSize = 28f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-        }, fullWidth(dp(6)))
-        root.addView(TextView(this).apply {
-            text = "by the THETECHGUY TOOL team"
-            textSize = 13f
-            setTextColor(Color.rgb(166, 177, 205))
-            gravity = Gravity.CENTER
-        }, fullWidth(dp(12)))
-        build(root)
     }
 
     private fun saveTwoCaptures() {
@@ -128,6 +110,7 @@ class TokenImportActivity : Activity() {
             !TokenStore.isAcceptableToken(pop) -> statusText.text = "Chrome/pop token is missing or invalid."
             else -> {
                 tokenStore.saveCaptures(service, pop)
+                logStore.add("Two approved browser captures imported manually")
                 Log.i(LOG_TAG, "TWO_CAPTURES_IMPORTED_MANUALLY nonce=$proofNonce")
                 startActivity(Intent(this, MainActivity::class.java))
                 finish()
