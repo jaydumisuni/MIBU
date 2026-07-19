@@ -81,11 +81,13 @@ def asset_roots() -> list[Path]:
             root,
             root / "dist",
             root / "resources",
+            root / "resources" / "mibu_components",
             root / "resources" / "expected ui",
             root / "resources" / "expected ui" / "pc",
             root / "_internal",
             root / "_internal" / "dist",
             root / "_internal" / "resources",
+            root / "_internal" / "resources" / "mibu_components",
             root / "_internal" / "resources" / "expected ui",
             root / "_internal" / "resources" / "expected ui" / "pc",
         ])

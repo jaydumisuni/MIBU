@@ -1,0 +1,35 @@
+MIBU work log - 2026-07-19
+
+- Checked current git state and confirmed local branch is main with origin set to https://github.com/jaydumisuni/MIBU.
+- Rebuilt the Android app and fixed a TokenImportActivity compile error caused by a wrong layout helper call.
+- Replaced the PC helper's running window with real Qt widgets instead of a full screenshot background:
+  - Live sidebar branding, logo, progress/help/status areas.
+  - Live Device Check, Install APK, Login & Get Token, and Phone Guide buttons.
+  - Live ADB command input and output console.
+  - Real Qt popups with normal clickable buttons and close controls.
+- Kept the existing ADB/install/token/waiting action logic and wired it into the new live Qt UI.
+- Forced the PC runtime window icon to use the approved `logo 1_transparent.png`.
+- Added component image assets for the Android app UI.
+- Rebuilt Android MainActivity and TokenImportActivity as live native layouts using the MIBU artwork instead of screenshot-only screens.
+- Converted Android InstructionsActivity and LogsActivity from image-hotspot screens to live card/button layouts.
+- Truncated long log lines in LogsActivity so token-heavy log entries do not break the layout.
+- Ran Android build and unit tests successfully.
+- Ran PC helper Python compile checks successfully.
+- Ran PC helper unit tests successfully: 31 tests passed.
+- Ran source review contracts successfully:
+  - tools/review_contracts.py
+  - tools/review_proof_v2.py
+  - tools/validate_android_ui_baseline.py
+  - pc-helper/qt6/validate_ui_contract.py
+- Built the Windows release package successfully at `pc-helper/release/MIBU-PC-Helper`.
+- Installed the final bundled APK to the connected Xiaomi phone through ADB.
+- Verified the connected phone:
+  - Serial: 73e68d0e226c
+  - Manufacturer: Xiaomi
+  - Model: 23076RA4BC
+  - Installed MIBU versionName: 0.2.0-dev
+- Opened MIBU on the phone through ADB successfully.
+- Tested in-app taps for Logs and Instructions pages; no fatal Android crash logs appeared.
+- The optional audio files were not found in this repo path, so the release build could not bundle them:
+  - TTG_v4_clean_connected_success.wav
+  - TTG_v4_clean_speaker_turn_on.wav

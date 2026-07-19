@@ -6,9 +6,25 @@ import time
 import webbrowser
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtCore import Qt, QObject, QThread, QTimer, Signal
 from PySide6.QtGui import QFont, QIcon, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPlainTextEdit,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 import mibu_pc_helper_v2 as base_ui
 from mibu_actions import (
@@ -19,6 +35,9 @@ from mibu_actions import (
     install_package,
     launch_phone_app,
     launch_token_import,
+    push_session_to_phone,
+    push_two_tokens_to_phone,
+    run_adb_user_command,
     reboot_to_fastboot,
     start_phone_waiting,
 )
@@ -26,6 +45,7 @@ from mibu_pc_helper_v2 import Window as V2Window
 from mibu_pc_helper_v2 import find_asset
 from mibu_pc_helper_v2 import WorkflowDialog as V2WorkflowDialog
 from mibu_pc_helper_v2 import LOGIN_URL
+from mibu_pc_helper_v2 import open_or_install_browser
 from mibu_pc_helper_v2 import required_asset
 from mibu_status import query_phone_status
 from ui_geometry import POPUP_CLOSE_RECT, SCREENS
@@ -119,13 +139,196 @@ class WorkflowDialog(V2WorkflowDialog):
         )
 
 
+class LiveDialog(QDialog):
+    def __init__(self, parent: "Window", title: str, subtitle: str, icon_text: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setWindowIcon(parent.windowIcon())
+        self.setModal(True)
+        self.resize(520, 500)
+        self.setMinimumSize(460, 360)
+        self.status = QLabel("Status appears here while this step runs.")
+        self.status.setObjectName("dialogStatusBox")
+        self.status.setWordWrap(True)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(26, 24, 26, 20)
+        root.setSpacing(14)
+
+        title_row = QHBoxLayout()
+        mark = QLabel(icon_text)
+        mark.setObjectName("dialogMark")
+        mark.setAlignment(Qt.AlignCenter)
+        mark.setFixedSize(62, 62)
+        title_box = QVBoxLayout()
+        heading = QLabel(title)
+        heading.setObjectName("dialogTitle")
+        sub = QLabel(subtitle)
+        sub.setObjectName("muted")
+        sub.setWordWrap(True)
+        title_box.addWidget(heading)
+        title_box.addWidget(sub)
+        close = QPushButton("x")
+        close.setObjectName("closeButton")
+        close.setFixedSize(32, 32)
+        close.clicked.connect(self.reject)
+        title_row.addWidget(mark)
+        title_row.addLayout(title_box, 1)
+        title_row.addWidget(close)
+        root.addLayout(title_row)
+
+        self.steps = QVBoxLayout()
+        self.steps.setSpacing(8)
+        root.addLayout(self.steps)
+        root.addWidget(self.status)
+        self.body = QVBoxLayout()
+        self.body.setSpacing(10)
+        root.addLayout(self.body)
+        self.actions = QHBoxLayout()
+        self.actions.setSpacing(12)
+        root.addLayout(self.actions)
+
+    def add_step(self, number: int, text: str) -> None:
+        row = QLabel(f"{number}.  {text}")
+        row.setObjectName("dialogStep")
+        self.steps.addWidget(row)
+
+    def add_action(self, label: str, callback, primary: bool = False) -> QPushButton:
+        button = QPushButton(label)
+        button.setObjectName("primaryButton" if primary else "secondaryButton")
+        button.setCursor(Qt.PointingHandCursor)
+        button.clicked.connect(callback)
+        self.actions.addWidget(button)
+        return button
+
+    def set_status(self, message: str) -> None:
+        self.status.setText(message.strip() or "Done")
+
+
 class Window(V2Window):
+    def _build_ui(self) -> None:
+        root = QWidget()
+        self.setCentralWidget(root)
+        shell = QHBoxLayout(root)
+        shell.setContentsMargins(14, 14, 14, 14)
+        shell.setSpacing(14)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(248)
+        side = QVBoxLayout(sidebar)
+        side.setContentsMargins(18, 18, 18, 18)
+        side.setSpacing(14)
+        logo = QLabel()
+        logo.setAlignment(Qt.AlignCenter)
+        logo.setFixedSize(210, 210)
+        logo.setPixmap(QPixmap(required_asset("logo 1_transparent.png")).scaled(208, 208, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        side.addWidget(logo)
+        brand = QLabel("MIBU")
+        brand.setObjectName("brand")
+        brand.setAlignment(Qt.AlignCenter)
+        side.addWidget(brand)
+        byline = QLabel("by THETECHGUY TOOL")
+        byline.setObjectName("muted")
+        byline.setAlignment(Qt.AlignCenter)
+        side.addWidget(byline)
+        progress_title = QLabel("Setup Progress")
+        progress_title.setObjectName("sectionTitle")
+        side.addWidget(progress_title)
+        self.progress_label = QLabel("1  Device Check\n2  Install APK\n3  Login & Get Token\n4  Phone Guide")
+        self.progress_label.setObjectName("progressList")
+        side.addWidget(self.progress_label)
+        help_card = QLabel("Need Help?\nUse Device Check for USB/RSA prompts, then Install APK, Login & Get Token, and Phone Guide.")
+        help_card.setObjectName("helpCard")
+        help_card.setWordWrap(True)
+        side.addWidget(help_card, 1)
+        self.system_label = QLabel("All systems checking...")
+        self.system_label.setObjectName("systemOk")
+        side.addWidget(self.system_label)
+        shell.addWidget(sidebar)
+
+        main = QFrame()
+        main.setObjectName("mainPanel")
+        body = QVBoxLayout(main)
+        body.setContentsMargins(22, 22, 22, 22)
+        body.setSpacing(14)
+        top = QHBoxLayout()
+        copy = QVBoxLayout()
+        kicker = QLabel("PC HELPER SETUP WIZARD")
+        kicker.setObjectName("kicker")
+        title = QLabel("Welcome to MIBU PC Helper")
+        title.setObjectName("heroTitle")
+        desc = QLabel("This tool prepares your device, installs MIBU, guides login, and hands off to your phone so the app can take over.")
+        desc.setObjectName("muted")
+        desc.setWordWrap(True)
+        copy.addWidget(kicker)
+        copy.addWidget(title)
+        copy.addWidget(desc)
+        top.addLayout(copy, 2)
+        hero = QLabel()
+        hero.setObjectName("heroArt")
+        hero.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        hero_path = find_asset("mibu_pc_hood_hero.png", "mibu_hood_hero.png", "assint.png")
+        if hero_path:
+            hero.setPixmap(QPixmap(hero_path).scaled(360, 220, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        top.addWidget(hero, 1)
+        body.addLayout(top)
+
+        self.step_cards: dict[str, QLabel] = {}
+        for name, icon, text in (
+            ("Device Check", "[1]", "Check ADB, guide USB debugging, and confirm RSA authorization."),
+            ("Install APK", "[2]", "Push the bundled MIBU.apk to the phone and open it."),
+            ("Login & Get Token", "[3]", "Open browser login, then explicitly paste/push approved captures."),
+            ("Phone Guide", "[4]", "Continue the waiting stage inside the Android app."),
+        ):
+            card = QPushButton(f"{icon}  {name}\n{text}")
+            card.setObjectName("stepButton")
+            card.setCursor(Qt.PointingHandCursor)
+            card.clicked.connect({
+                "Device Check": self.show_device_check,
+                "Install APK": self.show_install_apk,
+                "Login & Get Token": self.show_login_token,
+                "Phone Guide": self.show_phone_guide,
+            }[name])
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            card.setMinimumHeight(74)
+            self.buttons[name] = card
+            body.addWidget(card)
+
+        self.status = QLabel()
+        self.status.setObjectName("statusStrip")
+        self.status.setWordWrap(True)
+        body.addWidget(self.status)
+        self.time_label = QLabel()
+        self.time_label.setObjectName("statusStrip")
+        body.addWidget(self.time_label)
+        command_row = QHBoxLayout()
+        self.command_input = QLineEdit()
+        self.command_input.setObjectName("commandInput")
+        self.command_input.setPlaceholderText("ADB command, e.g. shell getprop ro.product.model")
+        self.command_input.returnPressed.connect(self.run_custom_adb_command)
+        self.command_button = QPushButton("Run")
+        self.command_button.setObjectName("secondaryButton")
+        self.command_button.clicked.connect(self.run_custom_adb_command)
+        command_row.addWidget(self.command_input, 1)
+        command_row.addWidget(self.command_button)
+        body.addLayout(command_row)
+        self.output = QPlainTextEdit()
+        self.output.setObjectName("floatingOutput")
+        self.output.setReadOnly(True)
+        self.output.setMaximumBlockCount(300)
+        self.output.setMinimumHeight(94)
+        body.addWidget(self.output)
+        shell.addWidget(main, 1)
+
     def __init__(self) -> None:
         # Inherited Device/Install/Login methods resolve WorkflowDialog from the
         # base module, so replace that one class with the reviewed v3 geometry.
         base_ui.WorkflowDialog = WorkflowDialog
         super().__init__()
-        self.setWindowIcon(QIcon(find_asset("logo 1_transparent.png") or required_asset("mibu_app_icon.png")))
+        self.setWindowTitle("MIBU PC Helper - THETECHGUY TOOL")
+        self.resize(1120, 720)
+        self.setMinimumSize(920, 620)
+        self.setWindowIcon(QIcon(required_asset("logo 1_transparent.png")))
         self._assistant_phase = 0
         self._assistant_thread: QThread | None = None
         self._assistant_worker: AssistantWorker | None = None
@@ -159,7 +362,6 @@ class Window(V2Window):
         self._theme()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
-        super().resizeEvent(event)
         self._position_assistant()
 
     def _position_assistant(self) -> None:
@@ -186,12 +388,49 @@ class Window(V2Window):
         self._position_assistant()
 
     def _theme(self) -> None:
-        super()._theme()
-        self.setStyleSheet(self.styleSheet() + """
+        self.setStyleSheet("""
+        QWidget { background:#040711; color:#f5f7fb; font-family:'Segoe UI',Arial; }
+        QFrame#sidebar, QFrame#mainPanel { background:rgba(7,12,26,245); border:1px solid #233653; border-radius:18px; }
+        QLabel#brand { color:#ffffff; font-size:38px; font-weight:300; letter-spacing:0; }
+        QLabel#kicker { color:#ff8a24; font-size:13px; font-weight:800; }
+        QLabel#heroTitle { color:#ffffff; font-size:30px; font-weight:800; }
+        QLabel#muted { color:#b7c0d6; font-size:13px; }
+        QLabel#sectionTitle { color:#eef4ff; font-size:12px; font-weight:800; text-transform:uppercase; }
+        QLabel#progressList, QLabel#helpCard, QLabel#systemOk, QLabel#statusStrip, QLabel#dialogStatusBox, QPlainTextEdit#floatingOutput, QLineEdit#commandInput {
+            background:rgba(9,16,32,235); border:1px solid #263957; border-radius:12px; color:#dce7ff; padding:10px;
+        }
+        QLabel#systemOk { color:#39ff87; }
+        QPushButton#stepButton {
+            text-align:left; background:rgba(10,15,32,235); border:1px solid #2f4162; border-radius:14px;
+            color:#f6f8ff; padding:12px 18px; font-size:15px; font-weight:650;
+        }
+        QPushButton#stepButton:hover, QPushButton#stepButtonActive {
+            border:2px solid #ff7a2b; background:rgba(22,18,48,245);
+        }
+        QPlainTextEdit#floatingOutput { font-family:Consolas; font-size:11px; }
+        QLineEdit#commandInput { font-size:12px; }
+        QPushButton#primaryButton, QPushButton#secondaryButton, QPushButton#assistantButton {
+            border-radius:13px; color:white; padding:10px 16px; min-height:36px; font-weight:750;
+        }
+        QPushButton#primaryButton, QPushButton#assistantButton {
+            background:qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff7a2b, stop:.48 #c546ff, stop:1 #218bff);
+            border:1px solid #ffffff;
+        }
+        QPushButton#secondaryButton { background:rgba(13,22,40,245); border:1px solid #48628c; }
+        QPushButton#closeButton { background:transparent; border:0; color:#dce7ff; font-size:18px; }
+        QLabel#dialogTitle { color:#ffffff; font-size:24px; font-weight:800; }
+        QLabel#dialogMark { border:2px solid #218bff; border-radius:31px; color:#53a8ff; font-size:24px; font-weight:800; background:rgba(8,18,38,235); }
+        QLabel#dialogStep { color:#dce7ff; font-size:14px; padding:7px 10px; background:rgba(8,14,28,190); border:1px solid #243653; border-radius:10px; }
+        QDialog { background:#070b16; }
         #assistantBubble { background:rgba(6,11,21,225); border:1px solid #53a8ff; border-radius:12px; color:#d9e6fb; padding:8px; font-size:11px; }
-        #assistantButton { background:qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff7a2b, stop:.48 #c546ff, stop:1 #218bff); border:1px solid #ffffff; border-radius:13px; color:white; font-weight:700; padding:8px 12px; }
         #assistantButton:disabled { background:#1b2437; border:1px solid #33425c; color:#8fa3c4; }
         """)
+
+    def _set_active(self, name: str) -> None:
+        for key, button in self.buttons.items():
+            button.setObjectName("stepButtonActive" if key == name else "stepButton")
+            button.style().unpolish(button)
+            button.style().polish(button)
 
     def _assistant_apk_path(self) -> str:
         return find_asset("MIBU.apk", "app-debug.apk")
@@ -241,15 +480,126 @@ class Window(V2Window):
         self._assistant_worker = None
         self.assistant_button.setEnabled(True)
 
+    def _report_dialog(self, dialog: LiveDialog, result: Result) -> None:
+        self._log(result.message)
+        dialog.set_status(result.message)
+        self._play(result.ok)
+
+    def show_device_check(self) -> None:
+        self._set_active("Device Check")
+        dialog = LiveDialog(self, "Device Check Guide", "Get ADB online before continuing.", "1")
+        for number, text in (
+            (1, "Connect phone by USB"),
+            (2, "Enable USB debugging"),
+            (3, "Accept Danger warning and tap OK"),
+            (4, "Accept RSA prompt and Always allow"),
+        ):
+            dialog.add_step(number, text)
+
+        def recheck() -> None:
+            result = check_device_ready()
+            self.state.device_ok = result.ok
+            self._update_status()
+            self._report_dialog(dialog, result)
+
+        dialog.add_action("Open ADB Help", lambda: webbrowser.open("https://developer.android.com/tools/adb"))
+        dialog.add_action("Recheck Device", recheck, True)
+        recheck()
+        dialog.exec()
+
+    def show_install_apk(self) -> None:
+        self._set_active("Install APK")
+        dialog = LiveDialog(self, "Install MIBU.apk", "Push the bundled Android app to the connected phone.", "2")
+        for number, text in (
+            (1, "ADB found and device online"),
+            (2, "Bundled APK located"),
+            (3, "Installing with adb install -r"),
+            (4, "Opening MIBU on phone"),
+        ):
+            dialog.add_step(number, text)
+        selected = {"path": find_asset("MIBU.apk", "app-debug.apk")}
+
+        def browse() -> None:
+            path, _ = QFileDialog.getOpenFileName(self, "Select MIBU APK", "", "Android APK (*.apk)")
+            if path:
+                selected["path"] = path
+                dialog.set_status(f"Selected APK:\n{path}")
+
+        def install() -> None:
+            path = selected["path"]
+            if not path:
+                self._report_dialog(dialog, Result(False, "No APK found. Build Android or browse to the APK."))
+                return
+            result = install_package(path)
+            self.state.apk_ok = result.ok
+            self._update_status()
+            self._report_dialog(dialog, result)
+            if result.ok:
+                opened = launch_phone_app()
+                self._log("Open MIBU:\n" + opened.message)
+                dialog.set_status(result.message + "\n\nOpen MIBU:\n" + opened.message)
+
+        dialog.add_action("Browse APK", browse)
+        dialog.add_action("Install APK", install, True)
+        dialog.exec()
+
+    def show_login_token(self) -> None:
+        self._set_active("Login & Get Token")
+        dialog = LiveDialog(self, "Login & Get Token", "Use your normal browser, then paste/import the token explicitly.", "3")
+        for number, text in (
+            (1, "Open Chrome, Firefox, or Brave"),
+            (2, "Log into Xiaomi yourself"),
+            (3, "Paste token/session manually"),
+            (4, "Push token to MIBU on phone"),
+        ):
+            dialog.add_step(number, text)
+
+        def open_browser() -> None:
+            chrome = open_or_install_browser("chrome")
+            firefox = open_or_install_browser("firefox")
+            brave = open_or_install_browser("brave")
+            dialog.set_status(f"{chrome}\n{firefox}\n{brave}\n\nMIBU does not ask for your password.")
+            self._log(dialog.status.text())
+
+        def paste_one() -> None:
+            token, accepted = QInputDialog.getText(self, "Token Import", "Paste token/session:", QLineEdit.Password)
+            if not accepted:
+                return
+            result = push_session_to_phone(token)
+            self.state.tokens_ok = result.ok
+            self._update_status()
+            self._report_dialog(dialog, result)
+
+        def paste_two() -> None:
+            service, accepted = QInputDialog.getText(self, "Firefox Service Token", "Paste Firefox new_bbs_serviceToken:", QLineEdit.Password)
+            if not accepted:
+                return
+            pop, accepted = QInputDialog.getText(self, "Chrome Pop Token", "Paste Chrome popRunToken:", QLineEdit.Password)
+            if not accepted:
+                return
+            result = push_two_tokens_to_phone(service, pop)
+            self.state.tokens_ok = result.ok
+            self._update_status()
+            self._report_dialog(dialog, result)
+
+        dialog.add_action("Open Browser", open_browser)
+        dialog.add_action("Paste One", paste_one)
+        dialog.add_action("Paste Two", paste_two, True)
+        dialog.exec()
+
     def show_phone_guide(self) -> None:
         self._set_active("Phone Guide")
-        dialog = WorkflowDialog(self, "Continue on Phone", SCREENS["phone"])
-        dialog.setWindowIcon(self.windowIcon())
+        dialog = LiveDialog(self, "Continue on Phone", "After login and token handoff, finish from the Android app.", "4")
+        for number, text in (
+            (1, "Open MIBU on the phone"),
+            (2, "Confirm session imported"),
+            (3, "Check account status"),
+            (4, "Keep mobile data on and tap Start Waiting"),
+        ):
+            dialog.add_step(number, text)
 
         def report(result: Result) -> None:
-            self._log(result.message)
-            dialog.set_status(result.message)
-            self._play(result.ok)
+            self._report_dialog(dialog, result)
 
         def open_app() -> None:
             report(launch_phone_app())
@@ -315,17 +665,17 @@ class Window(V2Window):
             self._log(info.message)
             dialog.set_status("Fastboot detected and phone timing state was proven complete. Continue with the official Mi Unlock Tool.")
 
-        dialog.add_hotspot("Open MIBU", open_app)
-        dialog.add_hotspot("Start Waiting", start_wait)
-        dialog.add_hotspot("Verify Fastboot", verify_fastboot)
-        dialog.add_hotspot("Done", dialog.accept)
+        dialog.add_action("Open MIBU", open_app)
+        dialog.add_action("Start Waiting", start_wait, True)
+        dialog.add_action("Verify Fastboot", verify_fastboot)
+        dialog.add_action("Done", dialog.accept)
         dialog.exec()
 
 
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("MIBU PC Helper")
-    app.setWindowIcon(QIcon(find_asset("logo 1_transparent.png") or required_asset("mibu_app_icon.png")))
+    app.setWindowIcon(QIcon(required_asset("logo 1_transparent.png")))
     app.setFont(QFont("Segoe UI", 9))
     try:
         window = Window()
