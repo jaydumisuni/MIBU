@@ -86,3 +86,5 @@ Follow-up work - 2026-07-19
 - Final release SHA-256: EXE `8b408c045805fd90f53b12150178b4849bac351a8bd51b4d8fc9cc0a4618115a`; APK `78ef46630e696b4e888835e93b92b3272520b06b51553a12cbed95e8076d58c8`.
 - Launched the final packaged EXE from the release folder. It remained responsive, exposed a nonzero Windows handle, showed `MIBU PC Helper - THETECHGUY TOOL`, and reported file/product version `0.2.0`.
 - Final phone verification remains pending because `adb devices -l` is empty. The code does not fabricate token captures or mark the timer armed without correlated proof from a connected phone.
+- Confirmed `origin/main` had not advanced beyond local base commit `e1f9c2e` before publishing.
+- Committed the complete live-workflow rebuild as `d365f98` (`Rebuild MIBU as live guided workflow`) and pushed it successfully to `https://github.com/jaydumisuni/MIBU` on `main`.
