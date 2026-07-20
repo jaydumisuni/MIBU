@@ -33,12 +33,17 @@ class CommunityCheckActivity : Activity() {
                 startActivity(Intent(this@CommunityCheckActivity, TokenImportActivity::class.java))
             }.root)
             val sessionButtons = LinearLayout(this@CommunityCheckActivity).apply { orientation = LinearLayout.HORIZONTAL }
-            val replace = mibuAction(R.drawable.mibu_icon_account, "Replace Session", "Import fresh", MibuColors.orange) {
+            val replaceAction = mibuAction(R.drawable.mibu_icon_account, "Replace Session", "", MibuColors.orange) {
                 startActivity(Intent(this@CommunityCheckActivity, TokenImportActivity::class.java))
-            }.root
-            val clear = mibuAction(R.drawable.mibu_icon_info, "Clear Session", "Remove saved", MibuColors.red) { confirmClearSession() }.root
-            sessionButtons.addView(replace, LinearLayout.LayoutParams(0, dp(62), 1f).apply { setMargins(0, 0, dp(4), 0) })
-            sessionButtons.addView(clear, LinearLayout.LayoutParams(0, dp(62), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+            }
+            val clearAction = mibuAction(R.drawable.mibu_icon_info, "Clear Session", "", MibuColors.red) { confirmClearSession() }
+            for (action in listOf(replaceAction, clearAction)) {
+                action.title.textSize = 12f
+                action.title.maxLines = 1
+                action.value.visibility = android.view.View.GONE
+            }
+            sessionButtons.addView(replaceAction.root, LinearLayout.LayoutParams(0, dp(58), 1f).apply { setMargins(0, 0, dp(4), 0) })
+            sessionButtons.addView(clearAction.root, LinearLayout.LayoutParams(0, dp(58), 1f).apply { setMargins(dp(4), 0, 0, 0) })
             addView(sessionButtons)
 
             addView(mibuSection("Notifications & Alerts"))

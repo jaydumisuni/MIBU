@@ -15,7 +15,9 @@ from dependency_check import browser_path
 
 BEIJING_ZONE = ZoneInfo("Asia/Shanghai")
 TARGET_TIME = time(23, 59, 58, 600000)
-LOGIN_URL = "https://account.xiaomi.com/"
+# Xiaomi Community establishes the cookies used by the documented handoff;
+# the generic account portal can authenticate without issuing them.
+LOGIN_URL = "https://c.mi.com/global/"
 WINGET_BROWSER_IDS = {"chrome": "Google.Chrome", "firefox": "Mozilla.Firefox"}
 
 
@@ -40,6 +42,16 @@ def classify_assistant_intent(message: str) -> str:
         return "install_mibu"
     if "open" in words and "mibu" in words:
         return "open_mibu"
+    if "mobile" in words and "data" in words and ({"on", "enable", "start"} & words):
+        return "mobile_data_on"
+    if "mobile" in words and "data" in words and ({"off", "disable", "stop"} & words):
+        return "mobile_data_off"
+    if ("wifi" in words or "wi-fi" in clean) and ({"on", "enable", "start"} & words):
+        return "wifi_on"
+    if ("wifi" in words or "wi-fi" in clean) and ({"off", "disable", "stop"} & words):
+        return "wifi_off"
+    if "network" in words or "mobile data" in clean:
+        return "network_status"
     if "status" in words or "what is happening" in clean:
         return "phone_summary"
     if (

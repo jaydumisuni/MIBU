@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import java.time.Duration
 import java.time.ZonedDateTime
 
 class StartWaitingActivity : Activity() {
@@ -33,6 +32,7 @@ class StartWaitingActivity : Activity() {
 
         if (!tokenStore.hasRequiredCaptures()) {
             Log.w(LOG_TAG, "WAITING_REJECTED_MISSING_CAPTURES nonce=$proofNonce")
+            Log.w(SERVICE_PROOF_TAG, "WAITING_SERVICE_REJECTED_MISSING_CAPTURES nonce=$proofNonce")
             logStore.add("Start Waiting needs two fresh browser captures")
             Toast.makeText(this, "Waiting was not armed. Import fresh Firefox and Chrome token captures first.", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, TokenImportActivity::class.java))
@@ -40,73 +40,40 @@ class StartWaitingActivity : Activity() {
             return
         }
 
-        val resuming = currentState == VerificationState.WAITING_ARMED
-        val targetMidnight = if (resuming) {
-            stateStore.waitingTargetMidnight() ?: run {
-                Log.e(LOG_TAG, "WAITING_RESUME_REJECTED_MISSING_TARGET nonce=$proofNonce")
-                stateStore.setVerificationState(VerificationState.UNKNOWN)
-                Toast.makeText(this, "The saved waiting target is missing. Import fresh captures and start again.", Toast.LENGTH_LONG).show()
-                returnToDashboard()
-                return
-            }
-        } else {
-            MibuLane.nextTargetMidnight(nowChina)
-        }
-
-        val remainingLanes = if (resuming) {
-            stateStore.lanes().filter { it.status == LaneStatus.ARMED }
-        } else {
-            MibuLane.defaultLanes()
-        }
-        if (remainingLanes.isEmpty()) {
-            val reconciled = stateStore.reconcileTimingState(nowChina)
-            Log.i(LOG_TAG, "WAITING_ALREADY_COMPLETE state=${reconciled.name} nonce=$proofNonce")
-            if (reconciled.isTimingComplete()) {
-                startCompletedProofService()
-            }
+        if (stateStore.serviceRunning()) {
+            Log.i(LOG_TAG, "WAITING_ALREADY_RUNNING state=${currentState.name} nonce=$proofNonce")
+            Toast.makeText(this, "The Xiaomi request service is already checking or waiting.", Toast.LENGTH_SHORT).show()
             returnToDashboard()
             return
         }
 
-        val latestTarget = remainingLanes.maxOf { it.targetTimeForMidnight(targetMidnight) }
-        val waitMs = Duration.between(nowChina, latestTarget).toMillis().coerceAtLeast(0L)
-        val freshnessMs = tokenStore.millisRemaining()
-        if (waitMs > freshnessMs) {
-            val waitMinutes = (waitMs + 59_999L) / 60_000L
-            val freshMinutes = tokenStore.minutesRemaining()
-            Log.w(LOG_TAG, "WAITING_REJECTED_TOKEN_EXPIRY waitMs=$waitMs freshnessMs=$freshnessMs nonce=$proofNonce")
-            logStore.add("Start Waiting paused: captures expire before target window")
-            Toast.makeText(
-                this,
-                "Tokens will expire before the timing window. Window is about $waitMinutes min away; tokens have about $freshMinutes min left. Capture fresh tokens closer to Beijing midnight.",
-                Toast.LENGTH_LONG
-            ).show()
-            startActivity(Intent(this, TokenImportActivity::class.java))
-            finish()
-            return
-        }
+        val resuming = currentState == VerificationState.WAITING_ARMED ||
+            currentState == VerificationState.PREFLIGHT_CHECKING ||
+            currentState == VerificationState.REQUESTS_RUNNING
+        val targetMidnight = stateStore.waitingTargetMidnight()
+            ?.takeIf { resuming }
+            ?: MibuLane.nextTargetMidnight(nowChina)
 
-        if (!resuming) {
-            stateStore.armWaiting(targetMidnight)
-        }
+        // Only the service may promote this to WAITING_ARMED, after live Xiaomi,
+        // cellular-network, token-freshness and server-clock checks all pass.
+        stateStore.beginPreflight(targetMidnight)
 
         try {
             startWaitingService()
             val marker = if (resuming) "WAITING_ACTIVITY_RESUMED" else "WAITING_ACTIVITY_STARTED"
             Log.i(LOG_TAG, "$marker targetMidnight=${targetMidnight.toInstant().toEpochMilli()} nonce=$proofNonce")
-            logStore.add(if (resuming) "Waiting service resumed" else "Waiting service armed")
+            logStore.add(if (resuming) "Xiaomi preflight resumed" else "Xiaomi preflight started")
             Toast.makeText(
                 this,
-                if (resuming) "MIBU is resuming the saved waiting service without resetting reached windows."
-                else "MIBU is starting the waiting service. The PC helper confirms when the service is actually armed.",
+                if (resuming) "MIBU is resuming the saved Xiaomi request cycle."
+                else "Checking Xiaomi eligibility, cellular data and server time before arming.",
                 Toast.LENGTH_SHORT
             ).show()
         } catch (exc: Exception) {
-            if (!resuming) {
-                stateStore.setVerificationState(VerificationState.UNKNOWN)
-                stateStore.clearWaitingTarget()
-            }
+            stateStore.setVerificationState(VerificationState.UNKNOWN)
+            stateStore.setServiceRunning(false)
             Log.e(LOG_TAG, "WAITING_START_FAILED nonce=$proofNonce", exc)
+            Log.e(SERVICE_PROOF_TAG, "WAITING_SERVICE_FAILED nonce=$proofNonce", exc)
             logStore.add("Waiting service failed: ${exc.message ?: "unknown error"}")
             Toast.makeText(this, "Could not start waiting service: ${exc.message}", Toast.LENGTH_LONG).show()
         }
@@ -136,9 +103,14 @@ class StartWaitingActivity : Activity() {
     }
 
     private fun completedMessage(state: VerificationState): String = when (state) {
-        VerificationState.TIMING_WINDOW_REACHED,
         VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION ->
-            "The timing stage is already complete. Continue with PC verification instead of starting a new wait."
+            "Xiaomi has already accepted this request. Continue with Mi Unlock Status instead of starting another cycle."
+        VerificationState.TIMING_WINDOW_REACHED ->
+            "This legacy timing marker is not Xiaomi approval. MIBU will run a fresh verified preflight."
+        VerificationState.QUOTA_LIMIT_REACHED ->
+            "Xiaomi returned application quota limit reached. Keep this result and retry only in the next valid window."
+        VerificationState.BLOCKED_UNTIL_DEADLINE ->
+            "Xiaomi has blocked new requests until the recorded deadline."
         VerificationState.WAIT_TIME_SHOWN ->
             "Mi Unlock already returned a waiting period. Keep that result; do not start another timing cycle."
         VerificationState.ACCOUNT_DEVICE_NOT_ADDED ->
@@ -152,5 +124,6 @@ class StartWaitingActivity : Activity() {
 
     companion object {
         private const val LOG_TAG = "MIBU_WAIT"
+        private const val SERVICE_PROOF_TAG = "MIBU_SERVICE"
     }
 }

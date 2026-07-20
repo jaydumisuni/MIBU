@@ -40,7 +40,16 @@ class MibuStateStore(context: Context) {
         }
         edit.putLong(KEY_TARGET_MIDNIGHT_EPOCH_MS, targetMidnight.toInstant().toEpochMilli())
         edit.putString(KEY_VERIFY, VerificationState.WAITING_ARMED.name)
+        edit.putBoolean(KEY_SERVICE_RUNNING, false)
         edit.apply()
+    }
+
+    fun beginPreflight(targetMidnight: ZonedDateTime) {
+        require(targetMidnight.zone == MibuLane.CHINA_ZONE) { "Waiting target must use Asia/Shanghai" }
+        prefs.edit()
+            .putLong(KEY_TARGET_MIDNIGHT_EPOCH_MS, targetMidnight.toInstant().toEpochMilli())
+            .putString(KEY_VERIFY, VerificationState.PREFLIGHT_CHECKING.name)
+            .apply()
     }
 
     fun waitingTargetMidnight(): ZonedDateTime? {
@@ -49,34 +58,9 @@ class MibuStateStore(context: Context) {
         return Instant.ofEpochMilli(epochMs).atZone(MibuLane.CHINA_ZONE)
     }
 
-    fun reconcileTimingState(nowChina: ZonedDateTime = ZonedDateTime.now(MibuLane.CHINA_ZONE)): VerificationState {
-        val currentVerification = verificationState()
-        if (currentVerification.isAuthoritativeResult()) return currentVerification
-
-        val targetMidnight = waitingTargetMidnight() ?: return currentVerification
-        val normalizedNow = nowChina.withZoneSameInstant(MibuLane.CHINA_ZONE)
-        val edit = prefs.edit()
-        var reached = 0
-        MibuLane.defaultLanes().forEach { lane ->
-            val current = laneStatus(lane.number)
-            val target = lane.targetTimeForMidnight(targetMidnight)
-            val next = if (current == LaneStatus.ARMED && !normalizedNow.isBefore(target)) {
-                LaneStatus.WINDOW_REACHED
-            } else {
-                current
-            }
-            if (next == LaneStatus.WINDOW_REACHED) reached += 1
-            if (next != current) edit.putString(laneKey(lane.number), next.name)
-        }
-
-        val verification = when {
-            reached == MibuLane.defaultLanes().size -> VerificationState.TIMING_WINDOW_REACHED
-            currentVerification.isTimingComplete() -> currentVerification
-            else -> VerificationState.WAITING_ARMED
-        }
-        edit.putString(KEY_VERIFY, verification.name).apply()
-        return verification
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun reconcileTimingState(nowChina: ZonedDateTime = ZonedDateTime.now(MibuLane.CHINA_ZONE)): VerificationState =
+        verificationState()
 
     fun clearWaitingTarget() {
         prefs.edit().remove(KEY_TARGET_MIDNIGHT_EPOCH_MS).apply()
@@ -87,6 +71,7 @@ class MibuStateStore(context: Context) {
         prefs.edit()
             .putString(KEY_VERIFY, state.name)
             .remove(KEY_TARGET_MIDNIGHT_EPOCH_MS)
+            .putBoolean(KEY_SERVICE_RUNNING, false)
             .apply()
     }
 
@@ -94,8 +79,17 @@ class MibuStateStore(context: Context) {
         val edit = prefs.edit()
             .putString(KEY_VERIFY, VerificationState.NOT_STARTED.name)
             .remove(KEY_TARGET_MIDNIGHT_EPOCH_MS)
+            .remove(KEY_SERVER_CLOCK_OFFSET_MS)
+            .putBoolean(KEY_SERVICE_RUNNING, false)
+            .remove(KEY_SERVICE_HEARTBEAT_MS)
         MibuLane.defaultLanes().forEach { lane ->
             edit.putString(laneKey(lane.number), LaneStatus.PENDING.name)
+                .remove(laneMessageKey(lane.number))
+                .remove(laneCodeKey(lane.number))
+                .remove(laneApplyKey(lane.number))
+                .remove(laneDeadlineKey(lane.number))
+                .remove(laneRequestKey(lane.number))
+                .remove(laneResponseKey(lane.number))
         }
         edit.apply()
     }
@@ -114,6 +108,59 @@ class MibuStateStore(context: Context) {
 
     fun laneSummary(): String = lanes().joinToString("\n") { it.summary() }
 
+    fun saveLaneResult(laneNumber: Int, result: XiaomiApiResult, requestedAtMs: Long = 0L, respondedAtMs: Long = 0L) {
+        require(laneNumber in 1..MibuLane.defaultLanes().size) { "Unknown lane number: $laneNumber" }
+        prefs.edit()
+            .putString(laneKey(laneNumber), result.laneStatus().name)
+            .putString(laneMessageKey(laneNumber), result.message.take(MAX_RESULT_MESSAGE))
+            .putInt(laneCodeKey(laneNumber), result.code ?: Int.MIN_VALUE)
+            .putInt(laneApplyKey(laneNumber), result.applyResult ?: Int.MIN_VALUE)
+            .putString(laneDeadlineKey(laneNumber), result.deadline)
+            .putLong(laneRequestKey(laneNumber), requestedAtMs)
+            .putLong(laneResponseKey(laneNumber), respondedAtMs)
+            .apply()
+    }
+
+    fun laneResultSummary(laneNumber: Int): String {
+        val status = laneStatus(laneNumber).name
+        val code = prefs.getInt(laneCodeKey(laneNumber), Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
+        val apply = prefs.getInt(laneApplyKey(laneNumber), Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
+        val deadline = prefs.getString(laneDeadlineKey(laneNumber), "").orEmpty()
+        val message = prefs.getString(laneMessageKey(laneNumber), "").orEmpty()
+        return buildString {
+            append(status)
+            code?.let { append(" code=").append(it) }
+            apply?.let { append(" apply=").append(it) }
+            if (deadline.isNotBlank()) append(" deadline=").append(deadline)
+            if (message.isNotBlank()) append(" ").append(message)
+        }
+    }
+
+    fun setServerClockOffset(offsetMs: Long) {
+        prefs.edit().putLong(KEY_SERVER_CLOCK_OFFSET_MS, offsetMs).apply()
+    }
+
+    fun serverClockOffset(): Long = prefs.getLong(KEY_SERVER_CLOCK_OFFSET_MS, 0L)
+
+    fun setServiceRunning(running: Boolean) {
+        prefs.edit()
+            .putBoolean(KEY_SERVICE_RUNNING, running)
+            .putLong(KEY_SERVICE_HEARTBEAT_MS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun serviceRunning(): Boolean {
+        if (!prefs.getBoolean(KEY_SERVICE_RUNNING, false)) return false
+        val heartbeat = prefs.getLong(KEY_SERVICE_HEARTBEAT_MS, 0L)
+        return heartbeat > 0L && System.currentTimeMillis() - heartbeat < SERVICE_HEARTBEAT_STALE_MS
+    }
+
+    fun heartbeat() {
+        if (prefs.getBoolean(KEY_SERVICE_RUNNING, false)) {
+            prefs.edit().putLong(KEY_SERVICE_HEARTBEAT_MS, System.currentTimeMillis()).apply()
+        }
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -122,7 +169,18 @@ class MibuStateStore(context: Context) {
         private const val KEY_COMMUNITY = "community_state"
         private const val KEY_VERIFY = "verification_state"
         private const val KEY_TARGET_MIDNIGHT_EPOCH_MS = "target_midnight_epoch_ms"
+        private const val KEY_SERVER_CLOCK_OFFSET_MS = "server_clock_offset_ms"
+        private const val KEY_SERVICE_RUNNING = "service_running"
+        private const val KEY_SERVICE_HEARTBEAT_MS = "service_heartbeat_ms"
+        private const val SERVICE_HEARTBEAT_STALE_MS = 15_000L
+        private const val MAX_RESULT_MESSAGE = 220
         private fun laneKey(number: Int): String = "lane_${number}_status"
+        private fun laneMessageKey(number: Int): String = "lane_${number}_message"
+        private fun laneCodeKey(number: Int): String = "lane_${number}_code"
+        private fun laneApplyKey(number: Int): String = "lane_${number}_apply"
+        private fun laneDeadlineKey(number: Int): String = "lane_${number}_deadline"
+        private fun laneRequestKey(number: Int): String = "lane_${number}_request_ms"
+        private fun laneResponseKey(number: Int): String = "lane_${number}_response_ms"
 
         fun parseBootloaderLocked(raw: String): Boolean? = when (raw.trim().lowercase()) {
             "1", "locked" -> true

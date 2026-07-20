@@ -18,14 +18,14 @@ jobs:
       - name: Compile review validators
         run: |
           python -m py_compile tools/review_contracts.py
-          python -m py_compile tools/review_proof_v2.py
+          python -m py_compile tools/review_proof_v3.py
           python -m py_compile tools/validate_android_ui_baseline.py
       - name: Validate restored approved Android UI baseline
         run: python tools/validate_android_ui_baseline.py
       - name: Validate implementation against agreed architecture
         run: python tools/review_contracts.py
       - name: Validate proof protocol and source-fresh release rules
-        run: python tools/review_proof_v2.py
+        run: python tools/review_proof_v3.py
 
   android:
     name: Android lint, unit tests and APK
@@ -74,11 +74,13 @@ jobs:
           python -m py_compile pc-helper/qt6/mibu_status.py
           python -m py_compile pc-helper/qt6/dependency_check.py
           python -m py_compile pc-helper/qt6/mibu_runtime.py
+          python -m py_compile pc-helper/qt6/mibu_browser_capture.py
+          python -m py_compile pc-helper/qt6/mibu_phone_agent.py
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v3.py
           python -m py_compile pc-helper/qt6/test_contracts.py
           python -m py_compile pc-helper/qt6/test_install_contracts.py
           python -m py_compile tools/review_contracts.py
-          python -m py_compile tools/review_proof_v2.py
+          python -m py_compile tools/review_proof_v3.py
           python -m py_compile tools/validate_android_ui_baseline.py
       - name: Run all PC helper unit tests
         working-directory: pc-helper/qt6
@@ -110,7 +112,7 @@ jobs:
           target = runtime.next_target()
           assert target.tzinfo is not None
           assert (target.hour, target.minute, target.second, target.microsecond) == (23, 59, 58, 600000)
-          assert mibu_actions.EXPECTED_APP_VERSION == '0.2.0-dev'
+          assert mibu_actions.EXPECTED_APP_VERSION == '0.3.0-dev'
           app = QApplication([])
           window = mibu.Window()
           assert set(window.buttons) == {'Device Check', 'Install APK', 'Login & Get Token', 'Phone Guide'}

@@ -19,7 +19,7 @@ WAIT_ENTRY = "com.thetechguy.mibu/.StartWaitingActivity"
 UNLOCK_METHODS_ENTRY = "com.thetechguy.mibu/.UnlockMethodsActivity"
 REMOTE_APK = "/sdcard/Download/MIBU.apk"
 PROOF_NONCE_EXTRA = "mibu_proof_nonce"
-EXPECTED_APP_VERSION = "0.2.0-dev"
+EXPECTED_APP_VERSION = "0.3.0-dev"
 MIN_TOKEN_LENGTH = 8
 MAX_TOKEN_LENGTH = 8_192
 _SELECTED_SERIAL: str | None = None
@@ -550,16 +550,21 @@ def start_phone_waiting() -> Result:
         "MIBU_SERVICE",
         (
             "WAITING_SERVICE_ARMED",
+            "WAITING_SERVICE_PREFLIGHT_APPROVED",
             "WAITING_SERVICE_RECOVERED_COMPLETE",
             "WAITING_SERVICE_COMPLETE",
         ),
         failure_markers=(
             "WAITING_SERVICE_REJECTED_MISSING_CAPTURES",
             "WAITING_SERVICE_REJECTED_TOKEN_EXPIRY",
+            "WAITING_SERVICE_REJECTED_CELLULAR",
+            "WAITING_SERVICE_REJECTED_CLOCK",
+            "WAITING_SERVICE_REJECTED_LATE",
+            "WAITING_SERVICE_PREFLIGHT_REJECTED",
             "WAITING_SERVICE_FAILED",
             "WAITING_SERVICE_NOT_NEEDED",
         ),
-        wait_seconds=10,
+        wait_seconds=30,
         nonce=nonce,
     )
     return proof if proof.ok else Result(False, f"Waiting activity opened, but the foreground service was not proven armed or complete.\n{proof.message}")

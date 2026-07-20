@@ -45,11 +45,11 @@ The Android app stops running when the phone enters fastboot. PC Helper owns the
 
 3. Login & Get Tokens
    User logs in themselves in normal browsers.
-   User obtains two captures only:
+   PC Helper reads only two approved Xiaomi captures:
    - Firefox new_bbs_serviceToken
    - Chrome popRunToken
 
-   PC Helper transfers them through URL-safe Base64 extras.
+   PC Helper validates both captures with Xiaomi and transfers them through URL-safe Base64 extras.
    Android emits an explicit proof marker after saving both captures.
 
 4. Android preparation
@@ -65,6 +65,9 @@ The Android app stops running when the phone enters fastboot. PC Helper owns the
    Android refuses to arm when:
    - either capture is missing
    - either capture is stale
+   - mobile data is not the active validated network
+   - Xiaomi preflight does not report eligibility
+   - Xiaomi does not provide a usable server clock
    - the next timing window is farther away than the remaining freshness
 
    When valid, Android schedules four hidden timing windows around one Beijing midnight:
@@ -75,13 +78,10 @@ The Android app stops running when the phone enters fastboot. PC Helper owns the
 
    PC Helper treats Start Waiting as successful only after Android emits its proof marker.
 
-6. Timing stage complete
-   Android records each lane as WINDOW_REACHED.
-   After all four, Android shows:
-   - TIMING STAGE COMPLETE
-   - Continue with PC verification
-
-   This does not mean Xiaomi approved an unlock request.
+6. Xiaomi result stage
+   Android submits each lane at its server-corrected target and records Xiaomi's response.
+   Approval is shown only when Xiaomi's response reports approval. Quota, blocked,
+   expired, rejected, unknown and network results remain distinct failure states.
 
 7. Fastboot verification
    PC Helper:
@@ -121,7 +121,7 @@ MIBU can prove:
 - APK installation and launch
 - explicit token import
 - token freshness
-- timing-window scheduling and completion
+- Xiaomi eligibility preflight, server-corrected scheduling and correlated lane responses
 - fastboot detection
 
-MIBU cannot by itself prove Xiaomi request approval, account/device binding, or bootloader unlock. The official Mi Unlock Tool remains the authoritative final verifier.
+MIBU can report Xiaomi's application response, but it cannot prove account/device binding or bootloader unlock. The official Mi Unlock Tool remains the authoritative final verifier.

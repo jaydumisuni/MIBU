@@ -8,7 +8,7 @@ from mibu_actions import EXPECTED_APP_VERSION, PROOF_NONCE_EXTRA, Result, _proof
 
 STATUS_ENTRY = "com.thetechguy.mibu/.StatusActivity"
 STATUS_TAG = "MIBU_STATUS"
-EXPECTED_PROOF_PROTOCOL = 2
+EXPECTED_PROOF_PROTOCOL = 3
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ class PhoneStatus:
 
     @property
     def timing_complete(self) -> bool:
-        return self.verification in {"TIMING_WINDOW_REACHED", "READY_FOR_MI_UNLOCK_VERIFICATION"}
+        return self.verification == "READY_FOR_MI_UNLOCK_VERIFICATION"
 
     @property
     def contract_current(self) -> bool:

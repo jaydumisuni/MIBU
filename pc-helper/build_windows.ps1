@@ -39,6 +39,7 @@ function Resolve-Gradle {
         "D:\mibu-build-tools\gradle\bin\gradle.bat",
         "D:\mibu-build-tools\gradle\gradle-8.10\bin\gradle.bat",
         "D:\mibu-build-tools\gradle-8.10.2\bin\gradle.bat",
+        (Join-Path $Root ".build-tools\gradle\gradle-8.10\bin\gradle.bat"),
         (Join-Path $Root "gradlew.bat")
     )) {
         if (Test-Path $candidate) { return $candidate }
@@ -47,7 +48,7 @@ function Resolve-Gradle {
 }
 
 function Resolve-AndroidSdk {
-    foreach ($candidate in @($env:ANDROID_SDK_ROOT, $env:ANDROID_HOME, "D:\mibu-build-tools\android-sdk")) {
+    foreach ($candidate in @($env:ANDROID_SDK_ROOT, $env:ANDROID_HOME, "D:\mibu-build-tools\android-sdk", (Join-Path $Root ".build-tools\android-sdk"))) {
         if ($candidate -and (Test-Path $candidate)) { return (Resolve-Path $candidate).Path }
     }
     return $null
@@ -102,8 +103,8 @@ python (Join-Path $Root "tools\extract_live_ui_assets.py")
 if ($LASTEXITCODE -ne 0) { throw "Live MIBU asset extraction failed with exit code $LASTEXITCODE" }
 python (Join-Path $Root "tools\review_contracts.py")
 if ($LASTEXITCODE -ne 0) { throw "THETECHGUY source-contract review failed with exit code $LASTEXITCODE" }
-python (Join-Path $Root "tools\review_proof_v2.py")
-if ($LASTEXITCODE -ne 0) { throw "MIBU proof-v2 review failed with exit code $LASTEXITCODE" }
+python (Join-Path $Root "tools\review_proof_v3.py")
+if ($LASTEXITCODE -ne 0) { throw "MIBU proof-v3 review failed with exit code $LASTEXITCODE" }
 python (Join-Path $Root "tools\validate_android_ui_baseline.py")
 if ($LASTEXITCODE -ne 0) { throw "Android expected-UI baseline validation failed with exit code $LASTEXITCODE" }
 $RequiredUi = @(
@@ -130,7 +131,7 @@ Push-Location $HelperDir
 try {
     python -m unittest discover -v
     if ($LASTEXITCODE -ne 0) { throw "PC helper unit tests failed with exit code $LASTEXITCODE" }
-    python -c "import mibu_actions, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_actions.EXPECTED_APP_VERSION == '0.2.0-dev'; print('MIBU v3 import/version/proof-gate smoke check passed')"
+    python -c "import mibu_actions, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_actions.EXPECTED_APP_VERSION == '0.3.0-dev'; print('MIBU v3 import/version/proof-gate smoke check passed')"
     if ($LASTEXITCODE -ne 0) { throw "MIBU v3 source smoke check failed" }
 } finally {
     Pop-Location

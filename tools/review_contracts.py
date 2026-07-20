@@ -43,6 +43,8 @@ def main() -> int:
         "pc-helper/qt6/mibu_actions.py",
         "pc-helper/qt6/mibu_runtime.py",
         "pc-helper/qt6/mibu_status.py",
+        "pc-helper/qt6/mibu_browser_capture.py",
+        "pc-helper/qt6/mibu_phone_agent.py",
         "pc-helper/qt6/dependency_check.py",
         "pc-helper/qt6/mibu_pc_helper_v3.py",
         "pc-helper/qt6/test_contracts.py",
@@ -88,7 +90,7 @@ def main() -> int:
     )
     require_text(
         "pc-helper/qt6/mibu_runtime.py",
-        'LOGIN_URL = "https://account.xiaomi.com/"',
+        'LOGIN_URL = "https://c.mi.com/global/"',
         '"chrome": "Google.Chrome"',
         '"firefox": "Mozilla.Firefox"',
         "def next_target",
@@ -105,7 +107,7 @@ def main() -> int:
         "def launch_mi_unlock_status",
         "def check_binding_recovery_compatibility",
         "Legacy binding recovery is not enabled by One Click",
-        'EXPECTED_APP_VERSION = "0.2.0-dev"',
+        'EXPECTED_APP_VERSION = "0.3.0-dev"',
     )
 
     manifest = "android/app/src/main/AndroidManifest.xml"
@@ -145,7 +147,7 @@ def main() -> int:
         "android/app/src/main/java/com/thetechguy/mibu/MainActivity.kt",
         "postDelayed(this, 1000L)",
         "Start Waiting",
-        "MibuForegroundService",
+        "stateStore.serviceRunning()",
         "requestNotificationPermissionIfNeeded",
     )
 

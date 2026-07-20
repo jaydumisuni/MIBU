@@ -16,8 +16,9 @@ The PC helper is the guided setup tool. The Android APK is the phone-side waitin
 - Check that ADB sees the phone.
 - Install or update MIBU.apk.
 - Show Beijing target time and local converted time.
-- Later: guide user-owned login/session handoff to the phone app.
-- Later: provide a proper Windows GUI installer.
+- Capture and validate the two user-approved Xiaomi browser session values.
+- Transfer them to the phone without displaying or writing them to a token file.
+- Install through the branded Windows installer with bundled runtime and platform-tools.
 
 ## Android app responsibilities
 
@@ -25,7 +26,9 @@ The PC helper is the guided setup tool. The Android APK is the phone-side waitin
 - Show account/session status.
 - Show Beijing target time.
 - Show local converted target time.
-- Keep a foreground service active near the timing window.
+- Preflight Xiaomi eligibility, cellular transport and server time.
+- Keep a foreground service active through the four phone-side request lanes.
+- Record Xiaomi's response for each lane without logging capture values.
 - Keep logs local to the device.
 
 ## Setup checklist shown by PC helper

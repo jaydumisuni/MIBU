@@ -2,8 +2,6 @@ package com.thetechguy.mibu
 
 import android.Manifest
 import android.app.Activity
-import android.app.ActivityManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
@@ -40,15 +38,19 @@ class MainActivity : Activity() {
     private lateinit var beijingValue: TextView
     private lateinit var localValue: TextView
     private lateinit var countdownValue: TextView
+    private lateinit var countdownTitle: TextView
+    private lateinit var countdownUnits: TextView
     private lateinit var mobileValue: TextView
     private lateinit var serviceValue: TextView
     private lateinit var serviceBadge: TextView
     private lateinit var startWaitingRoot: LinearLayout
     private lateinit var startWaitingTitle: TextView
+    private lateinit var startWaitingValue: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
+        MibuUpdateChecker.check(this)
     }
 
     override fun onResume() {
@@ -118,8 +120,10 @@ class MainActivity : Activity() {
             addView(times)
 
             val countdown = mibuCountdown()
-            countdownValue = countdown.second
-            addView(countdown.first)
+            countdownTitle = countdown.title
+            countdownValue = countdown.value
+            countdownUnits = countdown.units
+            addView(countdown.root)
 
             val mobile = mibuLiveRow(R.drawable.mibu_icon_signal, "Mobile Data Reminder", "Checking network...", MibuColors.green, onClick = {
                 openSettings()
@@ -137,6 +141,7 @@ class MainActivity : Activity() {
             }
             startWaitingRoot = start.root
             startWaitingTitle = start.title
+            startWaitingValue = start.value
             addView(start.root)
 
             val bottom = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
@@ -200,34 +205,57 @@ class MainActivity : Activity() {
         val time = DateTimeFormatter.ofPattern("HH:mm:ss")
 
         accountValue.text = when {
-            tokenStore.hasRequiredCaptures() -> "Eligible to send request"
-            tokenStore.hasSession() -> "Partial setup - second capture needed"
             verification.isAuthoritativeResult() -> friendlyVerification(verification)
-            else -> "Waiting for approved session"
+            verification == VerificationState.PREFLIGHT_CHECKING -> "Checking eligibility with Xiaomi"
+            verification == VerificationState.WAITING_ARMED -> "Eligible - request lanes armed"
+            verification == VerificationState.REQUESTS_RUNNING -> "Submitting request lanes"
+            tokenStore.hasRequiredCaptures() -> "Captures ready - preflight not run"
+            tokenStore.hasSession() -> "Partial setup - second capture needed"
+            else -> "Waiting for browser captures"
         }
         accountBadge.text = when {
-            tokenStore.hasRequiredCaptures() -> "READY"
             verification.isAuthoritativeResult() -> "RESULT"
+            verification == VerificationState.WAITING_ARMED -> "ARMED"
+            verification == VerificationState.PREFLIGHT_CHECKING || verification == VerificationState.REQUESTS_RUNNING -> "CHECKING"
+            tokenStore.hasRequiredCaptures() -> "CAPTURED"
             else -> "WAITING"
         }
         accountBadge.visibility = View.VISIBLE
         sessionValue.text = if (tokenStore.hasRequiredCaptures()) "From MIBU PC Tool" else "Import from PC helper"
         beijingValue.text = targetChina?.format(time) ?: "--:--:--"
         localValue.text = localTarget?.format(time) ?: "--:--:--"
+        val hasResult = verification.isAuthoritativeResult()
+        countdownTitle.text = if (hasResult) "Workflow Status" else "Time Remaining"
+        countdownUnits.visibility = if (hasResult) View.GONE else View.VISIBLE
+        countdownValue.textSize = if (hasResult) 20f else 31f
+        countdownValue.maxLines = 1
         countdownValue.text = when {
-            verification.isTimingComplete() -> "COMPLETE"
-            verification.isAuthoritativeResult() -> friendlyVerification(verification).uppercase()
+            verification.isTimingComplete() -> "REQUEST APPROVED"
+            hasResult -> "RESULT RECORDED"
             else -> "%02d : %02d : %02d".format(hours, minutes, seconds)
         }
         mobileValue.text = if (isCellularActive()) "Mobile data is active" else "Open network settings to confirm mobile data"
-        val running = isWaitingServiceRunning()
-        serviceValue.text = if (running) "Service is running" else friendlyVerification(verification)
+        val running = stateStore.serviceRunning()
+        serviceValue.text = when {
+            running -> "Service is running"
+            !tokenStore.hasRequiredCaptures() -> "Not started - import captures"
+            else -> friendlyVerification(verification)
+        }
         serviceBadge.text = if (running) "RUNNING" else "IDLE"
         serviceBadge.visibility = View.VISIBLE
         startWaitingTitle.text = when {
-            verification == VerificationState.WAITING_ARMED -> "Resume Waiting"
+            verification == VerificationState.WAITING_ARMED ||
+                verification == VerificationState.PREFLIGHT_CHECKING ||
+                verification == VerificationState.REQUESTS_RUNNING -> "Request In Progress"
             verification.blocksNewWaitingCycle() -> "Result Recorded"
             else -> "Start Waiting"
+        }
+        startWaitingValue.text = when {
+            verification == VerificationState.WAITING_ARMED -> "Four Xiaomi request lanes are armed"
+            verification == VerificationState.PREFLIGHT_CHECKING -> "Checking eligibility, cellular data and server time"
+            verification == VerificationState.REQUESTS_RUNNING -> "Receiving verified Xiaomi lane results"
+            verification.blocksNewWaitingCycle() -> verificationGuidance(verification)
+            else -> "Arm the verified phone-side request workflow"
         }
         startWaitingRoot.isEnabled = !verification.blocksNewWaitingCycle()
         startWaitingRoot.alpha = if (startWaitingRoot.isEnabled) 1f else 0.55f
@@ -240,17 +268,18 @@ class MainActivity : Activity() {
         return connectivity.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
     }
 
-    @Suppress("DEPRECATION")
-    private fun isWaitingServiceRunning(): Boolean {
-        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        return manager.getRunningServices(Int.MAX_VALUE).any { it.service.className == MibuForegroundService::class.java.name }
-    }
-
     private fun friendlyVerification(state: VerificationState): String = when (state) {
         VerificationState.NOT_STARTED -> "Not started"
+        VerificationState.PREFLIGHT_CHECKING -> "Checking Xiaomi eligibility"
         VerificationState.WAITING_ARMED -> "Waiting armed"
-        VerificationState.TIMING_WINDOW_REACHED -> "Timing window reached"
+        VerificationState.REQUESTS_RUNNING -> "Requests running"
+        VerificationState.TIMING_WINDOW_REACHED -> "Legacy timing state - recheck"
         VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Ready for Mi Unlock"
+        VerificationState.QUOTA_LIMIT_REACHED -> "Application quota limit reached"
+        VerificationState.BLOCKED_UNTIL_DEADLINE -> "Blocked until Xiaomi deadline"
+        VerificationState.COOKIE_EXPIRED -> "Browser captures expired"
+        VerificationState.REQUEST_REJECTED -> "Request rejected"
+        VerificationState.NETWORK_ERROR -> "Cellular or Xiaomi network error"
         VerificationState.WAIT_TIME_SHOWN -> "Official wait time shown"
         VerificationState.ACCOUNT_DEVICE_NOT_ADDED -> "Account/device not added"
         VerificationState.COMMUNITY_AUTH_REQUIRED -> "Community authorisation required"
@@ -260,7 +289,15 @@ class MainActivity : Activity() {
 
     private fun verificationGuidance(state: VerificationState): String = when (state) {
         VerificationState.TIMING_WINDOW_REACHED,
-        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Continue with PC Helper and the official Mi Unlock Tool."
+        VerificationState.COOKIE_EXPIRED -> "Import fresh browser captures and run the verified preflight again."
+        VerificationState.PREFLIGHT_CHECKING -> "MIBU is checking Xiaomi eligibility and server time."
+        VerificationState.WAITING_ARMED -> "Four request lanes are scheduled from Xiaomi server time."
+        VerificationState.REQUESTS_RUNNING -> "MIBU is sending the scheduled Xiaomi requests."
+        VerificationState.QUOTA_LIMIT_REACHED -> "Xiaomi returned quota limit reached; retry in the next valid window."
+        VerificationState.BLOCKED_UNTIL_DEADLINE -> "Wait until Xiaomi's recorded deadline before retrying."
+        VerificationState.REQUEST_REJECTED -> "Review the verified Xiaomi response in Logs before retrying."
+        VerificationState.NETWORK_ERROR -> "Use active mobile data, then run preflight again."
+        VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION -> "Continue to Mi Unlock Status on the phone."
         VerificationState.WAIT_TIME_SHOWN -> "Keep the official waiting period; do not restart the timing cycle."
         VerificationState.ACCOUNT_DEVICE_NOT_ADDED -> "Resolve the phone-side account/device association before retrying."
         VerificationState.COMMUNITY_AUTH_REQUIRED -> "Complete the Xiaomi Community authorisation route first."

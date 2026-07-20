@@ -4,7 +4,7 @@
 
 MIBU is a two-part **timing, state-proof and official-tool handoff assistant** for a Xiaomi device the user owns or is authorised to service.
 
-It does not claim that reaching a timing window means Xiaomi approved a request. It does not replace the official Mi Unlock Tool, bypass account/device restrictions, infer success from a toast, or currently submit/replay Xiaomi network requests.
+It submits four user-authorised Xiaomi application requests from the phone after a live eligibility, cellular-network and server-clock preflight. It does not replace the official Mi Unlock Tool, bypass account/device restrictions, infer success from a clock event or toast, or report approval without a Xiaomi response.
 
 ## Android component
 
@@ -31,9 +31,11 @@ The app:
 - expires captures after 30 minutes;
 - fails closed when wall-clock rollback would otherwise extend freshness;
 - refuses a wait that outlives the least-fresh capture;
+- requires an active, internet-validated cellular transport;
+- validates every lane capture with Xiaomi before arming;
+- derives scheduling from the median Xiaomi server-clock offset returned during preflight;
 - persists one Beijing-midnight instant as the source for all four lanes;
-- reconciles lane state from persisted targets after process recreation;
-- resumes an armed workflow without resetting reached lanes;
+- submits each lane once and stores the parsed response without exposing capture values;
 - must start foreground immediately on every service path, including rejection and completed-state recovery;
 - uses a bounded partial wake lock for only the remaining waiting interval;
 - requests visible-notification permission on Android 13+;
@@ -70,7 +72,7 @@ The PC helper:
 - prioritises bundled Android platform-tools;
 - requires exactly one normal online ADB device;
 - verifies `adb_enabled=1`;
-- requires Android app version `0.2.0-dev`;
+- requires Android app version `0.3.0-dev`;
 - updates an older installed package and verifies the resulting `versionName`;
 - falls back to the phone's package installer if silent ADB installation is blocked;
 - validates capture size and control characters before transfer;
@@ -89,8 +91,8 @@ The PC helper:
 The following state domains remain separate:
 
 - **Capture state** — whether both captures are present and fresh.
-- **Lane state** — `PENDING`, `ARMED`, `WINDOW_REACHED`, plus diagnostic outcomes.
-- **Timing state** — not started, armed, timing reached, or ready for official verification.
+- **Lane state** — `PENDING`, `PREFLIGHT_OK`, `ARMED`, `REQUESTING`, and parsed Xiaomi outcomes.
+- **Request state** — not started, preflight, armed, running, rejected, or ready for official verification.
 - **Community state** — confirmed, not found, not required, or unknown.
 - **Official-result state** — wait time shown, account/device not added, Community authorisation required, or unlocked.
 
@@ -174,8 +176,8 @@ Static review and CI are designed to prove:
 
 - source and documentation contracts;
 - Android lint, compilation and unit tests;
-- timing and freshness math;
-- state authority and idempotent resume rules;
+- timing, capture freshness and server-clock math;
+- state authority and correlated service-result rules;
 - nonce-correlated proof handling;
 - version-aware installation;
 - ADB/fastboot parsing;

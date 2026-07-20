@@ -9,6 +9,12 @@ from zoneinfo import ZoneInfo
 import mibu_actions
 import mibu_runtime
 import mibu_status
+import mibu_phone_agent
+
+
+class BrowserRouteTests(unittest.TestCase):
+    def test_login_opens_xiaomi_community_cookie_route(self) -> None:
+        self.assertEqual(mibu_runtime.LOGIN_URL, "https://c.mi.com/global/")
 
 
 class DeviceParsingTests(unittest.TestCase):
@@ -185,14 +191,14 @@ class PhoneStatusTests(unittest.TestCase):
         assert status is not None
         self.assertFalse(status.contract_current)
 
-    def test_timing_complete_only_accepts_completion_states(self) -> None:
+    def test_legacy_timing_window_is_not_server_completion(self) -> None:
         status = mibu_status._parse_status(
             self.proof_line(verification="TIMING_WINDOW_REACHED"),
             expected_nonce="abc12345",
         )
         self.assertIsNotNone(status)
         assert status is not None
-        self.assertTrue(status.timing_complete)
+        self.assertFalse(status.timing_complete)
 
     def test_status_parser_rejects_unrelated_log(self) -> None:
         self.assertIsNone(mibu_status._parse_status("I/Other: hello"))
@@ -227,6 +233,28 @@ class AssistantIntentTests(unittest.TestCase):
 
     def test_open_mibu_routes_to_phone_launch(self) -> None:
         self.assertEqual("open_mibu", mibu_runtime.classify_assistant_intent("open MIBU"))
+
+    def test_mobile_data_command_routes_to_verified_agent(self) -> None:
+        self.assertEqual("mobile_data_on", mibu_runtime.classify_assistant_intent("turn mobile data on"))
+
+    def test_wifi_command_routes_to_verified_agent(self) -> None:
+        self.assertEqual("wifi_off", mibu_runtime.classify_assistant_intent("turn wifi off"))
+
+
+class PhoneAgentParsingTests(unittest.TestCase):
+    def test_xiaomi_loaded_sim_and_validated_cellular_are_ready(self) -> None:
+        connectivity = (
+            "NetworkAgentInfo{network{102} ni{MOBILE[LTE] CONNECTED extra: internet} "
+            "Score(Policies : IS_VALIDATED) nc{[ Transports: CELLULAR Capabilities: INTERNET&VALIDATED]}"
+        )
+        state = mibu_phone_agent._parse_network_state(connectivity, "Wifi is disabled", "LOADED,ABSENT", "MTN ZM,")
+        self.assertTrue(state.ready_for_xiaomi)
+        self.assertEqual("MTN ZM", state.operator)
+
+    def test_wifi_prevents_xiaomi_network_ready(self) -> None:
+        connectivity = "MOBILE[LTE] CONNECTED Transports: CELLULAR Capabilities: INTERNET&VALIDATED"
+        state = mibu_phone_agent._parse_network_state(connectivity, "Wifi is enabled", "READY", "Carrier")
+        self.assertFalse(state.ready_for_xiaomi)
 
 
 if __name__ == "__main__":

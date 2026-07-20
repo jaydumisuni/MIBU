@@ -8,7 +8,8 @@ import org.junit.Test
 class VerificationStateRulesTest {
     @Test
     fun timingCompletionBlocksASecondWaitingCycle() {
-        assertTrue(VerificationState.TIMING_WINDOW_REACHED.isTimingComplete())
+        assertFalse(VerificationState.TIMING_WINDOW_REACHED.isTimingComplete())
+        assertTrue(VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION.isTimingComplete())
         assertTrue(VerificationState.READY_FOR_MI_UNLOCK_VERIFICATION.blocksNewWaitingCycle())
     }
 

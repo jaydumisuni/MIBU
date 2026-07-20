@@ -5,7 +5,9 @@ import java.time.ZonedDateTime
 
 enum class LaneStatus {
     PENDING,
+    PREFLIGHT_OK,
     ARMED,
+    REQUESTING,
     WINDOW_REACHED,
     APPROVED,
     MAYBE_APPROVED_RECHECK,
@@ -14,6 +16,7 @@ enum class LaneStatus {
     COOKIE_EXPIRED,
     COMMUNITY_GATE,
     NETWORK_ERROR,
+    REJECTED,
     UNKNOWN
 }
 
@@ -26,9 +29,16 @@ enum class CommunityDeviceState {
 
 enum class VerificationState {
     NOT_STARTED,
+    PREFLIGHT_CHECKING,
     WAITING_ARMED,
+    REQUESTS_RUNNING,
     TIMING_WINDOW_REACHED,
     READY_FOR_MI_UNLOCK_VERIFICATION,
+    QUOTA_LIMIT_REACHED,
+    BLOCKED_UNTIL_DEADLINE,
+    COOKIE_EXPIRED,
+    REQUEST_REJECTED,
+    NETWORK_ERROR,
     WAIT_TIME_SHOWN,
     ACCOUNT_DEVICE_NOT_ADDED,
     COMMUNITY_AUTH_REQUIRED,

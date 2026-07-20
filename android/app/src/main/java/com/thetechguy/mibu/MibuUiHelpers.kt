@@ -23,6 +23,13 @@ data class MibuLiveRow(
     val badge: TextView,
 )
 
+data class MibuCountdown(
+    val root: LinearLayout,
+    val title: TextView,
+    val value: TextView,
+    val units: TextView,
+)
+
 fun Activity.mibuScreen(padding: Int = 14, build: LinearLayout.() -> Unit): LinearLayout {
     window.statusBarColor = MibuColors.background
     window.navigationBarColor = MibuColors.background
@@ -63,7 +70,12 @@ fun Activity.mibuBrandHeader(
     onSettings: (() -> Unit)? = null,
     large: Boolean = false,
 ): FrameLayout {
-    val height = if (large) 294 else 172
+    val compact = !large && onBack != null
+    val height = when {
+        large -> 294
+        compact -> 118
+        else -> 172
+    }
     return FrameLayout(this).apply {
         background = rounded(MibuColors.panel, dp(18), MibuColors.line)
         clipToOutline = true
@@ -73,14 +85,21 @@ fun Activity.mibuBrandHeader(
             setImageResource(R.drawable.mibu_hood_live)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = "MIBU assistant"
-        }, FrameLayout.LayoutParams(dp(if (large) 300 else 220), dp(if (large) 245 else 170), Gravity.END or Gravity.BOTTOM))
+        }, FrameLayout.LayoutParams(
+            dp(if (large) 300 else if (compact) 156 else 220),
+            dp(if (large) 245 else if (compact) 116 else 170),
+            Gravity.END or Gravity.BOTTOM,
+        ))
 
         addView(ImageView(this@mibuBrandHeader).apply {
             setImageResource(R.drawable.mibu_logo_live)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = "MIBU logo"
-        }, FrameLayout.LayoutParams(dp(if (large) 118 else 82), dp(if (large) 118 else 82)).apply {
-            leftMargin = dp(if (onBack == null) 8 else 44)
+        }, FrameLayout.LayoutParams(
+            dp(if (large) 118 else if (compact) 58 else 82),
+            dp(if (large) 118 else if (compact) 58 else 82),
+        ).apply {
+            leftMargin = dp(if (onBack == null) 8 else if (compact) 36 else 44)
             topMargin = dp(if (large) 12 else 8)
         })
 
@@ -88,9 +107,12 @@ fun Activity.mibuBrandHeader(
             setImageResource(R.drawable.mibu_wordmark_live)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             contentDescription = "MIBU"
-        }, FrameLayout.LayoutParams(dp(if (large) 190 else 142), dp(if (large) 62 else 48)).apply {
-            leftMargin = dp(if (large) 128 else if (onBack == null) 86 else 120)
-            topMargin = dp(if (large) 26 else 18)
+        }, FrameLayout.LayoutParams(
+            dp(if (large) 190 else if (compact) 126 else 142),
+            dp(if (large) 62 else if (compact) 42 else 48),
+        ).apply {
+            leftMargin = dp(if (large) 128 else if (onBack == null) 86 else if (compact) 92 else 120)
+            topMargin = dp(if (large) 26 else if (compact) 12 else 18)
         })
 
         addView(TextView(this@mibuBrandHeader).apply {
@@ -98,8 +120,8 @@ fun Activity.mibuBrandHeader(
             textSize = if (large) 12f else 10f
             setTextColor(MibuColors.muted)
         }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-            leftMargin = dp(if (large) 132 else if (onBack == null) 88 else 122)
-            topMargin = dp(if (large) 82 else 62)
+            leftMargin = dp(if (large) 132 else if (onBack == null) 88 else if (compact) 94 else 122)
+            topMargin = dp(if (large) 82 else if (compact) 49 else 62)
         })
 
         if (large) {
@@ -115,9 +137,9 @@ fun Activity.mibuBrandHeader(
         }
 
         onBack?.let { callback ->
-            addView(mibuIconButton("\u2039", "Back", callback), FrameLayout.LayoutParams(dp(38), dp(38)).apply {
+            addView(mibuIconButton("\u2039", "Back", callback), FrameLayout.LayoutParams(dp(if (compact) 32 else 38), dp(if (compact) 32 else 38)).apply {
                 leftMargin = dp(4)
-                topMargin = dp(10)
+                topMargin = dp(if (compact) 7 else 10)
             })
         }
         onSettings?.let { callback ->
@@ -260,7 +282,13 @@ fun Activity.mibuTimeCard(label: String, value: String, date: String, accent: In
     return root to valueView
 }
 
-fun Activity.mibuCountdown(): Pair<LinearLayout, TextView> {
+fun Activity.mibuCountdown(): MibuCountdown {
+    val title = TextView(this).apply {
+        text = "Time Remaining"
+        textSize = 12f
+        setTextColor(MibuColors.muted)
+        gravity = Gravity.CENTER
+    }
     val value = TextView(this).apply {
         text = "-- : -- : --"
         textSize = 31f
@@ -269,26 +297,23 @@ fun Activity.mibuCountdown(): Pair<LinearLayout, TextView> {
         gravity = Gravity.CENTER
         includeFontPadding = false
     }
-    return LinearLayout(this).apply {
+    val units = TextView(this).apply {
+        text = "HOURS       MINUTES       SECONDS"
+        textSize = 9f
+        setTextColor(MibuColors.muted)
+        gravity = Gravity.CENTER
+    }
+    val root = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
         setPadding(dp(10), dp(8), dp(10), dp(8))
         background = rounded(Color.rgb(11, 8, 28), dp(14), MibuColors.purple)
         layoutParams = fullWidth(dp(8)).apply { height = dp(92) }
-        addView(TextView(this@mibuCountdown).apply {
-            text = "Time Remaining"
-            textSize = 12f
-            setTextColor(MibuColors.muted)
-            gravity = Gravity.CENTER
-        })
+        addView(title)
         addView(value)
-        addView(TextView(this@mibuCountdown).apply {
-            text = "HOURS       MINUTES       SECONDS"
-            textSize = 9f
-            setTextColor(MibuColors.muted)
-            gravity = Gravity.CENTER
-        })
-    } to value
+        addView(units)
+    }
+    return MibuCountdown(root, title, value, units)
 }
 
 fun Activity.mibuStep(number: Int, iconRes: Int, title: String, body: String, accent: Int): LinearLayout =
@@ -304,12 +329,8 @@ fun Activity.mibuStep(number: Int, iconRes: Int, title: String, body: String, ac
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(accent)
             gravity = Gravity.CENTER
-            background = rounded(Color.TRANSPARENT, dp(10), accent)
+            background = rounded(Color.TRANSPARENT, dp(21), accent)
         }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { setMargins(0, 0, dp(8), 0) })
-        addView(ImageView(this@mibuStep).apply {
-            setImageResource(iconRes)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-        }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { setMargins(0, 0, dp(9), 0) })
         addView(LinearLayout(this@mibuStep).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
@@ -326,6 +347,10 @@ fun Activity.mibuStep(number: Int, iconRes: Int, title: String, body: String, ac
                 maxLines = 2
             })
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        addView(ImageView(this@mibuStep).apply {
+            setImageResource(iconRes)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+        }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { setMargins(dp(8), 0, 0, 0) })
     }
 
 @Suppress("UseSwitchCompatOrMaterialCode")

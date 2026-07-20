@@ -105,6 +105,12 @@ class TokenStore(context: Context) {
         return normalizedStoredToken(KEY_POP_TOKEN, KEY_POP_CAPTURED_AT)
     }
 
+    fun tokenForLane(laneNumber: Int): String? = when (laneNumber) {
+        1, 3 -> getServiceToken()
+        2, 4 -> getPopToken()
+        else -> null
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }

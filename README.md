@@ -6,9 +6,9 @@
 
 MIBU is a two-part timing, state-proof and official-tool handoff assistant for Xiaomi devices the user owns or is authorised to service.
 
-MIBU does **not** send or replay Xiaomi request traffic in the current implementation. It does **not** claim that reaching a timing window means Xiaomi approved an unlock request. The official Mi Unlock Tool remains authoritative.
+MIBU validates the two user-approved Xiaomi browser captures, performs four phone-side requests at the configured Beijing timing offsets, and records Xiaomi's response for every lane. It does **not** treat a clock event, toast, or request attempt as approval. Xiaomi's response and the official Mi Unlock Tool remain authoritative.
 
-## Android app — `0.2.0-dev`
+## Android app — `0.3.0-dev`
 
 The Android app:
 
@@ -26,14 +26,16 @@ The Android app:
 - expires each capture after 30 minutes;
 - fails closed if the phone clock moves backwards rather than extending token lifetime;
 - refuses to arm if the captures cannot remain fresh until the final lane;
+- requires an active, validated cellular connection before preflight and submission;
+- validates all four lane credentials with Xiaomi before arming;
+- derives a server-clock offset from Xiaomi response headers instead of trusting the phone wall clock for submission timing;
 - persists one Beijing-midnight target for the dashboard, foreground service, Logs and PC proof bridge;
-- shows one user-facing countdown while keeping four-lane detail in Logs;
-- reconciles reached lanes after Android process recreation;
-- resumes an already-armed wait without resetting completed lanes;
+- shows one user-facing countdown while keeping four-lane request results in Logs;
+- submits each lane once at its configured offset and records the server response code/result;
 - enters foreground immediately on every foreground-service start path;
 - uses a bounded partial wake lock only for the remaining waiting interval;
 - requests notification permission on Android 13+ so the foreground state can remain visible;
-- preserves timing completion and every recorded official result;
+- preserves every recorded Xiaomi result and never converts a timing event into approval;
 - lets the user record only results actually shown by the official route:
   - official wait time shown;
   - account/device not added;
@@ -63,12 +65,12 @@ The helper:
 - uses a frameless `760 x 560` window with custom minimize, maximize and close controls;
 - renders real Qt controls and status text rather than placing click regions over screenshots;
 - includes a floating MIBU assistant with One-Click Assist, local command chat and an illustrated offline manual;
-- detects or installs Firefox and Chrome and keeps the explicit session handoff inside the UI;
+- detects or installs Firefox and Chrome, reads only the two approved Xiaomi cookie names, validates them with Xiaomi, and keeps values hidden;
 - prioritises platform-tools bundled with the release;
 - requires exactly one normal online ADB device;
 - distinguishes missing, unauthorised, offline and unsupported ADB states;
 - verifies Android reports `adb_enabled=1`;
-- requires Android app version `0.2.0-dev`;
+- requires Android app version `0.3.0-dev`;
 - updates an older installed MIBU version instead of treating any installed package as current;
 - verifies the installed version after ADB installation;
 - falls back to the Android/MIUI system installer when silent installation is blocked;
@@ -80,7 +82,7 @@ The helper:
 - treats `WAITING_ACTIVITY_STARTED` as activity-launch evidence only;
 - reports waiting success only after the foreground service emits:
   - `WAITING_SERVICE_ARMED`, or
-  - a correlated completed-state marker when the timing stage races ahead;
+  - a correlated Xiaomi-approved marker when the server result races ahead;
 - accepts early, correlated rejection markers instead of timing out ambiguously;
 - refuses fastboot handoff until Android reports timing completion;
 - parses only real fastboot-device rows and rejects multiple-device ambiguity;

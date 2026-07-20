@@ -1,5 +1,5 @@
 package com.thetechguy.mibu
 
 object ProofContract {
-    const val VERSION = 2
+    const val VERSION = 3
 }

@@ -62,6 +62,14 @@ from mibu_runtime import (
     open_or_install_browser,
 )
 from mibu_status import PhoneStatus, query_phone_status
+from mibu_update import UpdateInfo, check_for_update
+from mibu_browser_capture import capture_browser_tokens
+from mibu_phone_agent import (
+    prepare_xiaomi_mobile_network,
+    read_phone_network_state,
+    set_mobile_data,
+    set_wifi,
+)
 
 
 WINDOW_SIZE = QSize(760, 560)
@@ -123,25 +131,30 @@ class AssistantWorker(QObject):
         if not opened.ok:
             return opened
 
+        self.step.emit("Device Check", "Preparing SIM, Wi-Fi and mobile data for Xiaomi...")
+        network = prepare_xiaomi_mobile_network()
+        if not network.ok:
+            return network
+
         self.step.emit("Login & Get Token", "Checking the phone session state...")
         status_result, status = query_phone_status()
         if not status_result.ok or status is None:
             return Result(False, "MIBU opened, but its live status could not be confirmed.\n\n" + status_result.message)
         if status.timing_complete:
-            return Result(True, "The phone confirms the timing stage is complete. Continue with official verification.")
+            return Result(True, "The phone confirms Xiaomi accepted the application request. Continue with Mi Unlock Status and official verification.")
         if status.verification in {"WAIT_TIME_SHOWN", "ACCOUNT_DEVICE_NOT_ADDED", "COMMUNITY_AUTH_REQUIRED", "UNLOCKED"}:
             return Result(True, f"The phone already records the official result: {status.verification}.")
 
         if not status.captures_ready:
             launch_token_import()
-            self.step.emit("Login & Get Token", "Opening your installed browsers for the user-approved login handoff...")
-            chrome = open_or_install_browser("chrome")
-            firefox = open_or_install_browser("firefox")
-            return Result(
-                False,
-                "PC preparation is complete. The phone import screen and your browsers are open. Import the two approved captures, then press Continue One Click.\n\n"
-                + chrome + "\n" + firefox,
-            )
+            self.step.emit("Login & Get Token", "Capturing only the approved Xiaomi session values from Firefox and Chrome...")
+            capture_result, captures = capture_browser_tokens()
+            if not capture_result.ok or captures is None:
+                return capture_result
+            pushed = push_two_tokens_to_phone(captures.service_token, captures.pop_token)
+            if not pushed.ok:
+                return Result(False, capture_result.message + "\n" + pushed.message)
+            self.step.emit("Login & Get Token", "Both captures are Xiaomi-verified and imported to the phone.")
 
         self.step.emit("Phone Guide", "Starting the phone waiting service and checking proof...")
         waiting = start_phone_waiting()
@@ -151,9 +164,11 @@ class AssistantWorker(QObject):
         if not proof_result.ok or proof is None:
             return Result(False, "The waiting command ran, but the phone proof could not be read.\n\n" + proof_result.message)
         if proof.verification == "WAITING_ARMED":
-            return Result(True, "MIBU is armed and the countdown continues on the phone. The PC helper is no longer required.")
+            return Result(True, "MIBU passed live Xiaomi preflight. Four server-timed lanes are armed on the phone; the PC is no longer required.")
+        if proof.verification == "PREFLIGHT_CHECKING":
+            return Result(False, "The phone is still performing Xiaomi preflight. Press Continue One Click to recheck.")
         if proof.timing_complete:
-            return Result(True, "The timing window was reached while One Click Assist was running.")
+            return Result(True, "Xiaomi accepted the application request while One Click Assist was running. Continue with Mi Unlock Status.")
         return Result(False, f"The phone did not remain armed. Current state: {proof.verification}.")
 
 
@@ -551,6 +566,7 @@ class Window(QMainWindow):
         QTimer.singleShot(250, self._center)
         QTimer.singleShot(450, self.refresh_live_state)
         QTimer.singleShot(700, self._dependency_review)
+        QTimer.singleShot(1100, self._update_review)
 
     def _build_ui(self) -> None:
         transparent = QWidget()
@@ -867,6 +883,26 @@ class Window(QMainWindow):
 
         self.run_background(run_all_checks, done)
 
+    def _update_review(self) -> None:
+        def done(value: object) -> None:
+            if isinstance(value, UpdateInfo):
+                if value.update_available:
+                    message = f"MIBU {value.latest} is available. Click Guide, then Update, or open the latest GitHub release."
+                    self.assistant_bubble.setText(message)
+                    self._log(message)
+                else:
+                    self._log(f"Update check: MIBU {value.current} is current.")
+            elif isinstance(value, Exception):
+                self._log(f"Update check unavailable: {value}")
+
+        def probe() -> object:
+            try:
+                return check_for_update()
+            except Exception as exc:
+                return exc
+
+        self.run_background(probe, done)
+
     def _update_time(self) -> None:
         from datetime import datetime
         target = next_target()
@@ -972,6 +1008,21 @@ class Window(QMainWindow):
         if intent == "open_mibu":
             self.run_assistant_task(launch_phone_app, play_result=True)
             return "Opening MIBU on the connected phone..."
+        if intent == "mobile_data_on":
+            self.run_assistant_task(lambda: set_mobile_data(True), play_result=True)
+            return "Enabling mobile data through ADB, then verifying Android has a validated cellular connection..."
+        if intent == "mobile_data_off":
+            self.run_assistant_task(lambda: set_mobile_data(False), play_result=True)
+            return "Disabling mobile data through ADB and verifying cellular disconnected..."
+        if intent == "wifi_on":
+            self.run_assistant_task(lambda: set_wifi(True), play_result=True)
+            return "Enabling Wi-Fi through ADB and verifying the state..."
+        if intent == "wifi_off":
+            self.run_assistant_task(lambda: set_wifi(False), play_result=True)
+            return "Disabling Wi-Fi through ADB and verifying the state..."
+        if intent == "network_status":
+            self.run_assistant_task(lambda: read_phone_network_state()[0])
+            return "Reading the phone's real SIM, Wi-Fi, cellular and validation state..."
         if intent == "token_lanes":
             return "Two distinct captures feed four lanes: Firefox is reused for lanes 1 and 3; Chrome is reused for lanes 2 and 4."
         if intent == "manual":
@@ -1181,6 +1232,13 @@ class Window(QMainWindow):
         def push() -> Result:
             return push_two_tokens_to_phone(service.text(), pop.text())
 
+        def capture_and_push() -> Result:
+            captured, values = capture_browser_tokens()
+            if not captured.ok or values is None:
+                return captured
+            pushed = push_two_tokens_to_phone(values.service_token, values.pop_token)
+            return Result(pushed.ok, f"{captured.message}\n{pushed.message}")
+
         def complete(value: object) -> None:
             result = value if isinstance(value, Result) else Result(False, str(value))
             self.state.tokens_ok = result.ok
@@ -1197,7 +1255,11 @@ class Window(QMainWindow):
             if path:
                 button.setIcon(icon_provider.icon(QFileInfo(path)))
                 button.setIconSize(QSize(20, 20))
-        push_button = dialog.add_action("Push Captures", lambda: None, True)
+        automatic = dialog.add_action("Auto Capture", lambda: None, True)
+        automatic.setToolTip("Read only the two approved Xiaomi browser cookies, verify them, and push them to MIBU")
+        automatic.clicked.disconnect()
+        automatic.clicked.connect(lambda: dialog.run_action(automatic, "Checking Firefox and Chrome for approved Xiaomi captures...", capture_and_push, complete))
+        push_button = dialog.add_action("Manual Push", lambda: None)
         push_button.clicked.disconnect()
         push_button.clicked.connect(lambda: dialog.run_action(push_button, "Pushing approved captures to the phone...", push, complete))
         dialog.exec()

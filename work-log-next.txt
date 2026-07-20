@@ -112,3 +112,47 @@ Connected-device and assistant correction - 2026-07-19
 - Final matching EXE SHA-256 for both runnable folders: `d2690e47869f8a0aa4d053a395a88d8ee5b238ec1e1244fdb14a158113957359`.
 - Final bundled APK SHA-256: `b7e156d60b15645656671af3a25f0e74467ca73b194c023bd8da7d26eb5a044d`.
 - Committed and pushed the packaged-assistant/device communication correction as `e1fda17` (`Fix packaged assistant and device communication`) to `origin/main`.
+
+Release and real capture verification - 2026-07-20
+
+- Compared the old `Avoid quota limit reached/GetTokens.py`, the supplied script archive, and the TTG Device X-Ray ADB changes against MIBU's current implementation.
+- Confirmed the old token helper used Firefox cookie access plus a temporary Selenium Chrome profile, wrote four tokens to disk, and launched four console scripts. MIBU now keeps validated captures in memory, never writes token values to the work log, and runs the four timing lanes inside the phone service.
+- Confirmed the current Chrome version requires a non-default data directory for remote debugging. Added a normal-profile Chrome UI capture path that follows the user's proven bookmarklet flow and a controlled Selenium profile fallback.
+- Added Firefox lane 1/3 and Chrome lane 2/4 capture validation against Xiaomi before any value can be pushed to the phone. Firefox produced one fresh Xiaomi-valid capture; its 182-character value remained hidden.
+- Tested the supplied/stale Chrome capture and rejected it as expired. No stale or incomplete pair was pushed to Android.
+- Added Selenium 4.45 packaging and bundled Selenium Manager without the unnecessary `--collect-all selenium` dependency payload.
+- Kept the normal Xiaomi Chrome window open when `popRunToken` was absent so the user can finish login and rerun Auto Capture.
+- Confirmed bundled ADB 1.0.41 / platform-tools 37.0.0 is used before the obsolete PATH ADB 1.0.26.
+- Verified the connected Xiaomi device at runtime: serial `73e68d0e226c`, model `23076RA4BC`, codename `sky`, Android 15, HyperOS `OS2.0.204.0.VMWCNXM`, locked bootloader.
+- Rebuilt and reinstalled Android version `0.3.0-dev`; verified it launches on the physical phone without a crash or ANR.
+- Corrected the idle Android foreground-service text to `Not started - import captures` so the UI does not present an unknown/stale status before the two captures exist.
+- Captured and visually inspected the physical Android dashboard and settings screens. The live UI shows the approved branding, logo, device/network state, countdown, and native controls.
+- Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug` all passed. Only the existing Android system-bar deprecation warnings remain.
+- PC Python compilation, contract reviews, expected-UI validation, and 42 unit/behavior tests passed.
+- Built the compact frameless Windows app and visually inspected the real packaged and installed windows at 950 x 700 physical pixels (760 x 560 logical at 125% scaling).
+- Verified the final PC UI uses the approved neon logo/icon, custom title bar, four live workflow controls, assistant, status strip, command field, and connected-phone output.
+- Built `MIBU-PC-Helper-Setup-0.3.0.exe` at 72,815,535 bytes.
+- Performed an isolated silent installer test. The installed app launched and responded with the correct branded title and included `python310.dll`, Selenium Manager, bundled ADB/platform-tools, offline guide, approved ICO, and `dist/MIBU.apk`.
+- Final installer evidence path: `test-evidence/installed-mibu-0.3.0-final3`.
+- Final installed-PC screenshot: `test-evidence/pc-0.3-installed-final.png`.
+- At Beijing 23:58:49, made one final automatic capture attempt. Firefox remained valid, but normal Chrome exposed no `popRunToken`; MIBU correctly refused to push a partial pair or arm waiting.
+- The 2026-07-20 Beijing midnight window was therefore missed honestly. The next run must obtain a fresh logged-in Chrome `popRunToken` before the next Beijing midnight; the Android waiting service remains unarmed rather than showing a false success.
+- The optional success/failure WAV files are still absent from the expected resource paths, so the release uses the built-in failure-beep fallback.
+- Compared Android's Xiaomi request headers with the supplied original `NScript.py`. Confirmed all four lanes intentionally use the `new_bbs_serviceToken` cookie header even when lanes 2/4 contain the Chrome-derived capture.
+- Added an Android unit test for that exact original-worker cookie contract.
+- Fixed a proof-correlation gap so PC One Click accepts Xiaomi `WAITING_SERVICE_PREFLIGHT_APPROVED` as a real successful preflight result.
+- Removed obsolete Chrome-extension paths from CI; the discarded extension is not required by source or release checks.
+- Updated README and architecture/flow documentation to describe the real v0.3 phone-side Xiaomi preflight and submissions instead of the old no-network-request boundary.
+- Ran the real phone network agent. It verified cellular connected/validated, Wi-Fi off, SIM ready, and operator MTN ZM without asking the user to open Settings.
+- A final physical screenshot exposed an oversized authoritative-result string in the Android countdown card. Reworked it into a compact `Workflow Status / Result Recorded` state and added state-specific primary-action guidance.
+- Reinstalled that final APK on the phone, opened it, confirmed process `com.thetechguy.mibu` remained alive, and found no MIBU fatal exception or ANR marker.
+- Final Android visual evidence: `test-evidence/android-0.3-final-ui.png`.
+- Final installed-PC HWND evidence: `test-evidence/pc-0.3-installer-final-hwnd.png`.
+- Rebuilt the portable app and installer after the final Android polish. The isolated installer exited 0, the installed app responded with the correct title, and its APK hash matched the physically tested APK exactly.
+- Final APK SHA-256: `636e8e71c4f7e4761565c62cbfafc2704a4b8985a24a5c1751fa647c3ec0b9d4`.
+- Final PC EXE SHA-256: `fba3545139316b4ab7069382f19e279eeb50e033eb228eedc1fa544eb106bdf0`.
+- Final installer SHA-256: `3c23cd5df951455b0ffe0e63d56cd59ea2d2fbfd405db7e1d59668c19ca0f35b` (72,815,667 bytes).
+- Re-read `C:\Users\ATHENA 2.0\Downloads\Avoid quota limit reached\GetTokens.py` during the final audit. Its useful Firefox/Chrome/Firefox/Chrome lane ordering matches MIBU, but it installs dependencies at runtime, force-kills Firefox, launches Chrome with a fresh Selenium profile, writes captures to plaintext `token.txt`, and opens four command windows.
+- Confirmed the v0.3 helper replaces those failure points with packaged dependencies, non-destructive Firefox database reads, a normal logged-in Chrome UI capture plus isolated-profile fallback, in-memory capture handling, hidden subprocesses, and a single phone-side four-lane waiting service.
+- Repeated the final staged-code gate: 42 PC unit/behavior tests, both source/proof reviewers, the Android expected-UI baseline check, and Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug` all passed. The repository has no Gradle wrapper, so the Android gate used the pinned local Gradle 8.10 installation.
+- Reconfirmed the source debug APK and the APK bundled in the portable helper share SHA-256 `636e8e71c4f7e4761565c62cbfafc2704a4b8985a24a5c1751fa647c3ec0b9d4`.

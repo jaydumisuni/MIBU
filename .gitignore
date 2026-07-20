@@ -16,6 +16,9 @@ pc-helper/release-image-hotspot/
 pc-helper/qt6/bundle-dist/
 pc-helper/qt6/dist/
 pc-helper/qt6/build/
+pc-helper/qt6/dist.locked_*/
+pc-helper/qt6/build.locked_*/
+installer/output/
 rebuild-log.txt
 image-hotspot-log.txt
 design-match-log.txt
