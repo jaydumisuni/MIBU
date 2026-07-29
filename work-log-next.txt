@@ -186,3 +186,68 @@ Release and real capture verification - 2026-07-20
 - Rebuilt the portable PC helper successfully around the existing current Android APK.
 - Launched the packaged `MIBU-PC-Helper.exe` successfully as a smoke test and closed the test process.
 - Verified all 15 files in the generated `SHA256SUMS.txt`; no checksum mismatches were found.
+2026-07-29 - Verified English keyboard and China-ROM conversion follow-up
+==========================================================================
+
+- Audited the connected Redmi/Xiaomi phone before changing it:
+  - HyperOS build is OS2.0.204.0.VMWCNXM (China ROM).
+  - Active user locale was en-US, while the ROM default/product locale remains zh-CN.
+  - The only registered input method was Xiaomi Sogou:
+    com.sohu.inputmethod.sogou.xiaomi/.SogouIME.
+  - Google Play Services, Google Services Framework and Play Store are not present.
+  - Optional China packages detected included Xiaomi Market, Game Center, Mi Video,
+    Mi Music and MIUI Hybrid.
+- Confirmed that a locked China ROM cannot truthfully be described as a complete
+  Global-ROM conversion. MIBU changes only verified user-controllable layers and
+  reports ROM-signed Chinese recovery/security/setup screens as a remaining limit.
+- Cloned the official HeliBoard v4.0 source tag from:
+  https://github.com/HeliBorg/HeliBoard
+  - Exact source commit: bd48798b99cccc99704eebf2a9259c02dbd684d5
+  - Installed the required Android 36 SDK, Build Tools 36 and NDK 28.0.13004108.
+  - Used a temporary R: workspace mapping because Android NDK paths cannot contain
+    spaces.
+  - Built the ARM64 debugNoMinify variant from source.
+  - Verified package: helium314.keyboard.debug
+  - Verified IME service:
+    helium314.keyboard.debug/helium314.keyboard.latin.LatinIME
+  - Verified APK v1/v2 signatures and ARM64 native ABI.
+  - APK SHA-256:
+    b36ccd9e2594ed552a736007420cb42b05ffdc92bd49fb59f28c37c9c2cf05b4
+- Bundled the verified APK under resources/third_party with upstream GPLv3,
+  Apache-2.0 and CC-BY-SA-4.0 license texts plus build provenance.
+- Updated MIBU English Conversion so it:
+  - Verifies the bundled keyboard SHA-256 before installation.
+  - Installs and verifies HeliBoard when no English keyboard exists.
+  - Selects and re-verifies the English IME before disabling Sogou.
+  - Disables optional China apps and Chinese keyboards with reversible
+    pm disable-user operations; it does not uninstall or modify partitions.
+  - Enables only Google components already present on the ROM and never sideloads
+    mismatched privileged Google packages.
+  - Saves locale, keyboard and package state for rollback.
+  - Binds rollback snapshots to the device codename and ROM build.
+  - Preserves the first pre-conversion snapshot across Xiaomi installer retries.
+  - Refuses to apply a rollback snapshot to a different device or ROM build.
+  - Restores package state before reselecting the original keyboard on rollback.
+  - Deactivates a MIBU-installed HeliBoard package on rollback if it was absent
+    before conversion.
+  - Automatically copies the verified APK to Downloads and opens Xiaomi's system
+    installer when silent ADB installation is restricted.
+- Added regression coverage for:
+  - Verified keyboard install/select/disable ordering.
+  - Tampered APK rejection.
+  - Xiaomi INSTALL_FAILED_USER_RESTRICTED fallback.
+  - Original keyboard and package rollback.
+- Test result: 53 pytest tests passed; 43 unittest tests passed.
+- Rebuilt the Windows release successfully:
+  pc-helper/release/MIBU-PC-Helper/MIBU-PC-Helper.exe
+- Verified the packaged release launches and contains the same keyboard SHA-256,
+  provenance file and licenses.
+- Live phone result:
+  - A rollback snapshot was saved to
+    test-evidence/live-english-conversion-snapshot.json.
+  - Xiaomi rejected silent installation with INSTALL_FAILED_USER_RESTRICTED.
+  - MIBU copied the verified APK to the phone and opened
+    com.miui.packageinstaller/com.miui.packageInstaller.InstallStart.
+  - No China app or keyboard was disabled because HeliBoard was not yet installed.
+  - User action still required: tap Allow/Install on the phone installer, then run
+    English Conversion again for final selection and post-change verification.

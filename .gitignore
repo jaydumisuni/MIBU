@@ -50,6 +50,8 @@ resources/**
 !resources/live_ui/**
 !resources/guide/
 !resources/guide/**
+!resources/third_party/
+!resources/third_party/**
 !resources/expected ui/*.png
 !resources/expected ui/*.wav
 !resources/expected ui/android/*.png
