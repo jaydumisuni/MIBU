@@ -240,6 +240,12 @@ class AssistantIntentTests(unittest.TestCase):
     def test_wifi_command_routes_to_verified_agent(self) -> None:
         self.assertEqual("wifi_off", mibu_runtime.classify_assistant_intent("turn wifi off"))
 
+    def test_english_conversion_routes_to_reversible_workflow(self) -> None:
+        self.assertEqual(
+            "english_conversion",
+            mibu_runtime.classify_assistant_intent("convert my phone to English"),
+        )
+
 
 class PhoneAgentParsingTests(unittest.TestCase):
     def test_xiaomi_loaded_sim_and_validated_cellular_are_ready(self) -> None:

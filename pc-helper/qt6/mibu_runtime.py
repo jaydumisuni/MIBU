@@ -62,6 +62,13 @@ def classify_assistant_intent(message: str) -> str:
         return "phone_summary"
     if "four token" in clean or "4 token" in clean or "lane" in words or "lanes" in words:
         return "token_lanes"
+    if (
+        "english conversion" in clean
+        or "convert to english" in clean
+        or "change to english" in clean
+        or ("english" in words and {"phone", "rom", "language", "convert"} & words)
+    ):
+        return "english_conversion"
     if "manual" in words or "guide" in words or clean == "help":
         return "manual"
     if "start waiting" in clean or "phone guide" in clean or "timer" in words or "countdown" in words:

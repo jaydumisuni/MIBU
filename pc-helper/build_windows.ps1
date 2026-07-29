@@ -1,6 +1,8 @@
 param(
     [string]$ApkPath = "android\app\build\outputs\apk\debug\app-debug.apk",
-    [switch]$UseExistingApk
+    [switch]$UseExistingApk,
+    [switch]$SkipDependencyInstall,
+    [switch]$SkipIconRefresh
 )
 
 $ErrorActionPreference = "Stop"
@@ -60,10 +62,15 @@ function Assert-NonEmptyFile([string]$Path, [string]$Description) {
     }
 }
 
-python -m pip install --upgrade pip
-if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed with exit code $LASTEXITCODE" }
-python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller
-if ($LASTEXITCODE -ne 0) { throw "Python dependency installation failed with exit code $LASTEXITCODE" }
+if ($SkipDependencyInstall) {
+    python -c "import PyInstaller, PySide6; print('Using verified local PyInstaller ' + PyInstaller.__version__ + ' and PySide6 ' + PySide6.__version__)"
+    if ($LASTEXITCODE -ne 0) { throw "Required local Python build dependencies are missing" }
+} else {
+    python -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed with exit code $LASTEXITCODE" }
+    python -m pip install -r (Join-Path $HelperDir "requirements.txt") pyinstaller pytest
+    if ($LASTEXITCODE -ne 0) { throw "Python dependency installation failed with exit code $LASTEXITCODE" }
+}
 
 $AndroidSdk = Resolve-AndroidSdk
 if ($UseExistingApk) {
@@ -131,7 +138,9 @@ Push-Location $HelperDir
 try {
     python -m unittest discover -v
     if ($LASTEXITCODE -ne 0) { throw "PC helper unit tests failed with exit code $LASTEXITCODE" }
-    python -c "import mibu_actions, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_actions.EXPECTED_APP_VERSION == '0.3.0-dev'; print('MIBU v3 import/version/proof-gate smoke check passed')"
+    python -m pytest -q
+    if ($LASTEXITCODE -ne 0) { throw "PC helper pytest suite failed with exit code $LASTEXITCODE" }
+    python -c "import mibu_actions, mibu_english_conversion, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_english_conversion.SNAPSHOT_SCHEMA == 1; assert mibu_actions.EXPECTED_APP_VERSION == '0.3.0-dev'; print('MIBU v3 import/version/conversion/proof-gate smoke check passed')"
     if ($LASTEXITCODE -ne 0) { throw "MIBU v3 source smoke check failed" }
 } finally {
     Pop-Location
@@ -234,15 +243,17 @@ Copy-Item $ChecksumPath (Join-Path $BuiltHelper "SHA256SUMS.txt") -Force
 Assert-NonEmptyFile (Join-Path $BuiltHelper "dist\MIBU.apk") "PyInstaller runtime APK"
 Assert-NonEmptyFile (Join-Path $BuiltHelper "resources\live_ui\mibu_logo.png") "PyInstaller runtime branding"
 
-$IconRefresh = "$env:SystemRoot\System32\ie4uinit.exe"
-foreach ($argument in @("-ClearIconCache", "-show")) {
-    Start-Process -FilePath $IconRefresh -ArgumentList $argument -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
-}
-try {
-    $shell = New-Object -ComObject Shell.Application
-    @($shell.Windows()) | ForEach-Object { $_.Refresh() }
-} catch {
-    Write-Verbose "Explorer icon refresh was unavailable: $($_.Exception.Message)"
+if (-not $SkipIconRefresh) {
+    $IconRefresh = "$env:SystemRoot\System32\ie4uinit.exe"
+    foreach ($argument in @("-ClearIconCache", "-show")) {
+        Start-Process -FilePath $IconRefresh -ArgumentList $argument -WindowStyle Hidden -ErrorAction SilentlyContinue
+    }
+    try {
+        $shell = New-Object -ComObject Shell.Application
+        @($shell.Windows()) | ForEach-Object { $_.Refresh() }
+    } catch {
+        Write-Verbose "Explorer icon refresh was unavailable: $($_.Exception.Message)"
+    }
 }
 Write-Host "Both runnable EXE folders, APK, platform-tools, live UI, approved icon and SHA-256 manifest verified." -ForegroundColor Green
 Write-Host "Release folder: $BundleDir" -ForegroundColor Green

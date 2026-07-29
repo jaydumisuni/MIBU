@@ -70,6 +70,11 @@ from mibu_phone_agent import (
     set_mobile_data,
     set_wifi,
 )
+from mibu_english_conversion import (
+    apply_english_conversion,
+    audit_english_conversion,
+    rollback_english_conversion,
+)
 
 
 WINDOW_SIZE = QSize(760, 560)
@@ -432,6 +437,11 @@ class AssistantOverlay(QFrame):
         self.guide_button.setToolTip("Open the offline MIBU guide")
         self.guide_button.clicked.connect(owner.open_local_guide)
         commands.addWidget(self.guide_button)
+        self.english_button = QPushButton("English")
+        self.english_button.setObjectName("assistantMiniButton")
+        self.english_button.setToolTip("Audit and apply reversible English conversion")
+        self.english_button.clicked.connect(owner.show_english_conversion)
+        commands.addWidget(self.english_button)
         panel_layout.addLayout(commands)
 
         self.chat_panel = QFrame()
@@ -445,7 +455,9 @@ class AssistantOverlay(QFrame):
         self.chat_history.setLineWrapMode(QPlainTextEdit.WidgetWidth)
         self.chat_history.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.chat_history.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.chat_history.setPlainText("MIBU: Ask about ADB, install, login, tokens, waiting, status, or the manual.")
+        self.chat_history.setPlainText(
+            "MIBU: Ask about ADB, install, login, tokens, waiting, English conversion, status, or the manual."
+        )
         chat_layout.addWidget(self.chat_history, 1)
         chat_entry = QHBoxLayout()
         self.chat_input = QLineEdit()
@@ -796,6 +808,7 @@ class Window(QMainWindow):
         QPushButton#primaryButton, QPushButton#assistantButton { background:qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff7a2b, stop:.48 #c546ff, stop:1 #218bff); border:1px solid #f1f5ff; }
         QPushButton#secondaryButton { background:#0d1628; border:1px solid #48628c; }
         QPushButton:disabled { background:#1a2130; border-color:#313d51; color:#7f8da7; }
+        QPushButton#primaryButton:disabled, QPushButton#secondaryButton:disabled { background:#1a2130; border-color:#313d51; color:#7f8da7; }
         QFrame#dialogShell { background:#070b16; border:1px solid #4c7ed1; border-radius:11px; }
         QLabel#dialogTitle { color:#ffffff; font-size:19px; font-weight:800; }
         QLabel#dialogStep { color:#dce7ff; font-size:10px; padding:4px 8px; background:#080e1c; border:1px solid #243653; border-radius:7px; }
@@ -1025,6 +1038,9 @@ class Window(QMainWindow):
             return "Reading the phone's real SIM, Wi-Fi, cellular and validation state..."
         if intent == "token_lanes":
             return "Two distinct captures feed four lanes: Firefox is reused for lanes 1 and 3; Chrome is reused for lanes 2 and 4."
+        if intent == "english_conversion":
+            QTimer.singleShot(0, self.show_english_conversion)
+            return "Opening English Conversion. MIBU will audit first, save rollback state, then verify every approved change."
         if intent == "manual":
             QTimer.singleShot(0, self.open_local_guide)
             return "Opening the offline illustrated MIBU manual."
@@ -1046,7 +1062,7 @@ class Window(QMainWindow):
         if intent == "one_click":
             QTimer.singleShot(0, self.run_one_click_assist)
             return "Starting One-Click Assist. I will pause only for phone or browser approval you must provide."
-        return "I heard you. Try: hi, what apps are installed, is MIBU installed, install this, open MIBU, phone status, start one click, or adb shell getprop ro.product.model."
+        return "I heard you. Try: hi, phone status, convert phone to English, install MIBU, start one click, or adb shell getprop ro.product.model."
 
     def run_assistant_task(self, function: Callable[[], object], *, play_result: bool = False) -> None:
         def complete(value: object) -> None:
@@ -1173,6 +1189,79 @@ class Window(QMainWindow):
         recheck.clicked.disconnect()
         recheck.clicked.connect(lambda: dialog.run_action(recheck, "Checking the connected phone...", check_device_ready, complete))
         dialog.run_action(recheck, "Checking the connected phone...", check_device_ready, complete)
+        dialog.exec()
+
+    def show_english_conversion(self) -> None:
+        self._set_active("Device Check")
+        dialog = LiveDialog(
+            self,
+            "English Conversion",
+            "Audit the Xiaomi ROM, apply reversible English settings, and verify the result.",
+            "icon_guide.png",
+        )
+        dialog.resize(540, 470)
+        for number, text in (
+            (1, "Audit ROM, locale, keyboard and Google components"),
+            (2, "Save a rollback snapshot before changes"),
+            (3, "Apply English and disable only optional China apps"),
+            (4, "Verify every result directly from Android"),
+        ):
+            dialog.add_step(number, text)
+
+        audit_button = dialog.add_action("Audit", lambda: None)
+        rollback_button = dialog.add_action("Rollback", lambda: None)
+        apply_button = dialog.add_action("Apply Verified Changes", lambda: None, True)
+        apply_button.setEnabled(False)
+
+        def audit_action() -> Result:
+            result, _ = audit_english_conversion()
+            return result
+
+        def report(value: object) -> None:
+            result = value if isinstance(value, Result) else Result(False, str(value))
+            dialog.set_status(result.message, result.ok)
+            self._log("English Conversion: " + result.message)
+            self._play(result.ok)
+            QTimer.singleShot(50, self.refresh_live_state)
+
+        def audit_complete(value: object) -> None:
+            result = value if isinstance(value, Result) else Result(False, str(value))
+            apply_button.setEnabled(result.ok)
+            report(result)
+
+        audit_button.clicked.disconnect()
+        audit_button.clicked.connect(
+            lambda: dialog.run_action(
+                audit_button,
+                "Reading the live ROM and package state...",
+                audit_action,
+                audit_complete,
+            )
+        )
+        apply_button.clicked.disconnect()
+        apply_button.clicked.connect(
+            lambda: dialog.run_action(
+                apply_button,
+                "Applying reversible changes and verifying Android...",
+                apply_english_conversion,
+                report,
+            )
+        )
+        rollback_button.clicked.disconnect()
+        rollback_button.clicked.connect(
+            lambda: dialog.run_action(
+                rollback_button,
+                "Restoring the saved locale, keyboard and package state...",
+                rollback_english_conversion,
+                report,
+            )
+        )
+        dialog.run_action(
+            audit_button,
+            "Reading the live ROM and package state...",
+            audit_action,
+            audit_complete,
+        )
         dialog.exec()
 
     def show_install_apk(self) -> None:

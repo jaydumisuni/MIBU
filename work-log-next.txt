@@ -162,3 +162,27 @@ Release and real capture verification - 2026-07-20
 - The first release upload timed out during a TLS handshake after creating a draft. Inspected that draft, retained the two completed assets, uploaded the two missing large assets individually, and then published the single release without duplicates.
 - Published `v0.3.0` as the current release rather than a GitHub prerelease because both bundled update checkers intentionally use GitHub's `/releases/latest` endpoint, which excludes prereleases. Release notes still state the debug-signed Android artifact and the missed live Xiaomi window explicitly.
 - Executed the real PC update checker against GitHub after publication: current `0.3.0`, latest `0.3.0`, release URL resolved, and `update_available=False` as expected.
+
+## 2026-07-29 - MIBU English Conversion integration
+
+- Reviewed the supplied `TTG_ADB_ENABLER_V3` / MDM-removal script and separated reusable ADB inventory, verification and rollback ideas from unsafe FRP, MDM, raw-partition, `proinfo`, Settings replacement and insecure approval-fallback operations.
+- Added `pc-helper/qt6/mibu_english_conversion.py`, a Xiaomi-only, reversible workflow that audits ROM identity, active locale, input methods, enabled/disabled packages and Google core components.
+- Added a pre-change JSON rollback snapshot under the current user's local application-data folder. The snapshot deliberately excludes device serials, tokens and browser data.
+- Added verified actions for `en-US`, selecting an already-installed Gboard/AOSP Latin input method, enabling existing Google components and disabling only a conservative allowlist of optional China content/store packages with `pm disable-user --user 0`.
+- Added rollback that restores the recorded locale, keyboard and original enabled/disabled state for every touched package.
+- Explicitly excluded system Settings, System UI, Security Center, provisioning, telephony, package installers, raw partitions, FRP and MDM operations.
+- Added a native MIBU `English Conversion` dialog with automatic audit, disabled Apply until audit success, explicit Apply and Rollback actions, live status output and the existing compact branded styling.
+- Added an `English` button to the floating assistant and assistant intent routing for requests such as `convert my phone to English`.
+- Corrected the dialog disabled-button style so an unavailable Apply action cannot retain the active gradient.
+- Added deterministic conversion tests covering China-ROM audit, verified application, missing-Google refusal, rollback and absence of partition/FRP/uninstall commands.
+- Connected-phone audit verified a Xiaomi China HyperOS build. Android reports the active UI locale as `en-US`, the ROM default as `zh-CN`, only Xiaomi Sogou as an available input method, five optional China packages from the allowlist and no Play Services, Google Services Framework or Play Store.
+- Because Google core and an English keyboard are absent, MIBU truthfully reports a partial-conversion limit and does not claim that the locked China ROM is a Global ROM. Complete Google integration remains a verified compatible Global-ROM step after official bootloader unlock.
+- Ran the complete PC pytest suite: `47 passed`.
+- Ran the legacy unittest suite: `43 passed`.
+- Compiled all changed Python modules successfully.
+- Rendered and visually inspected the native English Conversion dialog at `test-evidence/english-conversion-dialog.png`.
+- Added `-SkipDependencyInstall` and `-SkipIconRefresh` release-build switches so installed build dependencies and cosmetic Explorer refreshes cannot stall an offline deterministic build.
+- Updated the Windows release gate to run pytest and import the English Conversion module.
+- Rebuilt the portable PC helper successfully around the existing current Android APK.
+- Launched the packaged `MIBU-PC-Helper.exe` successfully as a smoke test and closed the test process.
+- Verified all 15 files in the generated `SHA256SUMS.txt`; no checksum mismatches were found.
