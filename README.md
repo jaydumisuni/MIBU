@@ -8,7 +8,7 @@ MIBU is a two-part timing, state-proof and official-tool handoff assistant for X
 
 MIBU validates the two user-approved Xiaomi browser captures, performs four phone-side requests at the configured Beijing timing offsets, and records Xiaomi's response for every lane. It does **not** treat a clock event, toast, or request attempt as approval. Xiaomi's response and the official Mi Unlock Tool remain authoritative.
 
-## Android app — `0.3.0-dev`
+## Android app — `0.3.1-dev`
 
 The Android app:
 
@@ -70,7 +70,7 @@ The helper:
 - requires exactly one normal online ADB device;
 - distinguishes missing, unauthorised, offline and unsupported ADB states;
 - verifies Android reports `adb_enabled=1`;
-- requires Android app version `0.3.0-dev`;
+- requires Android app version `0.3.1-dev`;
 - updates an older installed MIBU version instead of treating any installed package as current;
 - verifies the installed version after ADB installation;
 - falls back to the Android/MIUI system installer when silent installation is blocked;

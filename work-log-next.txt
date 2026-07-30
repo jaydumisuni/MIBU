@@ -251,3 +251,134 @@ Release and real capture verification - 2026-07-20
   - No China app or keyboard was disabled because HeliBoard was not yet installed.
   - User action still required: tap Allow/Install on the phone installer, then run
     English Conversion again for final selection and post-change verification.
+
+2026-07-29 - Embedded MIBU keyboard and live China-content audit
+=================================================================
+
+- Audited the requested related repositories before borrowing:
+  - AndyClaw is GPL-3.0, so no source was copied into MIBU. Only the general
+    preflight/execute/post-verify and stable-screen ideas were retained.
+  - MobileClaw, adb-claw, TTG-Device-X-Ray and Sergeant are MIT licensed.
+  - adb-claw confirmed explicit Android display targeting and checked ADB input
+    return codes as the correct control pattern.
+  - TTG-Device-X-Ray supplied a read-only identity pattern for manufacturer,
+    model, device, ROM build, verified boot and bootloader state. Its existing
+    Redmi `sky` profile matches this phone and OS2.0.*.VMWCNXM.
+  - MobileClaw supplied the structured actionable-error/deep-link pattern.
+  - Sergeant's 10-for-2 method was treated as a coordination pattern: separate
+    evidence, implementation, test and live-device verification lanes followed
+    by one reconciled result. No model or privileged agent was added.
+- Rolled the Xiaomi Package Installer back to its factory package version after
+  the updated installer blocked new APK packages with an ICP-registration error.
+  This did not bypass Android security and did not make unrelated APK installs
+  reliable.
+- Proved that updating the already-installed, correctly signed MIBU package works
+  silently with `adb install -r`.
+- Replaced the external HeliBoard dependency with a real English InputMethodService
+  inside the signed MIBU APK:
+  - Package: com.thetechguy.mibu
+  - Service: com.thetechguy.mibu/.MibuEnglishImeService
+  - Android version: 0.3.1-dev, versionCode 4
+- Added the IME service declaration and `en_US` input-method metadata.
+- Built, installed and selected the first embedded MIBU keyboard. Android reported
+  it as the exact default input method, and screenshots proved it rendered under
+  both MIBU token entry and the English Settings search field.
+- Removed the 34 MB HeliBoard APK, third-party license bundle and Xiaomi installer
+  fallback from source and release packaging. English Conversion now stops safely
+  unless the installed MIBU build exposes the exact expected IME service.
+- Updated English Conversion rollback schema to preserve the original locale,
+  keyboard, package enabled states and launcher-content settings. MIBU itself is
+  never disabled during rollback.
+- Added bootloader/verified-boot identity to the conversion audit.
+- Added Baidu, Sogou and iFlytek to the reversible Chinese-keyboard cleanup list.
+- Visually reviewed the live phone across all launcher pages and folders:
+  - Settings top and lower sections are consistently English.
+  - Chinese content remains in the Xiaomi launcher search/news surface and the
+    Xiaomi Browser widget.
+  - Visible China apps include Baidu Maps, Pinduoduo, Kuaishou, Bilibili,
+    Douyin, Weibo, Toutiao, Tencent Video, Tomato Reader, QingTing/FM,
+    Duokan, Xiaomi Youpin, China Mi Community, GetApps, Mi Video and China
+    shopping/payment/content apps.
+  - Before-state screenshots were saved under `test-evidence` for home pages,
+    launcher folders, Settings and the old keyboard.
+- Expanded the reversible optional-content allowlist using exact installed package
+  IDs. Critical Settings, System UI, Security, telephony, provisioning, Xiaomi
+  Account, package installer and bootloader-binding components remain excluded.
+- Added verified launcher settings that hide the China search bar and disable
+  Xiaomi Browser app recommendations, with exact rollback values.
+- Reworked the embedded keyboard to a current dark Android layout:
+  - compact rounded keycaps, slim MIBU/English toolbar, number long-press hints,
+    icon-style Shift/Backspace/Hide actions, pressed ripple states, haptics and
+    editor-aware Go/Next/Search/Send/Done action labels.
+  - The settings control opens Android's documented input-method settings intent.
+- Android lint, Android unit tests and APK assembly all passed after the keyboard
+  redesign.
+- PC tests passed: 53 pytest tests and 43 unittest tests.
+- English Conversion focused tests passed: 10/10, including proof that MIBU's IME
+  is selected before any Chinese keyboard is disabled and rollback does not
+  disable the MIBU app.
+- Rebuilt the Windows release successfully with the current APK and checksum
+  manifest at:
+  pc-helper/release/MIBU-PC-Helper
+- Current live-device blocker:
+  - The phone disconnected from USB ADB after the before-state visual sweep.
+  - Repeated ADB server restarts show no connected USB device.
+  - The PC remains connected to the phone hotspot at 192.168.253.191, but TCP ADB
+    on port 5555 is not enabled and correctly refused the connection.
+  - No cleanup was applied while the transport was absent.
+
+2026-07-30 - Live English conversion, keyboard proof and release rebuild
+========================================================================
+
+- USB ADB returned with device `73e68d0e226c` online:
+  - Model: 23076RA4BC
+  - Device: sky
+- Installed the current signed Android update with `adb install -r`.
+- Verified the installed package reports versionName `0.3.1-dev` and
+  versionCode 4.
+- Enabled and selected the exact embedded keyboard:
+  `com.thetechguy.mibu/.MibuEnglishImeService`.
+- Ran English Conversion through the PC-helper implementation with a device/ROM
+  bound rollback snapshot:
+  `test-evidence/english-conversion-live-snapshot.json`.
+- The first live pass verified the locale, MIBU keyboard and launcher settings,
+  and disabled 23 optional China content/keyboard packages. Xiaomi rejected
+  `disable-user` for five protected system packages.
+- Added a reversible fallback for protected optional packages:
+  - Try `pm disable-user --user 0` first.
+  - If Xiaomi rejects that operation, use `pm uninstall --user 0`, which removes
+    only the user-0 registration and leaves the factory partition unchanged.
+  - Rollback restores those packages with
+    `cmd package install-existing --user 0` before restoring enabled state.
+- Added regression coverage for protected-package fallback and restoration.
+- The second live conversion pass verified successfully and hid the remaining:
+  - com.android.browser
+  - com.xiaomi.market
+  - com.miui.personalassistant
+  - com.miui.hybrid
+  - com.sohu.inputmethod.sogou.xiaomi
+- Kept critical Settings, System UI, Security, telephony, provisioning, Xiaomi
+  Account and package-installer components untouched.
+- Refreshed and inspected all three launcher pages and the System apps folder:
+  - No Han-script text was present in the captured accessibility trees.
+  - The launcher labels, remaining app labels and System apps folder were English.
+  - After-state PNG and XML evidence is stored under `test-evidence`.
+- Visually and functionally verified the redesigned keyboard:
+  - Three key taps followed by Backspace left exactly two entered characters.
+  - The gear opened Android's
+    `AvailableVirtualKeyboardActivity` in English.
+  - The hide control changed InputMethodManager state to
+    `mInputShown=false` and `mWindowVisible=false`.
+  - Evidence: `test-evidence/mibu-modern-keyboard.png`.
+- Remaining platform limit is reported truthfully: this is still a locked China
+  ROM without complete Google core, so ROM-signed recovery/security/setup screens
+  may contain Chinese until official unlock and a compatible verified Global ROM.
+- Final PC verification:
+  - 54 pytest tests passed.
+  - 43 unittest tests passed.
+  - Source review, proof-v3 review and smoke contracts passed.
+  - Rebuilt release:
+    `pc-helper/release/MIBU-PC-Helper/MIBU-PC-Helper.exe`.
+  - Launched the new release from that exact path.
+  - Verified a responsive 760x560 frameless branded window with the connected
+    phone state.

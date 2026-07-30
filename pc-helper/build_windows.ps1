@@ -123,12 +123,7 @@ $RequiredUi = @(
     (Join-Path $Root "resources\live_ui\chrome.png"),
     (Join-Path $Root "resources\guide\index.html"),
     (Join-Path $Root "resources\expected ui\android\approved_android_ui_baseline_sheet.svg"),
-    (Join-Path $Root "resources\expected ui\android\README.md"),
-    (Join-Path $Root "resources\third_party\HeliBoard-4.0-arm64-debug.apk"),
-    (Join-Path $Root "resources\third_party\HeliBoard-LICENSE.txt"),
-    (Join-Path $Root "resources\third_party\HeliBoard-LICENSE-Apache-2.0.txt"),
-    (Join-Path $Root "resources\third_party\HeliBoard-LICENSE-CC-BY-SA-4.0.txt"),
-    (Join-Path $Root "resources\third_party\README.txt")
+    (Join-Path $Root "resources\expected ui\android\README.md")
 )
 foreach ($asset in $RequiredUi) {
     Assert-NonEmptyFile $asset "Required branded UI asset"
@@ -145,7 +140,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "PC helper unit tests failed with exit code $LASTEXITCODE" }
     python -m pytest -q
     if ($LASTEXITCODE -ne 0) { throw "PC helper pytest suite failed with exit code $LASTEXITCODE" }
-    python -c "import mibu_actions, mibu_english_conversion, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_english_conversion.SNAPSHOT_SCHEMA == 2; assert mibu_actions.EXPECTED_APP_VERSION == '0.3.0-dev'; print('MIBU v3 import/version/conversion/proof-gate smoke check passed')"
+    python -c "import mibu_actions, mibu_english_conversion, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_english_conversion.SNAPSHOT_SCHEMA == 4; assert mibu_actions.EXPECTED_APP_VERSION == '0.3.1-dev'; print('MIBU v3 import/version/conversion/proof-gate smoke check passed')"
     if ($LASTEXITCODE -ne 0) { throw "MIBU v3 source smoke check failed" }
 } finally {
     Pop-Location

@@ -5,14 +5,13 @@ from pathlib import Path
 
 from mibu_actions import Result
 from mibu_english_conversion import (
-    BUNDLED_KEYBOARD_COMPONENT,
-    BUNDLED_KEYBOARD_PACKAGE,
     CHINESE_KEYBOARD_PACKAGES,
     GOOGLE_CORE_PACKAGES,
+    MIBU_KEYBOARD_COMPONENT,
+    MIBU_KEYBOARD_PACKAGE,
     OPTIONAL_CHINA_PACKAGES,
     apply_english_conversion,
     audit_english_conversion,
-    bundled_keyboard_path,
     rollback_english_conversion,
 )
 
@@ -22,8 +21,8 @@ class FakeAdb:
         self,
         *,
         include_google: bool = True,
-        include_english_keyboard: bool = True,
-        install_success: bool = True,
+        include_mibu_app: bool = True,
+        include_mibu_keyboard: bool = True,
     ) -> None:
         self.locale = "zh-CN"
         self.default_ime = "com.sohu.inputmethod.sogou.xiaomi/.SogouIME"
@@ -35,15 +34,17 @@ class FakeAdb:
         }
         if include_google:
             self.enabled.update(GOOGLE_CORE_PACKAGES)
-        if include_english_keyboard:
-            self.enabled.add("com.google.android.inputmethod.latin")
-            self.imes.append(
-                "com.google.android.inputmethod.latin/"
-                "com.android.inputmethod.latin.LatinIME"
-            )
+        if include_mibu_app:
+            self.enabled.add(MIBU_KEYBOARD_PACKAGE)
+        if include_mibu_app and include_mibu_keyboard:
+            self.imes.append(MIBU_KEYBOARD_COMPONENT)
         self.disabled = {"com.miui.hybrid"}
         self.commands: list[list[str]] = []
-        self.install_success = install_success
+        self.system_settings = {
+            "system_locales": self.locale,
+            "key_home_screen_search_bar": "1",
+            "com.android.browser.enable_app_chooser_recommend": "1",
+        }
         self.properties = {
             "ro.product.manufacturer": "Xiaomi",
             "ro.product.model": "Test Xiaomi",
@@ -51,6 +52,8 @@ class FakeAdb:
             "ro.mi.os.version.incremental": "OS2.0.TEST.CNXM",
             "ro.build.version.incremental": "fallback",
             "ro.product.mod_device": "test_cn",
+            "ro.boot.verifiedbootstate": "green",
+            "ro.boot.flash.locked": "1",
             "persist.sys.locale": self.locale,
         }
 
@@ -59,10 +62,15 @@ class FakeAdb:
         self.commands.append(parts.copy())
         if parts[:3] == ["shell", "getprop", parts[2]]:
             return Result(True, self.properties.get(parts[2], ""))
-        if parts[:5] == ["shell", "settings", "get", "system", "system_locales"]:
-            return Result(True, self.locale)
-        if parts[:5] == ["shell", "settings", "put", "system", "system_locales"]:
-            self.locale = parts[5]
+        if parts[:4] == ["shell", "settings", "get", "system"]:
+            return Result(True, self.system_settings.get(parts[4], "null"))
+        if parts[:4] == ["shell", "settings", "put", "system"]:
+            self.system_settings[parts[4]] = parts[5]
+            if parts[4] == "system_locales":
+                self.locale = parts[5]
+            return Result(True, "")
+        if parts[:4] == ["shell", "settings", "delete", "system"]:
+            self.system_settings.pop(parts[4], None)
             return Result(True, "")
         if parts[:5] == ["shell", "settings", "get", "secure", "default_input_method"]:
             return Result(True, self.default_ime)
@@ -95,21 +103,34 @@ class FakeAdb:
             if package in self.enabled or package in self.disabled:
                 return Result(True, f"package:/data/app/{package}/base.apk")
             return Result(False, "")
-        if parts[:2] == ["install", "-r"]:
-            if not self.install_success:
-                return Result(
-                    False,
-                    "Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]",
-                )
-            self.enabled.add(BUNDLED_KEYBOARD_PACKAGE)
-            if BUNDLED_KEYBOARD_COMPONENT not in self.imes:
-                self.imes.append(BUNDLED_KEYBOARD_COMPONENT)
-            return Result(True, "Success")
-        if parts and parts[0] == "push":
-            return Result(True, "1 file pushed")
-        if parts[:4] == ["shell", "am", "start", "-W"]:
-            return Result(True, "Status: ok")
         return Result(False, "Unexpected command: " + " ".join(parts))
+
+
+class ProtectedPackageFakeAdb(FakeAdb):
+    protected_package = "com.xiaomi.market"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.removed_for_user: set[str] = set()
+
+    def __call__(self, parts: list[str], timeout: int = 20) -> Result:
+        if parts[:3] == ["shell", "pm", "disable-user"] and parts[-1] == self.protected_package:
+            self.commands.append(parts.copy())
+            return Result(False, "SecurityException: Cannot disable system packages.")
+        if parts[:3] == ["shell", "pm", "uninstall"]:
+            self.commands.append(parts.copy())
+            package = parts[-1]
+            self.enabled.discard(package)
+            self.disabled.discard(package)
+            self.removed_for_user.add(package)
+            return Result(True, "Success")
+        if parts[:4] == ["shell", "cmd", "package", "install-existing"]:
+            self.commands.append(parts.copy())
+            package = parts[-1]
+            self.removed_for_user.discard(package)
+            self.enabled.add(package)
+            return Result(True, f"Package {package} installed for user: 0")
+        return super().__call__(parts, timeout)
 
 
 def ready() -> Result:
@@ -125,7 +146,8 @@ def test_audit_reports_real_china_rom_state() -> None:
     assert audit.is_china_rom
     assert audit.locale == "zh-CN"
     assert audit.google_core_ready
-    assert audit.preferred_ime.startswith("com.google.android.inputmethod.latin/")
+    assert audit.preferred_ime == MIBU_KEYBOARD_COMPONENT
+    assert audit.bootloader_state == "locked"
 
 
 def test_apply_is_verified_reversible_and_never_uses_partition_commands(tmp_path: Path) -> None:
@@ -134,7 +156,9 @@ def test_apply_is_verified_reversible_and_never_uses_partition_commands(tmp_path
     result = apply_english_conversion(snapshot_path=snapshot, runner=adb, ready_check=ready)
     assert result.ok
     assert adb.locale == "en-US"
-    assert adb.default_ime.startswith("com.google.android.inputmethod.latin/")
+    assert adb.default_ime == MIBU_KEYBOARD_COMPONENT
+    assert adb.system_settings["key_home_screen_search_bar"] == "0"
+    assert adb.system_settings["com.android.browser.enable_app_chooser_recommend"] == "0"
     assert not (
         set(OPTIONAL_CHINA_PACKAGES + CHINESE_KEYBOARD_PACKAGES) & adb.enabled
     )
@@ -161,34 +185,26 @@ def test_missing_google_core_is_reported_instead_of_sideloaded(tmp_path: Path) -
     assert not any(parts[:2] == ["install", "-r"] for parts in adb.commands)
 
 
-def test_bundled_english_keyboard_is_installed_verified_then_selected(
+def test_mibu_keyboard_is_verified_then_selected_before_china_keyboards_are_disabled(
     tmp_path: Path,
 ) -> None:
-    adb = FakeAdb(include_google=False, include_english_keyboard=False)
-    keyboard_apk = bundled_keyboard_path()
-    assert keyboard_apk is not None
-
+    adb = FakeAdb(include_google=False)
     result = apply_english_conversion(
         snapshot_path=tmp_path / "conversion.json",
-        keyboard_apk_path=keyboard_apk,
         runner=adb,
         ready_check=ready,
     )
 
     assert result.ok
-    assert adb.default_ime == BUNDLED_KEYBOARD_COMPONENT
-    assert BUNDLED_KEYBOARD_PACKAGE in adb.enabled
+    assert adb.default_ime == MIBU_KEYBOARD_COMPONENT
+    assert MIBU_KEYBOARD_PACKAGE in adb.enabled
     assert "com.sohu.inputmethod.sogou.xiaomi" in adb.disabled
-    install_index = next(
-        index
-        for index, parts in enumerate(adb.commands)
-        if parts[:2] == ["install", "-r"]
-    )
+    assert not any(parts[:2] == ["install", "-r"] for parts in adb.commands)
     select_index = next(
         index
         for index, parts in enumerate(adb.commands)
         if parts[:3] == ["shell", "ime", "set"]
-        and parts[3] == BUNDLED_KEYBOARD_COMPONENT
+        and parts[3] == MIBU_KEYBOARD_COMPONENT
     )
     disable_index = next(
         index
@@ -196,44 +212,35 @@ def test_bundled_english_keyboard_is_installed_verified_then_selected(
         if parts[:3] == ["shell", "pm", "disable-user"]
         and parts[-1] == "com.sohu.inputmethod.sogou.xiaomi"
     )
-    assert install_index < select_index < disable_index
+    assert select_index < disable_index
 
 
-def test_tampered_bundled_keyboard_is_rejected(tmp_path: Path) -> None:
-    adb = FakeAdb(include_english_keyboard=False)
-    keyboard_apk = tmp_path / "HeliBoard.apk"
-    keyboard_apk.write_bytes(b"not the verified keyboard")
-
-    result = apply_english_conversion(
-        snapshot_path=tmp_path / "conversion.json",
-        keyboard_apk_path=keyboard_apk,
-        runner=adb,
-        ready_check=ready,
-    )
-
-    assert not result.ok
-    assert "failed SHA-256 verification" in result.message
-    assert not any(parts[:2] == ["install", "-r"] for parts in adb.commands)
-
-
-def test_restricted_install_opens_xiaomi_installer_without_disabling_sogou(
+def test_old_mibu_without_keyboard_is_rejected_before_disabling_sogou(
     tmp_path: Path,
 ) -> None:
-    adb = FakeAdb(include_english_keyboard=False, install_success=False)
-    keyboard_apk = bundled_keyboard_path()
-    assert keyboard_apk is not None
-
+    adb = FakeAdb(include_mibu_keyboard=False)
     result = apply_english_conversion(
         snapshot_path=tmp_path / "conversion.json",
-        keyboard_apk_path=keyboard_apk,
         runner=adb,
         ready_check=ready,
     )
 
     assert not result.ok
-    assert "installer is open on the phone" in result.message
-    assert any(parts and parts[0] == "push" for parts in adb.commands)
-    assert any(parts[:4] == ["shell", "am", "start", "-W"] for parts in adb.commands)
+    assert "does not expose the required English keyboard" in result.message
+    assert not any(parts[:2] == ["install", "-r"] for parts in adb.commands)
+    assert "com.sohu.inputmethod.sogou.xiaomi" in adb.enabled
+
+
+def test_missing_mibu_app_requires_install_apk_before_conversion(tmp_path: Path) -> None:
+    adb = FakeAdb(include_mibu_app=False, include_mibu_keyboard=False)
+    result = apply_english_conversion(
+        snapshot_path=tmp_path / "conversion.json",
+        runner=adb,
+        ready_check=ready,
+    )
+
+    assert not result.ok
+    assert "Run Install APK first" in result.message
     assert "com.sohu.inputmethod.sogou.xiaomi" in adb.enabled
 
 
@@ -248,19 +255,45 @@ def test_rollback_restores_locale_keyboard_and_package_state(tmp_path: Path) -> 
     assert adb.locale == "zh-CN"
     assert adb.default_ime.startswith("com.sohu.inputmethod")
     assert "com.xiaomi.market" in adb.enabled
+
+
+def test_protected_system_package_uses_reversible_per_user_hide_and_restores(
+    tmp_path: Path,
+) -> None:
+    adb = ProtectedPackageFakeAdb()
+    snapshot = tmp_path / "conversion.json"
+
+    applied = apply_english_conversion(snapshot_path=snapshot, runner=adb, ready_check=ready)
+
+    assert applied.ok
+    assert adb.protected_package in adb.removed_for_user
+    assert any(
+        parts[:3] == ["shell", "pm", "uninstall"]
+        and parts[-1] == adb.protected_package
+        for parts in adb.commands
+    )
+
+    rolled_back = rollback_english_conversion(
+        snapshot_path=snapshot,
+        runner=adb,
+        ready_check=ready,
+    )
+
+    assert rolled_back.ok
+    assert adb.protected_package in adb.enabled
+    assert adb.protected_package not in adb.removed_for_user
     assert "com.miui.video" in adb.enabled
     assert "com.miui.hybrid" in adb.disabled
+    assert adb.system_settings["key_home_screen_search_bar"] == "1"
+    assert adb.system_settings["com.android.browser.enable_app_chooser_recommend"] == "1"
 
 
-def test_rollback_deactivates_keyboard_that_mibu_installed(tmp_path: Path) -> None:
-    adb = FakeAdb(include_english_keyboard=False)
-    keyboard_apk = bundled_keyboard_path()
-    assert keyboard_apk is not None
+def test_rollback_restores_previous_keyboard_without_disabling_mibu(tmp_path: Path) -> None:
+    adb = FakeAdb()
     snapshot = tmp_path / "conversion.json"
 
     applied = apply_english_conversion(
         snapshot_path=snapshot,
-        keyboard_apk_path=keyboard_apk,
         runner=adb,
         ready_check=ready,
     )
@@ -273,28 +306,25 @@ def test_rollback_deactivates_keyboard_that_mibu_installed(tmp_path: Path) -> No
     )
     assert rolled_back.ok
     assert adb.default_ime.startswith("com.sohu.inputmethod")
-    assert BUNDLED_KEYBOARD_PACKAGE in adb.disabled
+    assert MIBU_KEYBOARD_PACKAGE in adb.enabled
+    assert MIBU_KEYBOARD_PACKAGE not in adb.disabled
 
 
 def test_retry_preserves_original_preinstall_snapshot(tmp_path: Path) -> None:
-    adb = FakeAdb(include_english_keyboard=False)
-    keyboard_apk = bundled_keyboard_path()
-    assert keyboard_apk is not None
+    adb = FakeAdb()
     snapshot = tmp_path / "conversion.json"
 
     first = apply_english_conversion(
         snapshot_path=snapshot,
-        keyboard_apk_path=keyboard_apk,
         runner=adb,
         ready_check=ready,
     )
     assert first.ok
     original = json.loads(snapshot.read_text(encoding="utf-8"))
-    assert BUNDLED_KEYBOARD_PACKAGE not in original["package_enabled"]
+    assert MIBU_KEYBOARD_PACKAGE not in original["package_enabled"]
 
     second = apply_english_conversion(
         snapshot_path=snapshot,
-        keyboard_apk_path=keyboard_apk,
         runner=adb,
         ready_check=ready,
     )

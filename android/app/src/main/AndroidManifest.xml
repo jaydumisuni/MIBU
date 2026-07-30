@@ -51,5 +51,17 @@
             android:name=".MibuForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".MibuEnglishImeService"
+            android:exported="true"
+            android:label="MIBU English Keyboard"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/mibu_input_method" />
+        </service>
     </application>
 </manifest>

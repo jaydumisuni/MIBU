@@ -83,7 +83,7 @@ def main() -> int:
     )
     require(
         "pc-helper/qt6/mibu_actions.py",
-        'EXPECTED_APP_VERSION = "0.3.0-dev"',
+        'EXPECTED_APP_VERSION = "0.3.1-dev"',
         '"WAITING_SERVICE_ARMED"',
         '"WAITING_SERVICE_PREFLIGHT_APPROVED"',
         '"WAITING_SERVICE_PREFLIGHT_REJECTED"',

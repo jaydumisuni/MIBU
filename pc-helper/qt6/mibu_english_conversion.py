@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass
@@ -8,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from mibu_actions import Result, app_base_dir, check_device_ready, parse_installed_packages, run_tool
+from mibu_actions import Result, check_device_ready, parse_installed_packages, run_tool
 
 AdbRunner = Callable[[list[str], int], Result]
 ReadyCheck = Callable[[], Result]
@@ -28,39 +27,59 @@ GOOGLE_OPTIONAL_PACKAGES = (
 # These are optional content/store packages. System UI, Settings, Security,
 # provisioning, telephony and package installers are intentionally excluded.
 OPTIONAL_CHINA_PACKAGES = (
+    "com.android.browser",
     "com.xiaomi.market",
     "com.xiaomi.gamecenter",
+    "com.xiaomi.youpin",
+    "com.xiaomi.shop",
+    "com.xiaomi.vipaccount",
     "com.miui.video",
     "com.miui.player",
+    "com.miui.themestore",
+    "com.miui.personalassistant",
     "com.miui.contentextension",
     "com.miui.hybrid",
     "com.miui.hybrid.accessory",
+    "com.miui.newhome",
+    "com.miui.fm",
+    "com.eg.android.AlipayGphone",
+    "com.smile.gifmaker",
+    "com.baidu.searchbox",
+    "com.baidu.BaiduMap",
+    "com.xunmeng.pinduoduo",
+    "com.phoenix.read",
+    "com.ss.android.article.news",
+    "com.ss.android.ugc.aweme",
+    "com.mfashiongallery.emag",
+    "com.sina.weibo",
+    "com.duokan.reader",
+    "com.mipay.wallet",
+    "tv.danmaku.bili",
+    "com.tencent.qqlive",
+    "com.dragon.read",
 )
 
 CHINESE_KEYBOARD_PACKAGES = (
     "com.sohu.inputmethod.sogou.xiaomi",
     "com.iflytek.inputmethod.miui",
+    "com.baidu.input_mi",
 )
 
-BUNDLED_KEYBOARD_PACKAGE = "helium314.keyboard.debug"
-BUNDLED_KEYBOARD_COMPONENT = (
-    "helium314.keyboard.debug/helium314.keyboard.latin.LatinIME"
-)
-BUNDLED_KEYBOARD_FILENAME = "HeliBoard-4.0-arm64-debug.apk"
-BUNDLED_KEYBOARD_REMOTE_PATH = (
-    "/sdcard/Download/HeliBoard-4.0-arm64-debug.apk"
-)
-BUNDLED_KEYBOARD_SHA256 = (
-    "b36ccd9e2594ed552a736007420cb42b05ffdc92bd49fb59f28c37c9c2cf05b4"
-)
+MIBU_KEYBOARD_PACKAGE = "com.thetechguy.mibu"
+MIBU_KEYBOARD_COMPONENT = "com.thetechguy.mibu/.MibuEnglishImeService"
 
 KEYBOARD_PACKAGE_PRIORITY = (
+    MIBU_KEYBOARD_PACKAGE,
     "com.google.android.inputmethod.latin",
-    BUNDLED_KEYBOARD_PACKAGE,
     "com.android.inputmethod.latin",
 )
 
-SNAPSHOT_SCHEMA = 2
+LAUNCHER_ENGLISH_SETTINGS = {
+    "key_home_screen_search_bar": "0",
+    "com.android.browser.enable_app_chooser_recommend": "0",
+}
+
+SNAPSHOT_SCHEMA = 4
 
 
 @dataclass(frozen=True)
@@ -70,7 +89,11 @@ class EnglishConversionAudit:
     device: str
     rom_build: str
     mod_device: str
+    verified_boot_state: str
+    flash_locked: str
     locale: str
+    launcher_search_bar: str
+    browser_app_recommendations: str
     default_ime: str
     available_imes: tuple[str, ...]
     enabled_packages: frozenset[str]
@@ -95,6 +118,16 @@ class EnglishConversionAudit:
         return all(package in self.enabled_packages for package in GOOGLE_CORE_PACKAGES)
 
     @property
+    def bootloader_state(self) -> str:
+        if self.flash_locked == "1":
+            return "locked"
+        if self.flash_locked == "0":
+            return "unlocked"
+        if self.verified_boot_state.lower() == "orange":
+            return "unlocked"
+        return "unknown"
+
+    @property
     def preferred_ime(self) -> str:
         for package in KEYBOARD_PACKAGE_PRIORITY:
             for component in self.available_imes:
@@ -112,36 +145,13 @@ class EnglishConversionSnapshot:
     locale: str
     default_ime: str
     package_enabled: dict[str, bool]
+    system_settings: dict[str, str | None]
 
 
 def default_snapshot_path() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
     base = Path(local_app_data) if local_app_data else Path.home() / ".thetechguy"
     return base / "THETECHGUY" / "MIBU" / "english-conversion-snapshot.json"
-
-
-def bundled_keyboard_path(explicit: Path | None = None) -> Path | None:
-    if explicit is not None:
-        return explicit.resolve() if explicit.is_file() else None
-    base = app_base_dir()
-    candidates = (
-        base / "resources" / "third_party" / BUNDLED_KEYBOARD_FILENAME,
-        base / "_internal" / "resources" / "third_party" / BUNDLED_KEYBOARD_FILENAME,
-        Path.cwd() / "resources" / "third_party" / BUNDLED_KEYBOARD_FILENAME,
-        Path(__file__).resolve().parents[2]
-        / "resources"
-        / "third_party"
-        / BUNDLED_KEYBOARD_FILENAME,
-    )
-    return next((candidate.resolve() for candidate in candidates if candidate.is_file()), None)
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _run(runner: AdbRunner, parts: list[str], timeout: int = 20) -> Result:
@@ -197,7 +207,33 @@ def audit_english_conversion(
             or "unknown"
         ),
         mod_device=_read_value(runner, ["shell", "getprop", "ro.product.mod_device"]) or "unknown",
+        verified_boot_state=(
+            _read_value(runner, ["shell", "getprop", "ro.boot.verifiedbootstate"])
+            or "unknown"
+        ),
+        flash_locked=(
+            _read_value(runner, ["shell", "getprop", "ro.boot.flash.locked"])
+            or "unknown"
+        ),
         locale=locale,
+        launcher_search_bar=(
+            _read_value(
+                runner,
+                ["shell", "settings", "get", "system", "key_home_screen_search_bar"],
+            )
+        ),
+        browser_app_recommendations=(
+            _read_value(
+                runner,
+                [
+                    "shell",
+                    "settings",
+                    "get",
+                    "system",
+                    "com.android.browser.enable_app_chooser_recommend",
+                ],
+            )
+        ),
         default_ime=_read_value(runner, ["shell", "settings", "get", "secure", "default_input_method"]),
         available_imes=tuple(line.strip() for line in ime_output.splitlines() if "/" in line),
         enabled_packages=enabled,
@@ -214,7 +250,9 @@ def audit_english_conversion(
     summary = (
         f"Device: {audit.manufacturer} {audit.model}\n"
         f"ROM: {audit.rom_build} ({'China' if audit.is_china_rom else 'not identified as China'})\n"
+        f"Bootloader: {audit.bootloader_state}; verified boot: {audit.verified_boot_state}\n"
         f"Locale: {audit.locale}\n"
+        f"Launcher search content: {'visible' if audit.launcher_search_bar != '0' else 'hidden'}\n"
         f"Keyboard: {keyboard}\n"
         f"Google core: {google_state}\n"
         f"Optional China packages found: {optional_count}"
@@ -230,7 +268,6 @@ def _snapshot_for(audit: EnglishConversionAudit) -> EnglishConversionSnapshot:
         | set(GOOGLE_OPTIONAL_PACKAGES)
         | set(OPTIONAL_CHINA_PACKAGES)
         | set(CHINESE_KEYBOARD_PACKAGES)
-        | {BUNDLED_KEYBOARD_PACKAGE}
     )
     package_enabled = {
         package: package in audit.enabled_packages
@@ -245,6 +282,12 @@ def _snapshot_for(audit: EnglishConversionAudit) -> EnglishConversionSnapshot:
         locale=audit.locale,
         default_ime=audit.default_ime,
         package_enabled=package_enabled,
+        system_settings={
+            "key_home_screen_search_bar": audit.launcher_search_bar or None,
+            "com.android.browser.enable_app_chooser_recommend": (
+                audit.browser_app_recommendations or None
+            ),
+        },
     )
 
 
@@ -273,6 +316,21 @@ def _package_enabled(runner: AdbRunner, package: str) -> bool:
     return output.ok and package in parse_installed_packages(output.message)
 
 
+def _hide_package_for_user(runner: AdbRunner, package: str) -> tuple[bool, str]:
+    disabled = _run(runner, ["shell", "pm", "disable-user", "--user", "0", package], 25)
+    if not _package_enabled(runner, package):
+        return True, "disabled"
+
+    removed = _run(runner, ["shell", "pm", "uninstall", "--user", "0", package], 45)
+    if removed.ok and not _package_enabled(runner, package):
+        return True, "hidden for this user"
+
+    details = "; ".join(
+        text for text in (disabled.message.strip(), removed.message.strip()) if text
+    )
+    return False, details or "Android rejected both reversible package operations"
+
+
 def _installed_ime_for_package(runner: AdbRunner, package: str) -> str:
     output = _read_value(runner, ["shell", "ime", "list", "-s"])
     return next(
@@ -285,125 +343,43 @@ def _installed_ime_for_package(runner: AdbRunner, package: str) -> str:
     )
 
 
-def _open_keyboard_installer(runner: AdbRunner, apk: Path) -> Result:
-    pushed = _run(
-        runner,
-        ["push", str(apk), BUNDLED_KEYBOARD_REMOTE_PATH],
-        180,
-    )
-    if not pushed.ok:
-        return Result(
-            False,
-            "MIBU could not copy the verified keyboard to the phone. "
-            + pushed.message,
-        )
-    opened = _run(
-        runner,
-        [
-            "shell",
-            "am",
-            "start",
-            "-W",
-            "-a",
-            "android.intent.action.VIEW",
-            "-d",
-            f"file://{BUNDLED_KEYBOARD_REMOTE_PATH}",
-            "-t",
-            "application/vnd.android.package-archive",
-            "--grant-read-uri-permission",
-        ],
-        60,
-    )
-    if not opened.ok:
-        return Result(
-            False,
-            "The keyboard was copied to Downloads, but Xiaomi's installer "
-            "could not be opened automatically. "
-            + opened.message,
-        )
-    return Result(
-        True,
-        "Xiaomi's installer is open on the phone. Tap Allow/Install, then "
-        "run English Conversion again.",
-    )
-
-
 def _ensure_english_keyboard(
     audit: EnglishConversionAudit,
     runner: AdbRunner,
-    keyboard_apk_path: Path | None,
 ) -> tuple[Result, str]:
-    if audit.preferred_ime:
-        return Result(True, "Using an installed English keyboard."), audit.preferred_ime
-
-    apk = bundled_keyboard_path(keyboard_apk_path)
-    if apk is None:
+    if MIBU_KEYBOARD_PACKAGE not in audit.installed_packages:
         return (
             Result(
                 False,
-                "No English keyboard is installed and the verified bundled "
-                f"{BUNDLED_KEYBOARD_FILENAME} is missing.",
-            ),
-            "",
-        )
-    try:
-        apk_sha256 = _file_sha256(apk)
-    except OSError as exc:
-        return Result(False, f"Bundled English keyboard could not be read: {exc}"), ""
-    if apk_sha256 != BUNDLED_KEYBOARD_SHA256:
-        return (
-            Result(
-                False,
-                "Bundled English keyboard failed SHA-256 verification. "
-                "MIBU refused to install it.",
+                "MIBU is not installed on the phone. Run Install APK first; "
+                "the signed MIBU APK contains the verified English keyboard.",
             ),
             "",
         )
 
-    if BUNDLED_KEYBOARD_PACKAGE not in audit.installed_packages:
-        installed = _run(runner, ["install", "-r", str(apk)], 180)
-        if not installed.ok or "success" not in installed.message.lower():
-            fallback = _open_keyboard_installer(runner, apk)
-            return (
-                Result(
-                    False,
-                    "Android did not install the bundled English keyboard. "
-                    f"{fallback.message}\n"
-                    f"{installed.message or 'No install output.'}",
-                ),
-                "",
-            )
-    else:
-        _run(
-            runner,
-            ["shell", "pm", "enable", "--user", "0", BUNDLED_KEYBOARD_PACKAGE],
-            25,
-        )
-
-    package_path = _run(
-        runner, ["shell", "pm", "path", BUNDLED_KEYBOARD_PACKAGE], 25
-    )
+    package_path = _run(runner, ["shell", "pm", "path", MIBU_KEYBOARD_PACKAGE], 25)
     if not package_path.ok or "package:" not in package_path.message:
         return (
             Result(
                 False,
-                "ADB reported the keyboard install, but package verification failed.",
+                "MIBU is listed on the phone, but Android did not return its "
+                "installed package path. English conversion stopped safely.",
             ),
             "",
         )
 
-    component = _installed_ime_for_package(runner, BUNDLED_KEYBOARD_PACKAGE)
-    if component != BUNDLED_KEYBOARD_COMPONENT:
+    component = _installed_ime_for_package(runner, MIBU_KEYBOARD_PACKAGE)
+    if component != MIBU_KEYBOARD_COMPONENT:
         return (
             Result(
                 False,
-                "The installed keyboard did not expose the verified HeliBoard "
-                f"input method. Expected {BUNDLED_KEYBOARD_COMPONENT}; got "
-                f"{component or 'no service'}.",
+                "The installed MIBU build does not expose the required English "
+                f"keyboard. Expected {MIBU_KEYBOARD_COMPONENT}; got "
+                f"{component or 'no service'}. Run Install APK to update MIBU.",
             ),
             "",
         )
-    return Result(True, "Bundled HeliBoard 4.0 installed and verified."), component
+    return Result(True, "MIBU English keyboard package and service verified."), component
 
 
 def apply_english_conversion(
@@ -426,9 +402,10 @@ def apply_english_conversion(
     completed: list[str] = []
     warnings: list[str] = []
 
-    keyboard_result, english_ime = _ensure_english_keyboard(
-        audit, runner, keyboard_apk_path
-    )
+    # Retained for compatibility with older callers; MIBU now supplies its own
+    # signed keyboard and never installs an unrelated keyboard package.
+    _ = keyboard_apk_path
+    keyboard_result, english_ime = _ensure_english_keyboard(audit, runner)
     if not keyboard_result.ok:
         return Result(
             False,
@@ -461,6 +438,21 @@ def apply_english_conversion(
     else:
         warnings.append("Android did not grant the shell permission to change the full system locale")
 
+    for key, value in LAUNCHER_ENGLISH_SETTINGS.items():
+        changed = _run(
+            runner,
+            ["shell", "settings", "put", "system", key, value],
+            20,
+        )
+        after = _read_value(
+            runner,
+            ["shell", "settings", "get", "system", key],
+        )
+        if changed.ok and after == value:
+            completed.append(f"Disabled China launcher content setting {key}")
+        else:
+            warnings.append(f"Could not change launcher content setting {key}")
+
     for package in GOOGLE_CORE_PACKAGES + GOOGLE_OPTIONAL_PACKAGES:
         if package in audit.disabled_packages:
             enabled = _run(runner, ["shell", "pm", "enable", "--user", "0", package], 25)
@@ -475,11 +467,11 @@ def apply_english_conversion(
                 continue
             if english_ime.startswith(package + "/"):
                 continue
-            disabled = _run(runner, ["shell", "pm", "disable-user", "--user", "0", package], 25)
-            if disabled.ok and not _package_enabled(runner, package):
-                completed.append(f"Disabled China package {package}")
+            hidden, operation = _hide_package_for_user(runner, package)
+            if hidden:
+                completed.append(f"{operation.capitalize()} China package {package}")
             else:
-                warnings.append(f"Could not disable China package {package}")
+                warnings.append(f"Could not hide China package {package}: {operation}")
 
     _, verified = audit_english_conversion(runner, ready_check)
     google_ready = bool(verified and verified.google_core_ready)
@@ -509,6 +501,8 @@ def apply_english_conversion(
         and "en-US" in verified.locale
         and verified.default_ime == english_ime
         and verified.preferred_ime == english_ime
+        and verified.launcher_search_bar == "0"
+        and verified.browser_app_recommendations == "0"
         and china_apps_disabled
     )
     heading = (
@@ -544,6 +538,10 @@ def rollback_english_conversion(
             locale=str(data["locale"]),
             default_ime=str(data["default_ime"]),
             package_enabled={str(key): bool(value) for key, value in data["package_enabled"].items()},
+            system_settings={
+                str(key): None if value is None else str(value)
+                for key, value in data["system_settings"].items()
+            },
         )
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return Result(False, f"No valid English Conversion rollback snapshot is available: {exc}")
@@ -566,7 +564,29 @@ def rollback_english_conversion(
         locale_after = _read_value(runner, ["shell", "settings", "get", "system", "system_locales"])
         (restored if changed.ok and locale_after == snapshot.locale else failed).append("locale")
 
+    for key, value in snapshot.system_settings.items():
+        operation = "delete" if value is None else "put"
+        parts = ["shell", "settings", operation, "system", key]
+        if value is not None:
+            parts.append(value)
+        changed = _run(runner, parts, 20)
+        after = _read_value(
+            runner,
+            ["shell", "settings", "get", "system", key],
+        )
+        expected = "" if value is None else value
+        (restored if changed.ok and after == expected else failed).append(key)
+
     for package, was_enabled in snapshot.package_enabled.items():
+        if package not in current.installed_packages:
+            installed = _run(
+                runner,
+                ["shell", "cmd", "package", "install-existing", "--user", "0", package],
+                45,
+            )
+            if not installed.ok:
+                failed.append(package)
+                continue
         command = "enable" if was_enabled else "disable-user"
         parts = ["shell", "pm", command, "--user", "0", package]
         changed = _run(runner, parts, 25)
@@ -578,30 +598,6 @@ def rollback_english_conversion(
         selected = _run(runner, ["shell", "ime", "set", snapshot.default_ime], 20)
         ime_after = _read_value(runner, ["shell", "settings", "get", "secure", "default_input_method"])
         (restored if selected.ok and ime_after == snapshot.default_ime else failed).append("keyboard")
-
-    if BUNDLED_KEYBOARD_PACKAGE not in snapshot.package_enabled:
-        installed = _run(
-            runner, ["shell", "pm", "path", BUNDLED_KEYBOARD_PACKAGE], 20
-        )
-        if installed.ok and "package:" in installed.message:
-            deactivated = _run(
-                runner,
-                [
-                    "shell",
-                    "pm",
-                    "disable-user",
-                    "--user",
-                    "0",
-                    BUNDLED_KEYBOARD_PACKAGE,
-                ],
-                25,
-            )
-            (
-                restored
-                if deactivated.ok
-                and not _package_enabled(runner, BUNDLED_KEYBOARD_PACKAGE)
-                else failed
-            ).append("MIBU-installed keyboard deactivated")
 
     message = "Rollback complete." if not failed else "Rollback finished with items that Android did not restore."
     message += "\nRestored: " + (", ".join(restored) if restored else "none")

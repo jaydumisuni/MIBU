@@ -72,7 +72,7 @@ The PC helper:
 - prioritises bundled Android platform-tools;
 - requires exactly one normal online ADB device;
 - verifies `adb_enabled=1`;
-- requires Android app version `0.3.0-dev`;
+- requires Android app version `0.3.1-dev`;
 - updates an older installed package and verifies the resulting `versionName`;
 - falls back to the phone's package installer if silent ADB installation is blocked;
 - validates capture size and control characters before transfer;

@@ -107,7 +107,7 @@ def main() -> int:
         "def launch_mi_unlock_status",
         "def check_binding_recovery_compatibility",
         "Legacy binding recovery is not enabled by One Click",
-        'EXPECTED_APP_VERSION = "0.3.0-dev"',
+        'EXPECTED_APP_VERSION = "0.3.1-dev"',
     )
 
     manifest = "android/app/src/main/AndroidManifest.xml"
