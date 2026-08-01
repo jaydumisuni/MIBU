@@ -490,3 +490,6 @@ Release and real capture verification - 2026-07-20
   - Rechecked the device after reinstall: global
     `ota_disable_automatic_update=1` and the updater activity does not resolve.
     The phone was intentionally left in this fully disabled, reversible state.
+- Committed the reviewed implementation as `a23530b` with message
+  `Add verified system update controls` and pushed it successfully to
+  `https://github.com/jaydumisuni/MIBU` on branch `main`.
