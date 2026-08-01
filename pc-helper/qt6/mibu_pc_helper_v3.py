@@ -75,6 +75,11 @@ from mibu_english_conversion import (
     audit_english_conversion,
     rollback_english_conversion,
 )
+from mibu_system_updates import (
+    process_pending_system_update_request,
+    read_system_update_state,
+    set_system_updates_disabled,
+)
 
 
 WINDOW_SIZE = QSize(760, 560)
@@ -560,6 +565,7 @@ class Window(QMainWindow):
         self.state = AppState()
         self.buttons: dict[str, QPushButton] = {}
         self.cards: dict[str, QPushButton] = {}
+        self.utility_buttons: dict[str, QPushButton] = {}
         self._threads: set[QThread] = set()
         self._workers: dict[QThread, FunctionWorker] = {}
         self._assistant_thread: QThread | None = None
@@ -575,10 +581,14 @@ class Window(QMainWindow):
         self.assistant_timer = QTimer(self)
         self.assistant_timer.timeout.connect(self._animate_assistant)
         self.assistant_timer.start(900)
+        self.update_request_timer = QTimer(self)
+        self.update_request_timer.timeout.connect(self._poll_phone_update_requests)
+        self.update_request_timer.start(2000)
         QTimer.singleShot(250, self._center)
         QTimer.singleShot(450, self.refresh_live_state)
         QTimer.singleShot(700, self._dependency_review)
         QTimer.singleShot(1100, self._update_review)
+        QTimer.singleShot(1600, self._poll_phone_update_requests)
 
     def _build_ui(self) -> None:
         transparent = QWidget()
@@ -746,6 +756,19 @@ class Window(QMainWindow):
             button.clicked.connect(handlers[name])
             self.buttons[name] = button
             actions.addWidget(button, 0, column)
+        english_button = QPushButton("Convert to English")
+        english_button.setObjectName("englishUtilityButton")
+        english_button.setIcon(QIcon(live_asset("icon_guide.png")))
+        english_button.setIconSize(QSize(18, 18))
+        english_button.setCursor(Qt.PointingHandCursor)
+        english_button.setFixedHeight(28)
+        english_button.setMinimumWidth(0)
+        english_button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        english_button.clicked.connect(
+            lambda checked=False: self.show_english_conversion(auto_apply=True)
+        )
+        self.utility_buttons["Convert to English"] = english_button
+        actions.addWidget(english_button, 1, 3)
         body.addLayout(actions)
         content_layout.addWidget(main, 1)
         self.size_grip = QSizeGrip(self.shell)
@@ -804,6 +827,8 @@ class Window(QMainWindow):
         QPushButton#flowButton { background:#090f1d; border:1px solid #344a70; border-radius:7px; color:#edf3ff; font-size:8px; font-weight:700; padding:3px; }
         QPushButton#flowButton:hover { border:1px solid #258cff; }
         QPushButton#flowButton[active="true"] { border:2px solid #ff7a2b; background:#17102f; }
+        QPushButton#englishUtilityButton { background:#2b1609; border:1px solid #ff7a2b; border-radius:7px; color:#fff0df; font-size:8px; font-weight:800; padding:3px; }
+        QPushButton#englishUtilityButton:hover, QPushButton#englishUtilityButton[active="true"] { background:#4a2008; border:2px solid #ff9b45; }
         QPushButton#primaryButton, QPushButton#secondaryButton, QPushButton#assistantButton { border-radius:7px; color:white; padding:5px 10px; font-size:9px; font-weight:750; }
         QPushButton#primaryButton, QPushButton#assistantButton { background:qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff7a2b, stop:.48 #c546ff, stop:1 #218bff); border:1px solid #f1f5ff; }
         QPushButton#secondaryButton { background:#0d1628; border:1px solid #48628c; }
@@ -939,8 +964,22 @@ class Window(QMainWindow):
             lines.append(f"{marker}  {index}  {name}")
         self.progress_label.setText("\n".join(lines))
 
+    def _poll_phone_update_requests(self) -> None:
+        if self._assistant_thread is not None or any(thread.isRunning() for thread in self._threads):
+            return
+
+        def complete(value: object) -> None:
+            if not isinstance(value, Result):
+                return
+            self._log(value.message)
+            self.assistant_bubble.setText(value.message.splitlines()[0])
+            self._play(value.ok)
+            QTimer.singleShot(100, self.refresh_live_state)
+
+        self.run_background(process_pending_system_update_request, complete)
+
     def _set_active(self, name: str) -> None:
-        for mapping in (self.buttons, self.cards):
+        for mapping in (self.buttons, self.cards, self.utility_buttons):
             for key, button in mapping.items():
                 active = key == name
                 button.setProperty("active", active)
@@ -1041,6 +1080,15 @@ class Window(QMainWindow):
         if intent == "english_conversion":
             QTimer.singleShot(0, self.show_english_conversion)
             return "Opening English Conversion. MIBU will audit first, save rollback state, then verify every approved change."
+        if intent == "system_updates_off":
+            self.run_assistant_task(lambda: set_system_updates_disabled(True), play_result=True)
+            return "Disabling Xiaomi system updates, then verifying both the updater package and automatic OTA state..."
+        if intent == "system_updates_on":
+            self.run_assistant_task(lambda: set_system_updates_disabled(False), play_result=True)
+            return "Restoring Xiaomi system updates, then verifying the updater package is enabled..."
+        if intent == "system_updates_status":
+            self.run_assistant_task(lambda: read_system_update_state()[0])
+            return "Reading the real Xiaomi updater package and automatic OTA state..."
         if intent == "manual":
             QTimer.singleShot(0, self.open_local_guide)
             return "Opening the offline illustrated MIBU manual."
@@ -1062,7 +1110,7 @@ class Window(QMainWindow):
         if intent == "one_click":
             QTimer.singleShot(0, self.run_one_click_assist)
             return "Starting One-Click Assist. I will pause only for phone or browser approval you must provide."
-        return "I heard you. Try: hi, phone status, convert phone to English, install MIBU, start one click, or adb shell getprop ro.product.model."
+        return "I heard you. Try: hi, phone status, convert phone to English, disable system updates, install MIBU, start one click, or adb shell getprop ro.product.model."
 
     def run_assistant_task(self, function: Callable[[], object], *, play_result: bool = False) -> None:
         def complete(value: object) -> None:
@@ -1191,8 +1239,8 @@ class Window(QMainWindow):
         dialog.run_action(recheck, "Checking the connected phone...", check_device_ready, complete)
         dialog.exec()
 
-    def show_english_conversion(self) -> None:
-        self._set_active("Device Check")
+    def show_english_conversion(self, auto_apply: bool = False) -> None:
+        self._set_active("Convert to English")
         dialog = LiveDialog(
             self,
             "English Conversion",
@@ -1228,6 +1276,17 @@ class Window(QMainWindow):
             result = value if isinstance(value, Result) else Result(False, str(value))
             apply_button.setEnabled(result.ok)
             report(result)
+            if auto_apply and result.ok:
+                apply_button.setEnabled(False)
+                QTimer.singleShot(
+                    100,
+                    lambda: dialog.run_action(
+                        apply_button,
+                        "Applying reversible changes and verifying Android...",
+                        apply_english_conversion,
+                        report,
+                    ),
+                )
 
         audit_button.clicked.disconnect()
         audit_button.clicked.connect(

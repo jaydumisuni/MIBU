@@ -52,6 +52,12 @@ def classify_assistant_intent(message: str) -> str:
         return "wifi_off"
     if "network" in words or "mobile data" in clean:
         return "network_status"
+    if "system update" in clean or "ota update" in clean or "updates" in words:
+        if {"off", "disable", "stop", "block"} & words:
+            return "system_updates_off"
+        if {"on", "enable", "restore", "allow"} & words:
+            return "system_updates_on"
+        return "system_updates_status"
     if "status" in words or "what is happening" in clean:
         return "phone_summary"
     if (

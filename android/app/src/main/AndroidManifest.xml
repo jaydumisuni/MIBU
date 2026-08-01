@@ -21,6 +21,7 @@
         <activity android:name=".GuideActivity" android:exported="false" android:screenOrientation="sensorPortrait" />
         <activity android:name=".InstructionsActivity" android:exported="false" android:screenOrientation="sensorPortrait" />
         <activity android:name=".LogsActivity" android:exported="false" android:screenOrientation="sensorPortrait" />
+        <activity android:name=".SystemUpdateControlActivity" android:exported="false" android:screenOrientation="sensorPortrait" />
         <activity
             android:name=".TokenImportActivity"
             android:exported="true"
@@ -63,5 +64,9 @@
                 android:name="android.view.im"
                 android:resource="@xml/mibu_input_method" />
         </service>
+        <receiver
+            android:name=".SystemUpdateControlReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
     </application>
 </manifest>

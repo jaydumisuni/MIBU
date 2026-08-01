@@ -10,6 +10,7 @@ import mibu_actions
 import mibu_runtime
 import mibu_status
 import mibu_phone_agent
+import mibu_system_updates
 
 
 class BrowserRouteTests(unittest.TestCase):
@@ -245,6 +246,11 @@ class AssistantIntentTests(unittest.TestCase):
             "english_conversion",
             mibu_runtime.classify_assistant_intent("convert my phone to English"),
         )
+
+    def test_system_update_commands_route_to_verified_controls(self) -> None:
+        self.assertEqual("system_updates_off", mibu_runtime.classify_assistant_intent("disable system updates"))
+        self.assertEqual("system_updates_on", mibu_runtime.classify_assistant_intent("enable system updates"))
+        self.assertEqual("system_updates_status", mibu_runtime.classify_assistant_intent("system update status"))
 
 
 class PhoneAgentParsingTests(unittest.TestCase):

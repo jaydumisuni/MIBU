@@ -43,6 +43,7 @@ The app:
 - records Community evidence separately from timing and official-result state;
 - permits explicit recording of only an official result actually observed by the user;
 - offers a confirmed workflow reset that clears tokens, target, lanes and verification result while retaining Community evidence.
+- exposes a native System Updates popup. The APK records a request and independently reads the resulting package/OTA state; the PC helper performs the shell-only package change and returns a DUMP-protected acknowledgement.
 
 The app exposes three `android.permission.DUMP`-protected activities for ADB:
 
@@ -72,8 +73,9 @@ The PC helper:
 - prioritises bundled Android platform-tools;
 - requires exactly one normal online ADB device;
 - verifies `adb_enabled=1`;
-- requires Android app version `0.3.1-dev`;
+- requires Android app version `0.3.2-dev`;
 - updates an older installed package and verifies the resulting `versionName`;
+- applies and verifies reversible Xiaomi updater enable/disable requests from the phone without granting the APK fake system privileges;
 - falls back to the phone's package installer if silent ADB installation is blocked;
 - validates capture size and control characters before transfer;
 - uses URL-safe Base64 for transfer extras;

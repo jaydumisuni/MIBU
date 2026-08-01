@@ -382,3 +382,111 @@ Release and real capture verification - 2026-07-20
   - Launched the new release from that exact path.
   - Verified a responsive 760x560 frameless branded window with the connected
     phone state.
+
+## 2026-08-01 - Keyboard, English conversion, update control and release verification
+
+- Resumed with phone `73e68d0e226c` (`23076RA4BC`, device `sky`) online over
+  current Android platform-tools 37.0.0. Battery was verified at 100% and
+  charging before further device work.
+- Updated the MIBU Android version to `0.3.2-dev` / versionCode 5 and aligned
+  the PC helper, build scripts, CI checks, documentation and review contracts.
+- Finished the MIBU English keyboard layout:
+  - Added a separate `1 2 3 4 5 6 7 8 9 0` row above QWERTY.
+  - Removed the small number hints and long-press number behavior from QWERTY.
+  - Added lower clearance so the keyboard is not pressed against system
+    navigation.
+  - Visually verified the selected MIBU IME on the physical phone.
+  - Evidence: `test-evidence/mibu-keyboard-number-row.png`.
+- Added an orange `Convert to English` utility button below Phone Guide in the
+  compact PC helper. It audits first, preserves a device/ROM-bound rollback
+  snapshot, applies only the approved reversible user-layer changes, then
+  verifies locale, keyboard and package state.
+- Re-audited Settings and the launcher. Main Settings and the controllable
+  launcher/app layer are English. The only observed Han-script text is native
+  language names inside the language picker and a ROM-signed Digital Wellbeing
+  legal filing footer. Settings/SystemUI were not patched or replaced on the
+  locked verified China ROM.
+- Added native Android System Update Control:
+  - `SystemUpdateControlActivity` provides a branded popup with Disable,
+    Enable and Close controls.
+  - The APK records a request and independently reads the actual Xiaomi updater
+    package and `ota_disable_automatic_update` state.
+  - `SystemUpdateControlReceiver` accepts only DUMP-protected PC acknowledgements
+    and decodes the result through URL-safe Base64.
+- Added verified PC-side system update control:
+  - Disabling sets `ota_disable_automatic_update=1`, force-stops the updater and
+    first tries `pm disable-user --user 0 com.android.updater`.
+  - This HyperOS build rejects disabling protected system packages, so MIBU
+    falls back to `pm uninstall --user 0`, removing only the user-0 registration
+    while preserving the factory APK.
+  - Enabling restores the factory package with `cmd package install-existing`,
+    restores default enabled state and sets automatic OTA back to enabled.
+  - Every request is re-read and must match the exact requested package/OTA
+    state before the phone shows success.
+- Proved the Android popup end to end on the phone:
+  - Enable restored `com.android.updater` and automatic OTA.
+  - Disable removed the user-0 updater activity and set automatic OTA off.
+  - The popup independently displayed the verified Enabled and Disabled states.
+  - Final phone state was intentionally left DISABLED per the user request.
+  - Evidence includes `test-evidence/system-update-enable-roundtrip.png`,
+    `test-evidence/system-update-disable-roundtrip-final.png` and
+    `test-evidence/system-update-disabled-final.png`.
+- Found and stopped an obsolete evidence-build PC helper that was repeatedly
+  starting ADB 1.0.26. Restarted only the current bundled ADB 1.0.41/37.0.0 and
+  confirmed stable device communication.
+- Validated Aurora Store from its official release service as the honest store
+  option for this locked non-GMS China ROM:
+  - Current stable APK: Aurora Store 4.8.4 / `com.aurora.store`.
+  - APK SHA-256:
+    `8A1ED9AA09631290DA91CB793E0517B0F20DC70239AC94AE6682CD94F91A4BAD`.
+  - Verified APK v1/v2 signatures and the published signer SHA-256
+    `4c626157ad02bda3401a7263555f68a79663fc3e13a4d4369a12570941aa280f`.
+  - Xiaomi's native installer accepted the package warning and is waiting for
+    the user's private screen-lock verification. MIBU did not bypass that lock.
+  - The official Play Store was not misrepresented as working: this ROM has no
+    Google Play services, framework, account service or Play Store package.
+- Ran final source gates after the update-control implementation:
+  - Android lint, debug unit tests and release assembly passed.
+  - 59 pytest tests passed.
+  - 44 unittest tests passed.
+  - Source contract review and proof-v3 review passed.
+- The first Windows packaging copy exhausted drive D because many reproducible
+  `dist.locked_*` and `release.locked_*` folders remained from prior builds.
+  Verified every target was inside this workspace, removed only those generated
+  archives and recovered about 3.2 GB.
+- Rebuilt the self-contained Windows release successfully with the current APK,
+  platform-tools, icon, UI assets and SHA-256 manifest:
+  `pc-helper/release/MIBU-PC-Helper/MIBU-PC-Helper.exe`.
+- Visually inspected the compiled release with DPI-correct direct-window capture:
+  - Logical size 760x560 (950x700 at the current 125% display scale).
+  - Frameless custom title bar, branding, four cards, live output, command box,
+    four workflow buttons and orange Convert to English control all fit.
+  - Evidence: `test-evidence/windows-release-0.3.2-physical.png`.
+- Exercised the compiled EXE through Windows UI Automation:
+  - Device Check opened, Recheck Device ran and popup X closed it.
+  - Install APK exposed Browse APK and Install APK.
+  - Login exposed Open Chrome and Open Firefox.
+  - Phone Guide exposed Open MIBU, Start Waiting, Mi Unlock Status and Check Build;
+    Check Build completed while the window stayed responsive.
+  - Maximize changed the physical window from 950x700 to 1920x1020; Restore
+    returned it to 950x700.
+- Completed the final `0.3.2` release verification after the last Android status
+  text correction:
+  - Rebuilt `pc-helper/release/MIBU-PC-Helper/MIBU-PC-Helper.exe` and bundled
+    `dist/MIBU.apk`.
+  - Recomputed every entry in `SHA256SUMS.txt`; all 15 release hashes matched.
+  - Confirmed EXE file/product version `0.3.2` and a responsive compiled window
+    titled `MIBU PC Helper - THETECHGUY TOOL`.
+  - Reinstalled the exact bundled APK on phone `73e68d0e226c`; Android reports
+    versionName `0.3.2-dev`, versionCode 5, and `MainActivity` opened normally.
+  - Re-ran the PC suite: 59 pytest tests passed, source contracts passed and
+    proof-v3 passed.
+  - Captured the installed Android dashboard and live System Update Control in
+    `test-evidence/mibu-android-0.3.2-final-main.png` and
+    `test-evidence/system-update-disabled-release-0.3.2.png`.
+  - UI automation confirmed the popup exposes clickable Disable, Enable and
+    Close buttons. Its authoritative status showed the updater package disabled
+    and automatic OTA disabled.
+  - Rechecked the device after reinstall: global
+    `ota_disable_automatic_update=1` and the updater activity does not resolve.
+    The phone was intentionally left in this fully disabled, reversible state.

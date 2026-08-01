@@ -108,14 +108,17 @@ jobs:
           from PySide6.QtWidgets import QApplication
           import mibu_actions
           import mibu_runtime as runtime
+          import mibu_system_updates
           import mibu_pc_helper_v3 as mibu
           target = runtime.next_target()
           assert target.tzinfo is not None
           assert (target.hour, target.minute, target.second, target.microsecond) == (23, 59, 58, 600000)
-          assert mibu_actions.EXPECTED_APP_VERSION == '0.3.1-dev'
+          assert mibu_actions.EXPECTED_APP_VERSION == '0.3.2-dev'
+          assert mibu_system_updates.UPDATER_PACKAGE == 'com.android.updater'
           app = QApplication([])
           window = mibu.Window()
           assert set(window.buttons) == {'Device Check', 'Install APK', 'Login & Get Token', 'Phone Guide'}
+          assert set(window.utility_buttons) == {'Convert to English'}
           assert not window.windowIcon().isNull()
           assert (window.width(), window.height()) == (760, 560)
           assert (window.minimumWidth(), window.minimumHeight()) == (720, 520)

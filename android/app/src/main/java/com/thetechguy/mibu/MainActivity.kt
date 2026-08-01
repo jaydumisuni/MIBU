@@ -89,6 +89,9 @@ class MainActivity : Activity() {
             addView(mibuAction(R.drawable.mibu_icon_guide, "View guide", "Follow the complete PC and phone workflow", MibuColors.purple) {
                 startActivity(Intent(this@MainActivity, GuideActivity::class.java))
             }.root)
+            addView(mibuAction(R.drawable.mibu_icon_shield, "System Updates", "Enable or disable Xiaomi OTA updates", MibuColors.orange) {
+                startActivity(Intent(this@MainActivity, SystemUpdateControlActivity::class.java))
+            }.root)
             addView(footer())
         }
     }
@@ -143,6 +146,10 @@ class MainActivity : Activity() {
             startWaitingTitle = start.title
             startWaitingValue = start.value
             addView(start.root)
+
+            addView(mibuAction(R.drawable.mibu_icon_shield, "System Updates", "Open verified enable and disable controls", MibuColors.orange) {
+                startActivity(Intent(this@MainActivity, SystemUpdateControlActivity::class.java))
+            }.root)
 
             val bottom = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
             val logs = mibuAction(R.drawable.mibu_icon_logs, "Open Logs", "Activity", MibuColors.purple) {

@@ -29,7 +29,7 @@ class MibuEnglishImeService : InputMethodService() {
         keyboard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(5), dp(3), dp(5), dp(7))
+            setPadding(dp(5), dp(3), dp(5), dp(15))
             setBackgroundColor(BACKGROUND)
         }
         renderKeys()
@@ -53,6 +53,11 @@ class MibuEnglishImeService : InputMethodService() {
                 listOf("ABC", "*", "\"", "'", ":", ";", "!", "?", "_", "DEL")
             )
         } else {
+            addRow(
+                listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+                inset = false,
+                heightDp = 36,
+            )
             listOf(
                 listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
                 listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
@@ -111,7 +116,7 @@ class MibuEnglishImeService : InputMethodService() {
             }
         }
 
-    private fun addRow(keys: List<String>, inset: Boolean) {
+    private fun addRow(keys: List<String>, inset: Boolean, heightDp: Int = 45) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -124,7 +129,7 @@ class MibuEnglishImeService : InputMethodService() {
             }
             row.addView(
                 keyView(key),
-                LinearLayout.LayoutParams(0, dp(45), weight).apply {
+                LinearLayout.LayoutParams(0, dp(heightDp), weight).apply {
                     setMargins(dp(2), dp(2), dp(2), dp(2))
                 }
             )
@@ -184,11 +189,12 @@ class MibuEnglishImeService : InputMethodService() {
             text = displayLabel(label)
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = when (label) {
-                "SHIFT", "DEL" -> 24f
-                "SPACE" -> 12f
-                "?123", "ABC" -> 13f
-                "Enter" -> if (editorActionLabel().length > 2) 13f else 23f
+            textSize = when {
+                label == "SHIFT" || label == "DEL" -> 24f
+                label == "SPACE" -> 12f
+                label == "?123" || label == "ABC" -> 13f
+                label == "Enter" -> if (editorActionLabel().length > 2) 13f else 23f
+                label.length == 1 && label[0].isDigit() -> 16f
                 else -> 20f
             }
             typeface = Typeface.create("sans", Typeface.NORMAL)
@@ -200,27 +206,6 @@ class MibuEnglishImeService : InputMethodService() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
-        numberHint(label)?.let { hint ->
-            val hintView = TextView(this).apply {
-                text = hint
-                gravity = Gravity.TOP or Gravity.END
-                setPadding(0, dp(2), dp(5), 0)
-                setTextColor(HINT_TEXT)
-                textSize = 8f
-            }
-            container.addView(
-                hintView,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                )
-            )
-            container.setOnLongClickListener {
-                container.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                commit(hint)
-                true
-            }
-        }
         return container
     }
 
@@ -249,13 +234,6 @@ class MibuEnglishImeService : InputMethodService() {
             EditorInfo.IME_ACTION_DONE -> "Done"
             else -> "\u21b5"
         }
-    }
-
-    private fun numberHint(label: String): String? {
-        if (symbols || label.length != 1) return null
-        val index = "qwertyuiop".indexOf(label)
-        if (index < 0) return null
-        return "1234567890"[index].toString()
     }
 
     private fun handleKey(label: String) {
@@ -332,7 +310,6 @@ class MibuEnglishImeService : InputMethodService() {
         private const val ACCENT_KEY = 0xFF202D45.toInt()
         private const val TOOLBAR_KEY = 0xFF1B1D24.toInt()
         private const val SECONDARY_TEXT = 0xFFB8C2D8.toInt()
-        private const val HINT_TEXT = 0xFF8D94A6.toInt()
         private const val CYAN = 0xFF25C8FF.toInt()
         private const val MAGENTA = 0xFFB33CFF.toInt()
         private const val RIPPLE = 0xFF5A6070.toInt()

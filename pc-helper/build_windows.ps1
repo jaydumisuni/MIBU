@@ -140,7 +140,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "PC helper unit tests failed with exit code $LASTEXITCODE" }
     python -m pytest -q
     if ($LASTEXITCODE -ne 0) { throw "PC helper pytest suite failed with exit code $LASTEXITCODE" }
-    python -c "import mibu_actions, mibu_english_conversion, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_english_conversion.SNAPSHOT_SCHEMA == 4; assert mibu_actions.EXPECTED_APP_VERSION == '0.3.1-dev'; print('MIBU v3 import/version/conversion/proof-gate smoke check passed')"
+    python -c "import mibu_actions, mibu_english_conversion, mibu_system_updates, mibu_pc_helper_v3; assert mibu_pc_helper_v3.Window; assert mibu_english_conversion.SNAPSHOT_SCHEMA == 4; assert mibu_system_updates.UPDATER_PACKAGE == 'com.android.updater'; assert mibu_actions.EXPECTED_APP_VERSION == '0.3.2-dev'; print('MIBU v3 import/version/conversion/update-control/proof-gate smoke check passed')"
     if ($LASTEXITCODE -ne 0) { throw "MIBU v3 source smoke check failed" }
 } finally {
     Pop-Location
