@@ -75,6 +75,7 @@ from mibu_english_conversion import (
     audit_english_conversion,
     rollback_english_conversion,
 )
+from mibu_sleeper import MibuSleeperBridge
 from mibu_system_updates import (
     process_pending_system_update_request,
     read_system_update_state,
@@ -571,6 +572,7 @@ class Window(QMainWindow):
         self._assistant_thread: QThread | None = None
         self._assistant_worker: AssistantWorker | None = None
         self._assistant_phase = 0
+        self.sleeper = MibuSleeperBridge()
         self._build_ui()
         self._theme()
         self._update_time()
@@ -1038,6 +1040,9 @@ class Window(QMainWindow):
     def handle_assistant_message(self, message: str) -> str:
         clean = " ".join(message.lower().split())
         intent = classify_assistant_intent(message)
+        if intent == "sleeper_status":
+            self.run_assistant_task(self.sleeper.status_result)
+            return "Checking the canonical Sleeper engine, MIBU consumer identity, and current device observation..."
         if intent == "adb_command":
             command = message.strip()[4:].strip()
             if not command:

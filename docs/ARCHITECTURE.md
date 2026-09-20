@@ -195,3 +195,8 @@ A physical-device run remains necessary to prove external facts:
 - Xiaomi server behaviour and the official Mi Unlock Tool result.
 
 Tests confirm reviewed engineering. They do not replace understanding the implementation first.
+
+
+## Sleeper Agent
+
+The PC helper can attach the canonical private Sleeper Agent through the consumer bridge documented in `SLEEPER_INTEGRATION.md`. MIBU supplies tool identity/policy; Sleeper remains the shared engine and knowledge owner.

@@ -220,6 +220,10 @@ class TimingTests(unittest.TestCase):
 
 
 class AssistantIntentTests(unittest.TestCase):
+    def test_sleeper_status_routes_to_shared_engine_context(self) -> None:
+        self.assertEqual("sleeper_status", mibu_runtime.classify_assistant_intent("sleeper status"))
+        self.assertEqual("sleeper_status", mibu_runtime.classify_assistant_intent("Sleeper agent status"))
+
     def test_greeting_routes_to_live_phone_summary(self) -> None:
         self.assertEqual("greeting", mibu_runtime.classify_assistant_intent("hi"))
 
