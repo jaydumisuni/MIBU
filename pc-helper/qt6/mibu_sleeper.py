@@ -11,7 +11,7 @@ from mibu_actions import Result, check_device_ready, run_tool
 from mibu_update import CURRENT_VERSION
 
 
-SLEEPER_CONTRACT_COMMIT = "d8966052c752399aea5de01e6b842d3296a7043b"
+SLEEPER_CONTRACT_COMMIT = "19d69a1cbbe8a4d4b76239097d4876530d06943b"
 
 
 def consumer_descriptor() -> dict[str, object]:

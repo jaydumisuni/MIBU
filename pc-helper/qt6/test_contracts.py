@@ -279,6 +279,22 @@ class AssistantIntentTests(unittest.TestCase):
         )
 
 
+    def test_plain_operation_language_routes_to_sleeper_semantics(self) -> None:
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("unlock bootload"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("unlock network"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("wipe"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("bypass this"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("delete this"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("check this"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("research bootloader"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("find a way to unlock network"))
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("see what can happen if we install global ROM"))
+
+    def test_plain_unlock_network_is_not_stolen_by_network_status_shortcut(self) -> None:
+        self.assertEqual("sleeper_query", mibu_runtime.classify_assistant_intent("unlock network"))
+        self.assertEqual("network_status", mibu_runtime.classify_assistant_intent("network status"))
+
+
 class PhoneAgentParsingTests(unittest.TestCase):
     def test_xiaomi_loaded_sim_and_validated_cellular_are_ready(self) -> None:
         connectivity = (

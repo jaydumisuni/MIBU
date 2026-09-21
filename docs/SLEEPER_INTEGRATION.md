@@ -20,7 +20,7 @@ Public standalone mode does not invent Sleeper results. Internal attached mode u
 
 ## Current contract
 
-- tested Sleeper commit: d8966052c752399aea5de01e6b842d3296a7043b
+- tested Sleeper commit: 19d69a1cbbe8a4d4b76239097d4876530d06943b
 - MIBU PC Helper can query sleeper status from its assistant.
 - With ADB available, the bridge presents the connected Android observation to Sleeper and reports the selected entry adapter, its qualification state, and matching knowledge count.
 - Consumer context never grants mutation authority; Sleeper qualification and safety gates remain authoritative.
@@ -46,3 +46,11 @@ The MIBU assistant now uses Sleeper's canonical dialogue layer rather than raw k
 - Real MIBU assistant operations publish their caller-selected job to Sleeper before dispatch.
 - Code/pseudocode supplied in chat can be structurally inspected and discussed, but is not executed automatically or promoted to shared knowledge without evidence.
 - Comparisons are scoped to the current device identity so evidence from a different vendor/model/chipset is not mixed into the answer.
+
+## Plain assistant operation language
+
+MIBU's direct built-in controls keep priority. Other operation/research phrases are delegated to the canonical Sleeper dialogue engine even when the user does not prefix the message with "Sleeper".
+
+Examples include `unlock bootload`, `unlock network`, `wipe`, `bypass this`, `delete this`, `check this`, `research ...`, `find a way ...`, and `see what can happen ...`.
+
+MIBU only performs routing here. Semantic meaning, target/referent resolution, mutation/destructive classification and exploratory objective parsing remain owned by canonical Sleeper.

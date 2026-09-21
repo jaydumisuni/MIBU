@@ -32,7 +32,7 @@ class MibuSleeperContractTests(unittest.TestCase):
     def test_contract_pins_the_proven_consumer_context_revision(self):
         self.assertEqual(
             mibu_sleeper.SLEEPER_CONTRACT_COMMIT,
-            "d8966052c752399aea5de01e6b842d3296a7043b",
+            "19d69a1cbbe8a4d4b76239097d4876530d06943b",
         )
 
 

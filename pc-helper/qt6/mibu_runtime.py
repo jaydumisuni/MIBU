@@ -20,6 +20,43 @@ TARGET_TIME = time(23, 59, 58, 600000)
 LOGIN_URL = "https://c.mi.com/global/"
 WINGET_BROWSER_IDS = {"chrome": "Google.Chrome", "firefox": "Mozilla.Firefox"}
 
+_SEMANTIC_DELEGATE_PREFIXES = (
+    "unlock ",
+    "wipe",
+    "bypass ",
+    "delete ",
+    "remove ",
+    "check ",
+    "inspect ",
+    "verify ",
+    "research ",
+    "look into ",
+    "find out about ",
+    "find a way",
+    "find way",
+    "figure out how",
+    "work out how",
+    "see how to",
+    "how can we",
+    "see what can happen",
+    "see what happens",
+    "what can happen",
+    "what if ",
+    "assess ",
+    "simulate ",
+    "explore ",
+    "test the idea",
+    "backup ",
+    "back up ",
+    "restore ",
+    "flash ",
+)
+
+def looks_like_sleeper_semantic_request(message: str) -> bool:
+    clean = " ".join(message.lower().split()).strip()
+    if not clean:
+        return False
+    return clean.startswith(_SEMANTIC_DELEGATE_PREFIXES)
 
 def classify_assistant_intent(message: str) -> str:
     clean = " ".join(message.lower().split()).strip()
@@ -56,6 +93,8 @@ def classify_assistant_intent(message: str) -> str:
         return "wifi_on"
     if ("wifi" in words or "wi-fi" in clean) and ({"off", "disable", "stop"} & words):
         return "wifi_off"
+    if looks_like_sleeper_semantic_request(message):
+        return "sleeper_query"
     if "network" in words or "mobile data" in clean:
         return "network_status"
     if "system update" in clean or "ota update" in clean or "updates" in words:
