@@ -224,6 +224,12 @@ class AssistantIntentTests(unittest.TestCase):
         self.assertEqual("sleeper_status", mibu_runtime.classify_assistant_intent("sleeper status"))
         self.assertEqual("sleeper_status", mibu_runtime.classify_assistant_intent("Sleeper agent status"))
 
+    def test_sleeper_question_routes_to_canonical_brain(self) -> None:
+        self.assertEqual(
+            "sleeper_query",
+            mibu_runtime.classify_assistant_intent("Sleeper what do you know about this device?"),
+        )
+
     def test_greeting_routes_to_live_phone_summary(self) -> None:
         self.assertEqual("greeting", mibu_runtime.classify_assistant_intent("hi"))
 

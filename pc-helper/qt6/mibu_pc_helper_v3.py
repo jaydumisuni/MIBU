@@ -1042,7 +1042,10 @@ class Window(QMainWindow):
         intent = classify_assistant_intent(message)
         if intent == "sleeper_status":
             self.run_assistant_task(self.sleeper.status_result)
-            return "Checking the canonical Sleeper engine, MIBU consumer identity, and current device observation..."
+            return "Checking the canonical Sleeper engine, shared knowledge, MIBU consumer identity, and current device observation..."
+        if intent == "sleeper_query":
+            self.run_assistant_task(lambda: self.sleeper.ask_result(message))
+            return "Asking the canonical Sleeper brain using the current device context and shared knowledge..."
         if intent == "adb_command":
             command = message.strip()[4:].strip()
             if not command:

@@ -11,7 +11,7 @@ from mibu_actions import Result, check_device_ready, run_tool
 from mibu_update import CURRENT_VERSION
 
 
-SLEEPER_CONTRACT_COMMIT = "c909d80c48ce27e68d246c8808991b263078cbad"
+SLEEPER_CONTRACT_COMMIT = "25b2c6e26ee8258f601a5cbc03a17f8f88dd01b2"
 
 
 def consumer_descriptor() -> dict[str, object]:
@@ -29,12 +29,16 @@ def consumer_descriptor() -> dict[str, object]:
             "xiaomi_official_unlock_handoff",
             "browser_session_handoff",
             "reversible_system_updates",
+            "shared_sleeper_query",
+            "shared_learning_publish",
         ],
         "policy_tags": [
             "xiaomi_official_result_authoritative",
             "no_automatic_unlock_bypass",
             "no_token_logging",
             "user_authorised_device",
+            "caller_selects_job",
+            "partition_backup_before_write",
         ],
     }
 
@@ -136,13 +140,10 @@ class MibuSleeperBridge:
         result = run_tool(["shell", "getprop", name], timeout=10)
         return result.message.strip() if result.ok else ""
 
-    def inspect(self) -> MibuSleeperInspection:
-        if not self.available or self.brain is None:
-            return MibuSleeperInspection(False, self.consumer, self.engine_source, error=self.error)
-
+    def _current_observation(self):
         ready = check_device_ready()
         if not ready.ok:
-            return MibuSleeperInspection(True, self.consumer, self.engine_source, error=ready.message)
+            return None
 
         from techguy_netunlock.core.bootstrap import EntryObservation, infer_chipset_family
 
@@ -154,7 +155,7 @@ class MibuSleeperBridge:
         soc = self._getprop("ro.soc.model")
         chipset_family = infer_chipset_family(board, hardware, soc)
         chipset = soc or board or hardware
-        observation = EntryObservation(
+        return EntryObservation(
             vendor=vendor,
             platform="android",
             model=model,
@@ -163,6 +164,24 @@ class MibuSleeperBridge:
             chipset_family=chipset_family,
             chipset=chipset,
         )
+
+    def inspect(self) -> MibuSleeperInspection:
+        if not self.available or self.brain is None:
+            return MibuSleeperInspection(False, self.consumer, self.engine_source, error=self.error)
+
+        ready = check_device_ready()
+        if not ready.ok:
+            return MibuSleeperInspection(True, self.consumer, self.engine_source, error=ready.message)
+
+        self.brain.refresh_knowledge()
+        observation = self._current_observation()
+        if observation is None:
+            return MibuSleeperInspection(True, self.consumer, self.engine_source, error=ready.message)
+
+        vendor = observation.vendor
+        model = observation.model
+        chipset_family = observation.chipset_family
+        chipset = observation.chipset
         entry = self.brain.entry_for(observation, allow_candidate=True)
         knowledge = self.brain.knowledge_vault.select(observation)
         return MibuSleeperInspection(
@@ -182,3 +201,38 @@ class MibuSleeperBridge:
     def status_result(self) -> Result:
         inspection = self.inspect()
         return Result(inspection.connected, inspection.message())
+
+    def ask_result(self, message: str) -> Result:
+        if not self.available or self.brain is None:
+            return Result(False, f"Sleeper is not attached: {self.error or self.engine_source}")
+
+        self.brain.refresh_knowledge()
+        observation = self._current_observation()
+        records = self.brain.query_knowledge(message, observation=observation, limit=6)
+        if not records:
+            return Result(
+                True,
+                "Sleeper has no matching shared knowledge yet. The caller still owns the job; "
+                "Sleeper will use new evidence after it is published to the shared vault.",
+            )
+
+        lines = ["Sleeper shared knowledge:"]
+        for record in records:
+            provides = ", ".join(sorted(record.provides)[:4]) or "no capability labels"
+            lines.append(f"- {record.record_id} [{record.state.value}]: {provides}")
+        return Result(True, "\n".join(lines))
+
+    def publish_knowledge(self, record) -> Result:
+        if not self.available or self.brain is None:
+            return Result(False, f"Sleeper is not attached: {self.error or self.engine_source}")
+        try:
+            changed = self.brain.publish_knowledge(record)
+        except Exception as exc:
+            return Result(False, f"Sleeper rejected learned knowledge: {exc}")
+        action = "published" if changed else "already current"
+        sync = getattr(self.brain, "last_sync_status", None)
+        if sync is None:
+            return Result(True, f"Sleeper shared knowledge {action}: {record.record_id}")
+        synced, detail = sync
+        suffix = f"; sync {'ok' if synced else 'pending'}: {detail}"
+        return Result(True, f"Sleeper shared knowledge {action}: {record.record_id}{suffix}")

@@ -29,7 +29,11 @@ def classify_assistant_intent(message: str) -> str:
         return "adb_command"
 
     words = set(re.findall(r"[a-z0-9']+", clean))
-    if "sleeper" in words or ("agent" in words and "status" in words):
+    if "sleeper" in words:
+        if "status" in words or clean in {"sleeper", "sleeper agent"}:
+            return "sleeper_status"
+        return "sleeper_query"
+    if "agent" in words and "status" in words:
         return "sleeper_status"
     if clean in {"hi", "hello", "hey", "hello mibu", "hi mibu", "are you there"}:
         return "greeting"

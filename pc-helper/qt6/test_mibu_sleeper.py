@@ -14,6 +14,10 @@ class MibuSleeperContractTests(unittest.TestCase):
         self.assertEqual(descriptor["name"], "MIBU PC Helper")
         self.assertEqual(descriptor["repository"], "jaydumisuni/MIBU")
         self.assertIn("adb_transport", descriptor["capabilities"])
+        self.assertIn("shared_sleeper_query", descriptor["capabilities"])
+        self.assertIn("shared_learning_publish", descriptor["capabilities"])
+        self.assertIn("caller_selects_job", descriptor["policy_tags"])
+        self.assertIn("partition_backup_before_write", descriptor["policy_tags"])
         self.assertIn("xiaomi_official_result_authoritative", descriptor["policy_tags"])
 
     def test_public_build_can_remain_standalone_when_private_engine_is_absent(self):
@@ -28,7 +32,7 @@ class MibuSleeperContractTests(unittest.TestCase):
     def test_contract_pins_the_proven_consumer_context_revision(self):
         self.assertEqual(
             mibu_sleeper.SLEEPER_CONTRACT_COMMIT,
-            "c909d80c48ce27e68d246c8808991b263078cbad",
+            "25b2c6e26ee8258f601a5cbc03a17f8f88dd01b2",
         )
 
 
