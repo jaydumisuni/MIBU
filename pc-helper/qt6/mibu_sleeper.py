@@ -11,7 +11,7 @@ from mibu_actions import Result, check_device_ready, run_tool
 from mibu_update import CURRENT_VERSION
 
 
-SLEEPER_CONTRACT_COMMIT = "25b2c6e26ee8258f601a5cbc03a17f8f88dd01b2"
+SLEEPER_CONTRACT_COMMIT = "d8966052c752399aea5de01e6b842d3296a7043b"
 
 
 def consumer_descriptor() -> dict[str, object]:
@@ -121,6 +121,7 @@ class MibuSleeperBridge:
         if not available:
             return
         from techguy_netunlock.sleeper.brain import SleeperBrain
+        from techguy_netunlock.sleeper.conversation import SleeperDialogueEngine
         from techguy_netunlock.sleeper.tool_context import ConsumerToolContext
 
         self.context = ConsumerToolContext(
@@ -134,6 +135,7 @@ class MibuSleeperBridge:
             policy_tags=frozenset(str(v) for v in self.consumer["policy_tags"]),
         )
         self.brain = SleeperBrain(consumer_tool=self.context)
+        self.dialogue = SleeperDialogueEngine(self.brain)
 
     @staticmethod
     def _getprop(name: str) -> str:
@@ -203,24 +205,18 @@ class MibuSleeperBridge:
         return Result(inspection.connected, inspection.message())
 
     def ask_result(self, message: str) -> Result:
-        if not self.available or self.brain is None:
+        if not self.available or self.brain is None or not hasattr(self, "dialogue"):
             return Result(False, f"Sleeper is not attached: {self.error or self.engine_source}")
 
-        self.brain.refresh_knowledge()
         observation = self._current_observation()
-        records = self.brain.query_knowledge(message, observation=observation, limit=6)
-        if not records:
-            return Result(
-                True,
-                "Sleeper has no matching shared knowledge yet. The caller still owns the job; "
-                "Sleeper will use new evidence after it is published to the shared vault.",
-            )
+        reply = self.dialogue.respond(message, observation=observation)
+        return Result(True, reply.message)
 
-        lines = ["Sleeper shared knowledge:"]
-        for record in records:
-            provides = ", ".join(sorted(record.provides)[:4]) or "no capability labels"
-            lines.append(f"- {record.record_id} [{record.state.value}]: {provides}")
-        return Result(True, "\n".join(lines))
+    def set_current_job(self, job: str) -> Result:
+        if not self.available or not hasattr(self, "dialogue"):
+            return Result(False, f"Sleeper is not attached: {self.error or self.engine_source}")
+        self.dialogue.set_job(job)
+        return Result(True, f"Sleeper current caller-selected job: {self.dialogue.session.current_job}")
 
     def publish_knowledge(self, record) -> Result:
         if not self.available or self.brain is None:

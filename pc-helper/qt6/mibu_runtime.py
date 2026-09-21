@@ -98,6 +98,35 @@ def classify_assistant_intent(message: str) -> str:
     return "unknown"
 
 
+def assistant_job_for_intent(intent: str, message: str = "") -> str:
+    """Map an actual MIBU assistant action to the caller-selected Sleeper job.
+
+    Read-only/status intents intentionally return an empty string. Sleeper does
+    not choose the job; it receives the job from the consuming tool when the
+    assistant dispatches a real operation.
+    """
+    if intent == "adb_command":
+        command = message.strip()[4:].strip() if message.strip().lower().startswith("adb ") else message.strip()
+        return f"run ADB command: {command}" if command else "run ADB command"
+
+    jobs = {
+        "install_mibu": "install and verify MIBU on the connected phone",
+        "open_mibu": "open MIBU on the connected phone",
+        "mobile_data_on": "enable and verify mobile data",
+        "mobile_data_off": "disable and verify mobile data",
+        "wifi_on": "enable and verify Wi-Fi",
+        "wifi_off": "disable and verify Wi-Fi",
+        "english_conversion": "perform reversible English conversion",
+        "system_updates_off": "disable and verify Xiaomi system updates",
+        "system_updates_on": "restore and verify Xiaomi system updates",
+        "phone_guide": "start the phone handoff/waiting workflow",
+        "unlock_methods": "inspect Xiaomi unlock/binding methods",
+        "token_handoff": "perform the browser-session token handoff",
+        "one_click": "run MIBU One-Click Assist",
+    }
+    return jobs.get(intent, "")
+
+
 def app_base_dir() -> Path:
     return Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 

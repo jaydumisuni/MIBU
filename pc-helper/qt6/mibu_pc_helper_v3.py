@@ -59,6 +59,7 @@ from mibu_runtime import (
     next_target,
     browser_path,
     classify_assistant_intent,
+    assistant_job_for_intent,
     open_or_install_browser,
 )
 from mibu_status import PhoneStatus, query_phone_status
@@ -1040,6 +1041,9 @@ class Window(QMainWindow):
     def handle_assistant_message(self, message: str) -> str:
         clean = " ".join(message.lower().split())
         intent = classify_assistant_intent(message)
+        job = assistant_job_for_intent(intent, message)
+        if job:
+            self.sleeper.set_current_job(job)
         if intent == "sleeper_status":
             self.run_assistant_task(self.sleeper.status_result)
             return "Checking the canonical Sleeper engine, shared knowledge, MIBU consumer identity, and current device observation..."

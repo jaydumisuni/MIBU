@@ -262,6 +262,22 @@ class AssistantIntentTests(unittest.TestCase):
         self.assertEqual("system_updates_on", mibu_runtime.classify_assistant_intent("enable system updates"))
         self.assertEqual("system_updates_status", mibu_runtime.classify_assistant_intent("system update status"))
 
+    def test_real_assistant_actions_publish_caller_selected_job_to_sleeper(self) -> None:
+        self.assertEqual(
+            "disable and verify Xiaomi system updates",
+            mibu_runtime.assistant_job_for_intent("system_updates_off", "disable system updates"),
+        )
+        self.assertEqual(
+            "run ADB command: shell getprop ro.product.model",
+            mibu_runtime.assistant_job_for_intent(
+                "adb_command", "adb shell getprop ro.product.model"
+            ),
+        )
+        self.assertEqual(
+            "",
+            mibu_runtime.assistant_job_for_intent("phone_summary", "phone status"),
+        )
+
 
 class PhoneAgentParsingTests(unittest.TestCase):
     def test_xiaomi_loaded_sim_and_validated_cellular_are_ready(self) -> None:
