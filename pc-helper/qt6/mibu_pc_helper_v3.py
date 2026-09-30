@@ -759,6 +759,18 @@ class Window(QMainWindow):
             button.clicked.connect(handlers[name])
             self.buttons[name] = button
             actions.addWidget(button, 0, column)
+        smart_play_button = QPushButton("Smart Play")
+        smart_play_button.setObjectName("smartPlayUtilityButton")
+        smart_play_button.setIcon(QIcon(live_asset("icon_install.png")))
+        smart_play_button.setIconSize(QSize(18, 18))
+        smart_play_button.setCursor(Qt.PointingHandCursor)
+        smart_play_button.setFixedHeight(28)
+        smart_play_button.setMinimumWidth(0)
+        smart_play_button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        smart_play_button.clicked.connect(self.run_smart_play)
+        self.utility_buttons["Smart Play"] = smart_play_button
+        actions.addWidget(smart_play_button, 1, 2)
+
         english_button = QPushButton("Convert to English")
         english_button.setObjectName("englishUtilityButton")
         english_button.setIcon(QIcon(live_asset("icon_guide.png")))
@@ -830,6 +842,8 @@ class Window(QMainWindow):
         QPushButton#flowButton { background:#090f1d; border:1px solid #344a70; border-radius:7px; color:#edf3ff; font-size:8px; font-weight:700; padding:3px; }
         QPushButton#flowButton:hover { border:1px solid #258cff; }
         QPushButton#flowButton[active="true"] { border:2px solid #ff7a2b; background:#17102f; }
+        QPushButton#smartPlayUtilityButton { background:#091b2b; border:1px solid #258cff; border-radius:7px; color:#e8f4ff; font-size:8px; font-weight:800; padding:3px; }
+        QPushButton#smartPlayUtilityButton:hover, QPushButton#smartPlayUtilityButton[active="true"] { background:#0b2b48; border:2px solid #56a8ff; }
         QPushButton#englishUtilityButton { background:#2b1609; border:1px solid #ff7a2b; border-radius:7px; color:#fff0df; font-size:8px; font-weight:800; padding:3px; }
         QPushButton#englishUtilityButton:hover, QPushButton#englishUtilityButton[active="true"] { background:#4a2008; border:2px solid #ff9b45; }
         QPushButton#primaryButton, QPushButton#secondaryButton, QPushButton#assistantButton { border-radius:7px; color:white; padding:5px 10px; font-size:9px; font-weight:750; }
@@ -1226,6 +1240,28 @@ class Window(QMainWindow):
             self._play(result.ok)
 
         self.run_background(lambda: run_adb_user_command(command), done)
+
+    def run_smart_play(self) -> None:
+        button = self.utility_buttons.get("Smart Play")
+        if button is None:
+            return
+        if not button.isEnabled():
+            self._log("Smart Play is already running.")
+            return
+        button.setEnabled(False)
+        self._log("Smart Play: handing the phone to Sleeper Service Mode...")
+
+        def done(value: object) -> None:
+            button.setEnabled(True)
+            result = value if isinstance(value, Result) else Result(False, str(value))
+            self._log(result.message)
+            self._play(result.ok)
+            self.assistant.expand()
+            self.assistant.bubble.setText(result.message.splitlines()[0][:180])
+            self.assistant.progress.setValue(100 if result.ok else 0)
+            QTimer.singleShot(50, self.refresh_live_state)
+
+        self.run_background(self.sleeper.smart_play_result, done)
 
     def show_device_check(self) -> None:
         self._set_active("Device Check")

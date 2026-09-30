@@ -226,6 +226,11 @@ def check_device_ready() -> Result:
     return Result(True, f"Device online: {serial}\nADB state: {adb_value}")
 
 
+def selected_adb_serial() -> str:
+    """Return the serial chosen by the last successful device check."""
+    return (_SELECTED_SERIAL or "").strip()
+
+
 def phone_identity() -> Result:
     ready = check_device_ready()
     if not ready.ok:

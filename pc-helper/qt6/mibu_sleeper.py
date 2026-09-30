@@ -7,11 +7,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mibu_actions import Result, check_device_ready, run_tool
+from mibu_actions import (
+    Result,
+    adb_path,
+    check_device_ready,
+    run_tool,
+    selected_adb_serial,
+)
 from mibu_update import CURRENT_VERSION
 
 
-SLEEPER_CONTRACT_COMMIT = "19d69a1cbbe8a4d4b76239097d4876530d06943b"
+SLEEPER_CONTRACT_COMMIT = "671a2f752a953e4e5c765c9c284d8a449983d4c0"
 
 
 def consumer_descriptor() -> dict[str, object]:
@@ -31,6 +37,7 @@ def consumer_descriptor() -> dict[str, object]:
             "reversible_system_updates",
             "shared_sleeper_query",
             "shared_learning_publish",
+            "smart_play_engine",
         ],
         "policy_tags": [
             "xiaomi_official_result_authoritative",
@@ -203,6 +210,179 @@ class MibuSleeperBridge:
     def status_result(self) -> Result:
         inspection = self.inspect()
         return Result(inspection.connected, inspection.message())
+
+    def _smart_play_descriptor(self) -> Path | None:
+        configured = os.environ.get("TTG_SMART_PLAY_DESCRIPTOR", "").strip()
+        if configured:
+            path = Path(configured).expanduser().resolve()
+            return path if path.is_file() else None
+
+        candidates: list[Path] = []
+        if self.engine_source and self.engine_source not in {"installed/bundled"}:
+            source = Path(self.engine_source).expanduser().resolve()
+            for parent in (source, *source.parents):
+                if parent.name == "Sleeper-agent":
+                    candidates.append(
+                        parent
+                        / ".workspace"
+                        / "smart-play-engine-build"
+                        / "engine-manifest.json"
+                    )
+                    break
+
+        sleeper_root = os.environ.get("SLEEPER_AGENT_ROOT", "").strip()
+        if sleeper_root:
+            candidates.append(
+                Path(sleeper_root).expanduser().resolve()
+                / ".workspace"
+                / "smart-play-engine-build"
+                / "engine-manifest.json"
+            )
+
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return None
+
+    def smart_play_result(self) -> Result:
+        """Run the canonical Sleeper Smart Play transaction.
+
+        MIBU selects the job and reports the result. Sleeper owns the device,
+        Service Mode, installer broker, proof, rollback, and release.
+        """
+        if not self.available:
+            return Result(
+                False,
+                f"Sleeper is not attached: {self.error or self.engine_source}",
+            )
+
+        ready = check_device_ready()
+        if not ready.ok:
+            return ready
+        serial = selected_adb_serial()
+        if not serial:
+            return Result(False, "Smart Play has no selected ADB target.")
+
+        descriptor_path = self._smart_play_descriptor()
+        if descriptor_path is None:
+            return Result(
+                False,
+                "TTG Smart Play Engine descriptor is not available. "
+                "Set TTG_SMART_PLAY_DESCRIPTOR or install the Sleeper engine bundle.",
+            )
+        tool = adb_path()
+        if not tool:
+            return Result(False, "ADB is not available for Smart Play.")
+
+        from uuid import uuid4
+
+        from techguy_netunlock.sleeper.adb_transport import ADBPosixTransport
+        from techguy_netunlock.sleeper.android import AndroidADBResidentSleeper
+        from techguy_netunlock.sleeper.service_lease import ServiceAuthorityLease
+        from techguy_netunlock.sleeper.smart_play import SmartPlayServiceSession
+        from techguy_netunlock.sleeper.smart_play_engine import (
+            SmartPlayEngineDescriptor,
+            TTGSmartPlayEngineStrategy,
+        )
+
+        try:
+            descriptor = SmartPlayEngineDescriptor.load(descriptor_path)
+            transport = ADBPosixTransport(
+                serial,
+                adb_path=tool,
+                timeout_seconds=90.0,
+            )
+            sleeper = AndroidADBResidentSleeper(transport)
+            strategy = TTGSmartPlayEngineStrategy(sleeper, descriptor)
+
+            # Recover evidence before mutation. A foreign GMS signer, unknown
+            # account state, or other migration blocker must stop Smart Play
+            # before Service Mode itself is upgraded.
+            preflight = strategy.qualify()
+            if not preflight.viable:
+                return Result(
+                    False,
+                    "Smart Play stopped safely: "
+                    + preflight.reason
+                    + ". No package migration or Service Mode broker upgrade "
+                    "was performed.",
+                )
+
+            sleeper.ensure_service_mode_package(
+                descriptor.service_mode_apk,
+                expected_sha256=descriptor.service_mode_sha256,
+                expected_version_code=descriptor.service_mode_version_code,
+            )
+            sleeper.start()
+            lease = ServiceAuthorityLease(
+                "smart-play-" + uuid4().hex[:20],
+                "mibu",
+                serial,
+            )
+            session = SmartPlayServiceSession(
+                sleeper,
+                (strategy,),
+                lease,
+            )
+
+            gmail = run_tool(
+                ["shell", "pm", "path", descriptor.gmail_proof_package],
+                timeout=15,
+            )
+            gmail_present = gmail.ok and "package:" in gmail.message
+            gmail_artifact_ready = bool(
+                descriptor.gmail_proof_apk is not None
+                and descriptor.gmail_proof_apk.is_file()
+            )
+            proof_package = (
+                descriptor.gmail_proof_package
+                if gmail_present or gmail_artifact_ready
+                else descriptor.qualification_proof_package
+            )
+
+            result = session.run(proof_package=proof_package)
+            if not result.success:
+                attempt = result.attempts[-1] if result.attempts else None
+                reason = (
+                    attempt.error
+                    if attempt and attempt.error
+                    else next(
+                        (
+                            item.split("not-qualified:", 1)[1]
+                            for item in (attempt.evidence if attempt else ())
+                            if "not-qualified:" in item
+                        ),
+                        result.error or "qualification did not pass",
+                    )
+                )
+                return Result(
+                    False,
+                    "Smart Play stopped safely: "
+                    + reason
+                    + ". No unqualified package migration was performed.",
+                )
+
+            completion = session.release(result)
+            if not completion.committed:
+                return Result(
+                    False,
+                    "Smart Play verification passed but commit proof was not completed.",
+                )
+
+            if proof_package == descriptor.gmail_proof_package:
+                return Result(
+                    True,
+                    "Smart Play complete: TTG Smart Play Engine, Google Play Store, "
+                    "and Gmail proof are host-native and verified.",
+                )
+            return Result(
+                True,
+                "Smart Play engine ready: TTG Smart Play Engine and Google Play Store "
+                "are host-native and verified. Gmail proof is pending; install Gmail "
+                "from Play Store, then press Smart Play again.",
+            )
+        except Exception as exc:
+            return Result(False, f"Smart Play failed closed: {exc}")
 
     def ask_result(self, message: str) -> Result:
         if not self.available or self.brain is None or not hasattr(self, "dialogue"):
