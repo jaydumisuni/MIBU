@@ -50,7 +50,7 @@ class MibuSleeperContractTests(unittest.TestCase):
                 {"TTG_SMART_PLAY_DESCRIPTOR": "", "SLEEPER_AGENT_ROOT": ""},
                 clear=False,
             ):
-                self.assertEqual(bridge._smart_play_descriptor(), descriptor)
+                self.assertEqual(bridge._smart_play_descriptor(), descriptor.resolve())
 
     def test_smart_play_fails_closed_when_sleeper_is_unavailable(self):
         bridge = object.__new__(mibu_sleeper.MibuSleeperBridge)
@@ -69,6 +69,23 @@ class MibuSleeperContractTests(unittest.TestCase):
         self.assertIn('self.utility_buttons["Smart Play"]', source)
         self.assertIn("self.sleeper.smart_play_result", source)
         self.assertIn("def run_smart_play", source)
+
+    def test_smart_play_release_gate_uses_gmail_only_for_qualification(self):
+        source = (
+            Path(__file__).resolve().parent / "mibu_sleeper.py"
+        ).read_text()
+        self.assertIn(
+            "descriptor.qualification_build",
+            source,
+        )
+        self.assertIn(
+            "proof_package = descriptor.gmail_proof_package",
+            source,
+        )
+        self.assertIn(
+            "proof_package = descriptor.qualification_proof_package",
+            source,
+        )
 
     def test_smart_play_preflight_precedes_service_mode_upgrade(self):
         source = (

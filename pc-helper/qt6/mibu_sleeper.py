@@ -325,20 +325,17 @@ class MibuSleeperBridge:
                 lease,
             )
 
-            gmail = run_tool(
-                ["shell", "pm", "path", descriptor.gmail_proof_package],
-                timeout=15,
-            )
-            gmail_present = gmail.ok and "package:" in gmail.message
-            gmail_artifact_ready = bool(
-                descriptor.gmail_proof_apk is not None
+            # Production release gate is Play Store. Qualification builds
+            # add Gmail as the second real Google-app proof so we do not claim
+            # compatibility from package presence or Play alone.
+            if (
+                descriptor.qualification_build
+                and descriptor.gmail_proof_apk is not None
                 and descriptor.gmail_proof_apk.is_file()
-            )
-            proof_package = (
-                descriptor.gmail_proof_package
-                if gmail_present or gmail_artifact_ready
-                else descriptor.qualification_proof_package
-            )
+            ):
+                proof_package = descriptor.gmail_proof_package
+            else:
+                proof_package = descriptor.qualification_proof_package
 
             result = session.run(proof_package=proof_package)
             if not result.success:
@@ -369,17 +366,11 @@ class MibuSleeperBridge:
                     "Smart Play verification passed but commit proof was not completed.",
                 )
 
-            if proof_package == descriptor.gmail_proof_package:
-                return Result(
-                    True,
-                    "Smart Play complete: TTG Smart Play Engine, Google Play Store, "
-                    "and Gmail proof are host-native and verified.",
-                )
             return Result(
                 True,
-                "Smart Play engine ready: TTG Smart Play Engine and Google Play Store "
-                "are host-native and verified. Gmail proof is pending; install Gmail "
-                "from Play Store, then press Smart Play again.",
+                "Smart Play complete: TTG Smart Play Engine is provisioned, "
+                "Google account integration is ready, Google Play Store opened "
+                "host-native, and the qualification proof app opened successfully.",
             )
         except Exception as exc:
             return Result(False, f"Smart Play failed closed: {exc}")
