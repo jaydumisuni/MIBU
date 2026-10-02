@@ -1,5 +1,7 @@
 #define MyAppName "MIBU PC Helper"
-#define MyAppVersion "0.3.0"
+#ifndef MyAppVersion
+#define MyAppVersion "0.3.2"
+#endif
 #define MyAppPublisher "THETECHGUY TOOL"
 #define MyAppURL "https://github.com/jaydumisuni/MIBU"
 #define MyAppExeName "MIBU-PC-Helper.exe"
