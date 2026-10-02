@@ -1,4 +1,7 @@
-param([string]$IsccPath = "")
+param(
+    [string]$IsccPath = "",
+    [string]$Version = "0.3.2"
+)
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
@@ -20,13 +23,13 @@ if (-not $IsccPath) {
 }
 if (-not $IsccPath) { throw "Inno Setup 6 compiler was not found." }
 
-& $IsccPath $Script
+& $IsccPath "/DMyAppVersion=$Version" $Script
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
-$Installer = Join-Path $PSScriptRoot "output\MIBU-PC-Helper-Setup-0.3.0.exe"
+$Installer = Join-Path $PSScriptRoot "output\MIBU-PC-Helper-Setup-$Version.exe"
 if (-not (Test-Path $Installer) -or (Get-Item $Installer).Length -le 0) {
     throw "Installer output is missing or empty: $Installer"
 }
 $Hash = (Get-FileHash -Algorithm SHA256 $Installer).Hash.ToLowerInvariant()
-Set-Content -Path (Join-Path $PSScriptRoot "output\SHA256SUMS.txt") -Value "$Hash  MIBU-PC-Helper-Setup-0.3.0.exe" -Encoding ASCII
+Set-Content -Path (Join-Path $PSScriptRoot "output\SHA256SUMS.txt") -Value "$Hash  MIBU-PC-Helper-Setup-$Version.exe" -Encoding ASCII
 Write-Host "Installer: $Installer" -ForegroundColor Green
