@@ -11,6 +11,8 @@ class PublicReleaseBoundaryTests(unittest.TestCase):
         cls.workflow = (cls.root / ".github/workflows/build.yml").read_text()
         cls.installer = (cls.root / "installer/MIBU-PC-Helper.iss").read_text()
         cls.builder = (cls.root / "installer/build_installer.ps1").read_text()
+        cls.helper = (cls.root / "pc-helper/qt6/mibu_pc_helper_v3.py").read_text()
+        cls.actions = (cls.root / "pc-helper/qt6/mibu_actions.py").read_text()
 
     def test_setup_contains_complete_release_bundle(self) -> None:
         self.assertIn(
@@ -30,6 +32,15 @@ class PublicReleaseBoundaryTests(unittest.TestCase):
         self.assertNotIn("Portable", publish)
         self.assertNotIn("SHA256SUMS", publish)
         self.assertIn("Expected exactly one public MIBU setup package", self.workflow)
+
+    def test_release_contains_remote_adb_single_instance_and_hotplug_contracts(self) -> None:
+        self.assertIn("MIBU_ADB_SERVER", self.actions)
+        self.assertIn("SingleInstanceGate", self.helper)
+        self.assertIn("device_hotplug_timer.start(1500)", self.helper)
+        self.assertIn(
+            "Qt.ConnectionType.QueuedConnection",
+            self.helper,
+        )
 
     def test_tag_version_drives_installer_filename(self) -> None:
         self.assertIn('/DMyAppVersion=$Version', self.builder)
