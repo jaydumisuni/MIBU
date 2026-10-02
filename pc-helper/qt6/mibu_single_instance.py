@@ -63,14 +63,16 @@ class SingleInstanceGate(QObject):
         kernel32.CloseHandle(ctypes.c_void_p(self._mutex_handle))
         self._mutex_handle = None
 
-    def _request_activation(self) -> None:
+    def _request_activation(self) -> bool:
         probe = QLocalSocket()
         probe.connectToServer(self.name)
-        if probe.waitForConnected(350):
-            probe.write(b"activate\n")
-            probe.flush()
-            probe.waitForBytesWritten(350)
-            probe.disconnectFromServer()
+        if not probe.waitForConnected(350):
+            return False
+        probe.write(b"activate\n")
+        probe.flush()
+        probe.waitForBytesWritten(350)
+        probe.disconnectFromServer()
+        return True
 
     def acquire(self) -> bool:
         if not self._acquire_platform_lock():
@@ -81,8 +83,12 @@ class SingleInstanceGate(QObject):
             self._owns_server = True
             return True
 
-        # Unix-domain sockets can survive an unclean exit. The Win32 mutex
-        # above already proves exclusive ownership before this cleanup.
+        # A failed listen can mean a live owner or a stale endpoint. Never
+        # remove the endpoint until a connection probe proves no owner answers.
+        if self._request_activation():
+            self._release_platform_lock()
+            return False
+
         QLocalServer.removeServer(self.name)
         self._owns_server = self.server.listen(self.name)
         if not self._owns_server:
