@@ -77,7 +77,9 @@ jobs:
           python -m py_compile pc-helper/qt6/mibu_browser_capture.py
           python -m py_compile pc-helper/qt6/mibu_phone_agent.py
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v3.py
+          python -m py_compile pc-helper/qt6/mibu_single_instance.py
           python -m py_compile pc-helper/qt6/test_contracts.py
+          python -m py_compile pc-helper/qt6/test_single_instance.py
           python -m py_compile pc-helper/qt6/test_install_contracts.py
           python -m py_compile pc-helper/qt6/test_release_boundary.py
           python -m py_compile tools/review_contracts.py
