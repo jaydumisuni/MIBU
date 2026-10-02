@@ -3,6 +3,7 @@ name: Build MIBU
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -69,7 +70,6 @@ jobs:
         run: python -m pip install -r pc-helper/qt6/requirements.txt
       - name: Compile active sources and tests
         run: |
-          python -m py_compile pc-helper/mibu_pc_helper.py
           python -m py_compile pc-helper/qt6/mibu_actions.py
           python -m py_compile pc-helper/qt6/mibu_status.py
           python -m py_compile pc-helper/qt6/dependency_check.py
@@ -77,8 +77,11 @@ jobs:
           python -m py_compile pc-helper/qt6/mibu_browser_capture.py
           python -m py_compile pc-helper/qt6/mibu_phone_agent.py
           python -m py_compile pc-helper/qt6/mibu_pc_helper_v3.py
+          python -m py_compile pc-helper/qt6/mibu_single_instance.py
           python -m py_compile pc-helper/qt6/test_contracts.py
+          python -m py_compile pc-helper/qt6/test_single_instance.py
           python -m py_compile pc-helper/qt6/test_install_contracts.py
+          python -m py_compile pc-helper/qt6/test_release_boundary.py
           python -m py_compile tools/review_contracts.py
           python -m py_compile tools/review_proof_v3.py
           python -m py_compile tools/validate_android_ui_baseline.py
@@ -118,7 +121,7 @@ jobs:
           app = QApplication([])
           window = mibu.Window()
           assert set(window.buttons) == {'Device Check', 'Install APK', 'Login & Get Token', 'Phone Guide'}
-          assert set(window.utility_buttons) == {'Convert to English'}
+          assert set(window.utility_buttons) == {'Convert to English', 'Smart Play'}
           assert not window.windowIcon().isNull()
           assert (window.width(), window.height()) == (760, 560)
           assert (window.minimumWidth(), window.minimumHeight()) == (720, 520)
@@ -131,8 +134,6 @@ jobs:
           app.quit()
           print('Qt live controls, assistant, icon, version and timing proof passed')
           PY
-      - name: CLI time smoke test
-        run: python pc-helper/mibu_pc_helper.py time
 
   windows-release:
     name: Complete Windows release proof
@@ -143,10 +144,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android platform-tools
+      - name: Provision Android platform-tools
         shell: powershell
-        run: sdkmanager "platform-tools"
+        run: |
+          $sdkRoot = Join-Path $env:RUNNER_TEMP "mibu-android-sdk"
+          $zipPath = Join-Path $env:RUNNER_TEMP "platform-tools.zip"
+          Invoke-WebRequest -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" -OutFile $zipPath
+          New-Item -ItemType Directory -Force -Path $sdkRoot | Out-Null
+          Expand-Archive -Path $zipPath -DestinationPath $sdkRoot -Force
+          $required = @("adb.exe", "fastboot.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")
+          foreach ($name in $required) {
+            $path = Join-Path $sdkRoot "platform-tools\$name"
+            if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) {
+              throw "Downloaded platform-tools missing: $path"
+            }
+          }
+          "ANDROID_SDK_ROOT=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ANDROID_HOME=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/download-artifact@v4
         with:
           name: MIBU-debug-apk
@@ -180,8 +194,67 @@ jobs:
             if (-not (Test-Path $path)) { throw "Release contract missing: $path" }
             if ((Get-Item $path).Length -le 0) { throw "Release contract empty: $path" }
           }
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+      - name: Compile single assembled Windows package
+        shell: powershell
+        run: |
+          $version = "0.3.2"
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -match '^v(.+)$') {
+            $version = $Matches[1]
+          }
+          .\installer\build_installer.ps1 -Version $version
+          $packages = @(Get-ChildItem installer\output\MIBU-PC-Helper-Setup-*.exe)
+          if ($packages.Count -ne 1) {
+            throw "Expected exactly one public MIBU setup package, found $($packages.Count)."
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: MIBU-PC-Helper-Windows
-          path: pc-helper/release/MIBU-PC-Helper
+          name: MIBU-Windows-Release
+          path: installer/output/MIBU-PC-Helper-Setup-*.exe
           if-no-files-found: error
+
+  publish-release:
+    name: Publish single public MIBU package
+    needs: windows-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MIBU-Windows-Release
+          path: release-assets
+      - name: Enforce one public release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/MIBU-PC-Helper-Setup-*.exe)
+          test "${#assets[@]}" -eq 1
+          find release-assets -maxdepth 1 -type f | grep -Ev 'MIBU-PC-Helper-Setup-[^/]+\.exe$' && exit 1 || true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset=(release-assets/MIBU-PC-Helper-Setup-*.exe)
+          expected_name="$(basename "${asset[0]}")"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            while IFS= read -r existing; do
+              if [[ -n "$existing" && "$existing" != "$expected_name" ]]; then
+                gh release delete-asset "$GITHUB_REF_NAME" "$existing" -y
+              fi
+            done < <(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')
+            gh release upload "$GITHUB_REF_NAME" "${asset[0]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${asset[0]}" --generate-notes --title "MIBU ${GITHUB_REF_NAME#v}"
+          fi
+          mapfile -t published < <(
+            gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name'
+          )
+          test "${#published[@]}" -eq 1
+          test "${published[0]}" = "$expected_name"

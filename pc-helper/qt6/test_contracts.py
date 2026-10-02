@@ -65,6 +65,89 @@ class DeviceParsingTests(unittest.TestCase):
         self.assertFalse(mibu_actions._valid_token("x" * (mibu_actions.MAX_TOKEN_LENGTH + 1)))
 
 
+class RemoteAdbAndHotplugTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        mibu_actions._SELECTED_SERIAL = None
+
+    def test_remote_adb_server_defaults_to_5037(self) -> None:
+        self.assertEqual(
+            ("kratos.local", 5037),
+            mibu_actions.adb_server_endpoint("kratos.local"),
+        )
+
+    def test_remote_adb_server_accepts_explicit_port_and_tcp_prefix(self) -> None:
+        self.assertEqual(
+            ("192.168.30.52", 5040),
+            mibu_actions.adb_server_endpoint("tcp:192.168.30.52:5040"),
+        )
+
+    def test_remote_adb_server_rejects_invalid_port(self) -> None:
+        with self.assertRaises(ValueError):
+            mibu_actions.adb_server_endpoint("kratos.local:not-a-port")
+
+    def test_run_tool_routes_through_remote_adb_server(self) -> None:
+        fake = type(
+            "Proc",
+            (),
+            {"returncode": 0, "stdout": "List of devices attached\n"},
+        )()
+        with patch.dict(
+            mibu_actions.os.environ,
+            {"MIBU_ADB_SERVER": "kratos.local:5040"},
+            clear=False,
+        ), patch.object(
+            mibu_actions, "adb_path", return_value="adb"
+        ), patch.object(
+            mibu_actions.subprocess, "run", return_value=fake
+        ) as run:
+            result = mibu_actions.run_tool(["devices"])
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            ["adb", "-H", "kratos.local", "-P", "5040", "devices"],
+            run.call_args.args[0],
+        )
+
+    def test_hotplug_reselects_reconnected_device(self) -> None:
+        with patch.object(
+            mibu_actions,
+            "list_devices",
+            side_effect=[
+                mibu_actions.Result(
+                    True, "List of devices attached\nFIRST\tdevice\n"
+                ),
+                mibu_actions.Result(
+                    True, "List of devices attached\nSECOND\tdevice\n"
+                ),
+            ],
+        ), patch.object(
+            mibu_actions,
+            "run_tool",
+            return_value=mibu_actions.Result(True, "1"),
+        ):
+            self.assertTrue(mibu_actions.check_device_ready().ok)
+            self.assertEqual(
+                "FIRST", mibu_actions.selected_adb_serial()
+            )
+            self.assertTrue(mibu_actions.check_device_ready().ok)
+            self.assertEqual(
+                "SECOND", mibu_actions.selected_adb_serial()
+            )
+
+    def test_disconnect_clears_stale_selected_serial(self) -> None:
+        mibu_actions._SELECTED_SERIAL = "OLD"
+        with patch.object(
+            mibu_actions,
+            "list_devices",
+            return_value=mibu_actions.Result(
+                True, "List of devices attached\n\n"
+            ),
+        ):
+            result = mibu_actions.check_device_ready()
+        self.assertFalse(result.ok)
+        self.assertEqual("", mibu_actions.selected_adb_serial())
+
+
 class ServiceProofTests(unittest.TestCase):
     def test_service_armed_marker_is_success_for_matching_nonce(self) -> None:
         with patch.object(

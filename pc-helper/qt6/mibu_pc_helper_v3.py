@@ -6,7 +6,7 @@ import webbrowser
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QFileInfo, QObject, QPoint, QSize, Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtCore import QFileInfo, QObject, QPoint, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QColor, QFont, QIcon, QMouseEvent, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -77,6 +77,7 @@ from mibu_english_conversion import (
     rollback_english_conversion,
 )
 from mibu_sleeper import MibuSleeperBridge
+from mibu_single_instance import SingleInstanceGate
 from mibu_system_updates import (
     process_pending_system_update_request,
     read_system_update_state,
@@ -96,7 +97,7 @@ def live_asset(name: str) -> str:
 
 
 class FunctionWorker(QObject):
-    finished = Signal(object)
+    finished = Signal(object, object)
 
     def __init__(self, function: Callable[[], object]) -> None:
         super().__init__()
@@ -107,7 +108,7 @@ class FunctionWorker(QObject):
             value = self.function()
         except Exception as exc:  # pragma: no cover - GUI safety boundary
             value = Result(False, f"Action failed unexpectedly: {exc}")
-        self.finished.emit(value)
+        self.finished.emit(self, value)
 
 
 class AssistantWorker(QObject):
@@ -570,9 +571,11 @@ class Window(QMainWindow):
         self.utility_buttons: dict[str, QPushButton] = {}
         self._threads: set[QThread] = set()
         self._workers: dict[QThread, FunctionWorker] = {}
+        self._background_completions: dict[QThread, Callable[[object], None]] = {}
         self._assistant_thread: QThread | None = None
         self._assistant_worker: AssistantWorker | None = None
         self._assistant_phase = 0
+        self._last_live_signature: tuple[object, ...] | None = None
         self.sleeper = MibuSleeperBridge()
         self._build_ui()
         self._theme()
@@ -587,6 +590,9 @@ class Window(QMainWindow):
         self.update_request_timer = QTimer(self)
         self.update_request_timer.timeout.connect(self._poll_phone_update_requests)
         self.update_request_timer.start(2000)
+        self.device_hotplug_timer = QTimer(self)
+        self.device_hotplug_timer.timeout.connect(self.refresh_live_state)
+        self.device_hotplug_timer.start(1500)
         QTimer.singleShot(250, self._center)
         QTimer.singleShot(450, self.refresh_live_state)
         QTimer.singleShot(700, self._dependency_review)
@@ -759,6 +765,18 @@ class Window(QMainWindow):
             button.clicked.connect(handlers[name])
             self.buttons[name] = button
             actions.addWidget(button, 0, column)
+        smart_play_button = QPushButton("Smart Play")
+        smart_play_button.setObjectName("smartPlayUtilityButton")
+        smart_play_button.setIcon(QIcon(live_asset("icon_install.png")))
+        smart_play_button.setIconSize(QSize(18, 18))
+        smart_play_button.setCursor(Qt.PointingHandCursor)
+        smart_play_button.setFixedHeight(28)
+        smart_play_button.setMinimumWidth(0)
+        smart_play_button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        smart_play_button.clicked.connect(self.run_smart_play)
+        self.utility_buttons["Smart Play"] = smart_play_button
+        actions.addWidget(smart_play_button, 1, 2)
+
         english_button = QPushButton("Convert to English")
         english_button.setObjectName("englishUtilityButton")
         english_button.setIcon(QIcon(live_asset("icon_guide.png")))
@@ -830,6 +848,8 @@ class Window(QMainWindow):
         QPushButton#flowButton { background:#090f1d; border:1px solid #344a70; border-radius:7px; color:#edf3ff; font-size:8px; font-weight:700; padding:3px; }
         QPushButton#flowButton:hover { border:1px solid #258cff; }
         QPushButton#flowButton[active="true"] { border:2px solid #ff7a2b; background:#17102f; }
+        QPushButton#smartPlayUtilityButton { background:#091b2b; border:1px solid #258cff; border-radius:7px; color:#e8f4ff; font-size:8px; font-weight:800; padding:3px; }
+        QPushButton#smartPlayUtilityButton:hover, QPushButton#smartPlayUtilityButton[active="true"] { background:#0b2b48; border:2px solid #56a8ff; }
         QPushButton#englishUtilityButton { background:#2b1609; border:1px solid #ff7a2b; border-radius:7px; color:#fff0df; font-size:8px; font-weight:800; padding:3px; }
         QPushButton#englishUtilityButton:hover, QPushButton#englishUtilityButton[active="true"] { background:#4a2008; border:2px solid #ff9b45; }
         QPushButton#primaryButton, QPushButton#secondaryButton, QPushButton#assistantButton { border-radius:7px; color:white; padding:5px 10px; font-size:9px; font-weight:750; }
@@ -871,21 +891,34 @@ class Window(QMainWindow):
         worker.moveToThread(thread)
         self._threads.add(thread)
         self._workers[thread] = worker
+        self._background_completions[thread] = completion
 
-        def done(value: object) -> None:
-            completion(value)
-            thread.quit()
-
-        worker.finished.connect(done)
+        worker.finished.connect(
+            self._background_result,
+            Qt.ConnectionType.QueuedConnection,
+        )
         thread.started.connect(worker.run)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(lambda: self._background_done(thread))
         thread.start()
 
+    @Slot(object, object)
+    def _background_result(self, worker: object, value: object) -> None:
+        if not isinstance(worker, FunctionWorker):
+            return
+        thread = worker.thread()
+        if not isinstance(thread, QThread):
+            return
+        completion = self._background_completions.pop(thread, None)
+        if completion is not None:
+            completion(value)
+        thread.quit()
+
     def _background_done(self, thread: QThread) -> None:
         self._threads.discard(thread)
         self._workers.pop(thread, None)
+        self._background_completions.pop(thread, None)
 
     def _log(self, message: str) -> None:
         self.output.appendPlainText(message.strip())
@@ -1018,11 +1051,24 @@ class Window(QMainWindow):
             device, version, status_result, phone = value
             self.state.device_ok = device.ok
             self.state.apk_ok = version.ok
-            self.state.tokens_ok = bool(status_result.ok and phone and phone.captures_ready)
+            self.state.tokens_ok = bool(
+                status_result.ok and phone and phone.captures_ready
+            )
             self._update_status()
+            signature = (
+                device.ok,
+                device.message,
+                version.ok,
+                status_result.ok,
+                getattr(phone, "verification", None),
+            )
             if device.ok:
                 self.system_label.setText("Phone connected")
-            self._log(device.message)
+            else:
+                self.system_label.setText("Phone disconnected")
+            if signature != self._last_live_signature:
+                self._last_live_signature = signature
+                self._log(device.message)
 
         self.run_background(probe, done)
 
@@ -1226,6 +1272,28 @@ class Window(QMainWindow):
             self._play(result.ok)
 
         self.run_background(lambda: run_adb_user_command(command), done)
+
+    def run_smart_play(self) -> None:
+        button = self.utility_buttons.get("Smart Play")
+        if button is None:
+            return
+        if not button.isEnabled():
+            self._log("Smart Play is already running.")
+            return
+        button.setEnabled(False)
+        self._log("Smart Play: handing the phone to Sleeper Service Mode...")
+
+        def done(value: object) -> None:
+            button.setEnabled(True)
+            result = value if isinstance(value, Result) else Result(False, str(value))
+            self._log(result.message)
+            self._play(result.ok)
+            self.assistant.expand()
+            self.assistant.bubble.setText(result.message.splitlines()[0][:180])
+            self.assistant.progress.setValue(100 if result.ok else 0)
+            QTimer.singleShot(50, self.refresh_live_state)
+
+        self.run_background(self.sleeper.smart_play_result, done)
 
     def show_device_check(self) -> None:
         self._set_active("Device Check")
@@ -1449,6 +1517,15 @@ class Window(QMainWindow):
         dialog.exec()
 
 
+def _activate_existing_window(window: QMainWindow) -> None:
+    if window.isMinimized():
+        window.showNormal()
+    else:
+        window.show()
+    window.raise_()
+    window.activateWindow()
+
+
 def main() -> int:
     if sys.platform == "win32":
         import ctypes
@@ -1458,7 +1535,16 @@ def main() -> int:
     app.setOrganizationName("THETECHGUY TOOL")
     app.setWindowIcon(QIcon(live_asset("mibu_logo.png")))
     app.setFont(QFont("Segoe UI", 9))
+
+    instance = SingleInstanceGate()
+    if not instance.acquire():
+        return 0
+
     window = Window()
+    instance.activate_requested.connect(
+        lambda: _activate_existing_window(window)
+    )
+    app.aboutToQuit.connect(instance.close)
     window.show()
     return app.exec()
 
