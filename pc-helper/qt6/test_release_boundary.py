@@ -32,6 +32,7 @@ class PublicReleaseBoundaryTests(unittest.TestCase):
         self.assertNotIn("Portable", publish)
         self.assertNotIn("SHA256SUMS", publish)
         self.assertIn("Expected exactly one public MIBU setup package", self.workflow)
+        self.assertIn("GH_REPO: ${{ github.repository }}", publish)
 
     def test_release_contains_remote_adb_single_instance_and_hotplug_contracts(self) -> None:
         self.assertIn("MIBU_ADB_SERVER", self.actions)
