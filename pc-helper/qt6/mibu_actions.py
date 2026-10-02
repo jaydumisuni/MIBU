@@ -61,6 +61,59 @@ def adb_path() -> str | None:
     return shutil.which("adb")
 
 
+
+def adb_server_endpoint(value: str | None = None) -> tuple[str, int] | None:
+    """Return the optional remote ADB server endpoint.
+
+    MIBU uses bundled/local ADB by default. Set MIBU_ADB_SERVER to
+    host or host:port when the ADB server is running on another workstation.
+    """
+    raw = (
+        value
+        if value is not None
+        else os.environ.get("MIBU_ADB_SERVER", "")
+    ).strip()
+    if not raw:
+        return None
+    if raw.startswith("tcp:"):
+        raw = raw[4:]
+
+    host = raw
+    port = 5037
+    if raw.startswith("["):
+        match = re.fullmatch(r"\[([^]]+)\](?::([0-9]+))?", raw)
+        if not match:
+            raise ValueError("MIBU_ADB_SERVER has invalid bracketed host syntax")
+        host = match.group(1)
+        if match.group(2):
+            port = int(match.group(2))
+    elif raw.count(":") == 1:
+        maybe_host, maybe_port = raw.rsplit(":", 1)
+        if maybe_port:
+            if not maybe_port.isdigit():
+                raise ValueError("MIBU_ADB_SERVER port must be numeric")
+            host = maybe_host
+            port = int(maybe_port)
+    elif ":" in raw:
+        raise ValueError(
+            "IPv6 MIBU_ADB_SERVER values must use [address]:port syntax"
+        )
+
+    if not host or any(ch.isspace() for ch in host):
+        raise ValueError("MIBU_ADB_SERVER host is invalid")
+    if not 1 <= port <= 65535:
+        raise ValueError("MIBU_ADB_SERVER port must be between 1 and 65535")
+    return host, port
+
+
+def _adb_server_args() -> list[str]:
+    endpoint = adb_server_endpoint()
+    if endpoint is None:
+        return []
+    host, port = endpoint
+    return ["-H", host, "-P", str(port)]
+
+
 def fastboot_path() -> str | None:
     env = os.environ.get("MIBU_FASTBOOT") or os.environ.get("FASTBOOT")
     candidates = [Path(env)] if env else []
@@ -83,12 +136,16 @@ def run_tool(parts: list[str], timeout: int = 45) -> Result:
     tool = adb_path()
     if not tool:
         return Result(False, "ADB not found. Install platform-tools, set MIBU_ADB, or bundle platform-tools beside MIBU PC Helper.")
-    command_parts = parts
+    command_parts = list(parts)
     if _SELECTED_SERIAL and _targets_device(parts):
-        command_parts = ["-s", _SELECTED_SERIAL] + parts
+        command_parts = ["-s", _SELECTED_SERIAL] + command_parts
+    try:
+        server_args = _adb_server_args()
+    except ValueError as exc:
+        return Result(False, f"Remote ADB configuration is invalid: {exc}")
     try:
         proc = subprocess.run(
-            [tool] + command_parts,
+            [tool] + server_args + command_parts,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -179,7 +236,12 @@ def check_device_ready() -> Result:
         return devices_result
     devices = parse_devices(devices_result.message)
     if not devices:
-        return Result(False, "No device detected. Connect USB cable, enable USB debugging, then accept the RSA prompt.")
+        _SELECTED_SERIAL = None
+        source = "remote ADB server" if adb_server_endpoint() else "local ADB"
+        return Result(
+            False,
+            f"No device detected through {source}. Connect the phone, enable USB debugging, then accept the RSA prompt.",
+        )
     requested_serial = os.environ.get("MIBU_ADB_SERIAL", "").strip()
     if requested_serial:
         match = next(((serial, state) for serial, state in devices if serial == requested_serial), None)
