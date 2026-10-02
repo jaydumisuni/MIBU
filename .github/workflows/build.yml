@@ -121,7 +121,7 @@ jobs:
           app = QApplication([])
           window = mibu.Window()
           assert set(window.buttons) == {'Device Check', 'Install APK', 'Login & Get Token', 'Phone Guide'}
-          assert set(window.utility_buttons) == {'Convert to English'}
+          assert set(window.utility_buttons) == {'Convert to English', 'Smart Play'}
           assert not window.windowIcon().isNull()
           assert (window.width(), window.height()) == (760, 560)
           assert (window.minimumWidth(), window.minimumHeight()) == (720, 520)
