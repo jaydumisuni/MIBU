@@ -26,3 +26,16 @@ Run locally with:
 ```bash
 python mibu_pc_helper_qt.py
 ```
+
+## Remote ADB server
+
+MIBU uses its bundled/local ADB server by default. For a phone managed through
+an ADB server on another workstation, set:
+
+    MIBU_ADB_SERVER=host[:port]
+
+Port `5037` is used when omitted. Example:
+
+    MIBU_ADB_SERVER=kratos.local:5037
+
+The same device-selection and hotplug logic is used for local and remote ADB.
