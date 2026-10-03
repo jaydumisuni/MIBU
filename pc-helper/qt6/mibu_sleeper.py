@@ -291,6 +291,7 @@ class MibuSleeperBridge:
                 serial,
                 adb_path=tool,
                 timeout_seconds=90.0,
+                reconnect_window_seconds=45.0,
             )
             sleeper = AndroidADBResidentSleeper(transport)
             strategy = TTGSmartPlayEngineStrategy(sleeper, descriptor)

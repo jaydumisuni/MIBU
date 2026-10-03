@@ -87,6 +87,15 @@ class MibuSleeperContractTests(unittest.TestCase):
             source,
         )
 
+    def test_smart_play_enables_bounded_same_serial_reconnect(self):
+        source = (
+            Path(__file__).resolve().parent / "mibu_sleeper.py"
+        ).read_text()
+        self.assertIn(
+            "reconnect_window_seconds=45.0",
+            source,
+        )
+
     def test_smart_play_preflight_precedes_service_mode_upgrade(self):
         source = (
             Path(__file__).resolve().parent / "mibu_sleeper.py"
