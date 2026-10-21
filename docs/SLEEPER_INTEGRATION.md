@@ -54,3 +54,13 @@ MIBU's direct built-in controls keep priority. Other operation/research phrases 
 Examples include `unlock bootload`, `unlock network`, `wipe`, `bypass this`, `delete this`, `check this`, `research ...`, `find a way ...`, and `see what can happen ...`.
 
 MIBU only performs routing here. Semantic meaning, target/referent resolution, mutation/destructive classification and exploratory objective parsing remain owned by canonical Sleeper.
+
+## Third-party 17Unlock donor finding (2026-10-21)
+
+Canonical donor review: `jaydumisuni/bootloader-tokenit` commit `8b8c19a`, `docs/evidence/V0_6_17UNLOCK_DONOR_OBSERVATION_20261021.md` and `17UNLOCK_DONOR_CAPABILITY_MANIFEST.json`.
+
+The observed unsigned `17Unlockv1.0.3.exe` is not a general Xiaomi unlock engine. Its decompiled local exploit eligibility is limited to `pudding`, `popsicle`, `pandora`, `nezha`, and `myron`, with security patches no later than 2026-07-13. On the observed Redmi Note 12R `sky / OS2.0.204.0.VMWCNXM`, it reports **unsupported** and disables Unlock; the handset remains locked at the observed checkpoint.
+
+The donor's method attempts temporary root, ABL slot substitution, an `efisp` write, FRP erase, a `misc` wipe-data write, and eventual ABL restoration. Its success condition is invalid because FRP erase success alone can trigger a success message even without independently confirmed bootloader unlock.
+
+**MIBU/Sleeper contract:** classify this donor as read-only knowledge, not executable authority. Do not reuse or bundle the donor exploit images, issue cross-model ABL/efisp/FRP/misc writes, or treat reported success as proof. Continue using the existing canonical Sleeper Director, MIBU-owned device transport, backup qualification, and exact device/firmware guards. TTG Reverse Engineering owns any subsequent offline analysis; TokenIt owns eligibility/authorization evidence. A real integration would require independent device-specific proof, verified backups/rollback, and post-reboot physical bootloader-state readback. This finding does **not** qualify an unlock operation for `sky`.
