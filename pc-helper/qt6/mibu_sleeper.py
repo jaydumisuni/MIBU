@@ -211,6 +211,34 @@ class MibuSleeperBridge:
         inspection = self.inspect()
         return Result(inspection.connected, inspection.message())
 
+    def rom_readiness_result(self, rom_path: str) -> Result:
+        """Use the existing MIBU/Sleeper ADB selection for a read-only ROM check."""
+        if not self.available:
+            return Result(False, f"Sleeper is not attached: {self.error or self.engine_source}")
+        ready = check_device_ready()
+        if not ready.ok:
+            return ready
+        serial = selected_adb_serial()
+        if not serial:
+            return Result(False, "No selected ADB device for ROM handoff.")
+        keys = (
+            "ro.product.device", "ro.miui.region",
+            "ro.boot.flash.locked", "ro.boot.verifiedbootstate",
+            "ro.build.version.incremental",
+        )
+        properties = {key: self._getprop(key) for key in keys}
+        from mibu_rom_preflight import assess_rom_handoff, format_readiness
+
+        try:
+            report = assess_rom_handoff(
+                properties=properties, rom=Path(rom_path), serial=serial,
+            )
+        except (OSError, ValueError) as exc:
+            return Result(False, f"ROM verification stopped: {exc}")
+        # This is not executable install authority: a verified archive is
+        # still blocked until qualified device and installer evidence exists.
+        return Result(False, format_readiness(report))
+
     def _smart_play_descriptor(self) -> Path | None:
         configured = os.environ.get("TTG_SMART_PLAY_DESCRIPTOR", "").strip()
         if configured:

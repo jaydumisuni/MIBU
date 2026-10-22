@@ -64,3 +64,20 @@ The observed unsigned `17Unlockv1.0.3.exe` is not a general Xiaomi unlock engine
 The donor's method attempts temporary root, ABL slot substitution, an `efisp` write, FRP erase, a `misc` wipe-data write, and eventual ABL restoration. Its success condition is invalid because FRP erase success alone can trigger a success message even without independently confirmed bootloader unlock.
 
 **MIBU/Sleeper contract:** classify this donor as read-only knowledge, not executable authority. Do not reuse or bundle the donor exploit images, issue cross-model ABL/efisp/FRP/misc writes, or treat reported success as proof. Continue using the existing canonical Sleeper Director, MIBU-owned device transport, backup qualification, and exact device/firmware guards. TTG Reverse Engineering owns any subsequent offline analysis; TokenIt owns eligibility/authorization evidence. A real integration would require independent device-specific proof, verified backups/rollback, and post-reboot physical bootloader-state readback. This finding does **not** qualify an unlock operation for `sky`.
+
+
+## Exact sky Global ROM handoff (2026-10-22)
+
+The existing MIBU Sleeper bridge now exposes **ROM Check**, a read-only
+user-selected ZIP verification. It pins the selected ADB device, reads
+device/region/lock properties through MIBU's canonical transport, checks the
+known sky Global OS2.0.208.0.VMWMIXM recovery ZIP's complete size and official
+MD5, and validates its ZIP central-directory/payload structure. It does not
+re-download the 4.98 GB package or duplicate Sleeper's transport.
+
+A good ROM checksum is **not** an unlock or installer qualification.
+China-to-Global recovery OTA was previously rejected by the stock updater
+(code 2001), and the ROM Check result never authorizes flashing or attempts a
+bootloader transition. Only a separately qualified, exact-device installation
+method and independent physical bootloader proof can change that status.
+The donor 17Unlock engineering ABL/kernel method remains unqualified for sky.

@@ -765,6 +765,16 @@ class Window(QMainWindow):
             button.clicked.connect(handlers[name])
             self.buttons[name] = button
             actions.addWidget(button, 0, column)
+        rom_check_button = QPushButton("ROM Check")
+        rom_check_button.setObjectName("romCheckUtilityButton")
+        rom_check_button.setIcon(QIcon(live_asset("icon_guide.png")))
+        rom_check_button.setCursor(Qt.PointingHandCursor)
+        rom_check_button.setFixedHeight(28)
+        rom_check_button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        rom_check_button.setToolTip("Read-only Xiaomi ROM integrity and device handoff")
+        rom_check_button.clicked.connect(self.run_rom_check)
+        self.utility_buttons["ROM Check"] = rom_check_button
+        actions.addWidget(rom_check_button, 1, 0)
         smart_play_button = QPushButton("Smart Play")
         smart_play_button.setObjectName("smartPlayUtilityButton")
         smart_play_button.setIcon(QIcon(live_asset("icon_install.png")))
@@ -1272,6 +1282,28 @@ class Window(QMainWindow):
             self._play(result.ok)
 
         self.run_background(lambda: run_adb_user_command(command), done)
+
+    def run_rom_check(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select official Xiaomi ROM ZIP", "", "ROM ZIP (*.zip)",
+        )
+        if not path:
+            return
+        button = self.utility_buttons["ROM Check"]
+        if not button.isEnabled():
+            return
+        button.setEnabled(False)
+        self._log("ROM Check: reading the selected archive and Sleeper device state...")
+
+        def done(value: object) -> None:
+            button.setEnabled(True)
+            result = value if isinstance(value, Result) else Result(False, str(value))
+            self._log(result.message)
+            self.assistant.expand()
+            self.assistant.bubble.setText(result.message.splitlines()[0][:180])
+            self.assistant.progress.setValue(0)
+
+        self.run_background(lambda: self.sleeper.rom_readiness_result(path), done)
 
     def run_smart_play(self) -> None:
         button = self.utility_buttons.get("Smart Play")
