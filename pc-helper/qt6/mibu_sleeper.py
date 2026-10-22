@@ -229,9 +229,27 @@ class MibuSleeperBridge:
         properties = {key: self._getprop(key) for key in keys}
         from mibu_rom_preflight import assess_rom_handoff, format_readiness
 
+        # Reuse Sleeper's device-selected read-only acceptance path if
+        # available. ADB-mode properties never become a Fastboot PASS.
+        acceptance = None
+        try:
+            import shutil
+            import subprocess
+            from techguy_netunlock.sleeper.xiaomi_sky_acceptance import inspect_physical_acceptance
+            fb = os.environ.get("FASTBOOT_EXECUTABLE", "").strip() or shutil.which("fastboot")
+            adb_bin = adb_path()
+            if fb and adb_bin and properties.get("ro.product.device") == "sky":
+                acceptance = inspect_physical_acceptance(
+                    serial=serial, adb=adb_bin, fastboot=fb
+                ).to_dict()
+        except (ImportError, OSError, ValueError, TimeoutError, subprocess.TimeoutExpired):
+            # Unavailable proof must never grant installation authority.
+            acceptance = None
+
         try:
             report = assess_rom_handoff(
                 properties=properties, rom=Path(rom_path), serial=serial,
+                sleeper_acceptance=acceptance,
             )
         except (OSError, ValueError) as exc:
             return Result(False, f"ROM verification stopped: {exc}")

@@ -19,7 +19,8 @@ def _md5_file(path: Path) -> str:
             h.update(buf)
     return h.hexdigest()
 
-def assess_rom_handoff(*, properties:dict[str,str], rom:Path, serial:str, verify_bytes:bool=True)->dict:
+def assess_rom_handoff(*, properties:dict[str,str], rom:Path, serial:str, verify_bytes:bool=True,
+                       sleeper_acceptance:dict|None=None)->dict:
     spec=SKY_GLOBAL_208
     issues=[]
     product=properties.get("ro.product.device","").strip()
@@ -46,18 +47,32 @@ def assess_rom_handoff(*, properties:dict[str,str], rom:Path, serial:str, verify
             if not structure:issues.append("ZIP central directory/payload invalid.")
     if not verify_bytes:issues.append("Metadata-only inspection does not validate ROM bytes.")
     if product!="sky":issues.append("The connected handset does not match the sky firmware target.")
-    if lock!="0":issues.append("Physical bootloader unlock is not verified.")
+    proof = sleeper_acceptance if isinstance(sleeper_acceptance, dict) else {}
+    observed = proof.get("observations", {})
+    if not isinstance(observed, dict): observed = {}
+    # Android property readback is supporting evidence, never physical PASS.
+    unlocked = bool(
+        lock == "0" and
+        proof.get("serial") == serial and
+        proof.get("mode") == "fastboot" and
+        proof.get("verdict") == "PASS" and
+        proof.get("physical_unlock_proven") is True and
+        observed.get("product") == product == "sky" and
+        observed.get("getvar_unlocked") == "yes" and
+        observed.get("device_unlocked") == "true"
+    )
+    if not unlocked:issues.append("Physical Fastboot bootloader unlock proof is missing or inconsistent.")
     if region=="CN":issues.append("Stock updater rejected the China-to-Global transition with code 2001.")
     elif not region:issues.append("Phone region is unknown.")
     if verified_boot not in ("green","orange"):issues.append("Verified-boot state is unknown.")
     good_rom=bool(known and size==spec["size"] and digest==spec["official_md5"] and structure)
-    unlocked=(lock=="0")
+
     # No code here can flash, reboot, install, erase or grant install authority.
     return {
       "schema":"ttg.mibu.rom-handoff-readonly.v1",
       "serial":serial,
       "device":{"product":product,"region":region or "unknown","build":build or "unknown",
-                "bootloader":"unlocked" if unlocked else "locked" if lock=="1" else "unknown",
+                "bootloader":"unlocked" if unlocked else "locked" if lock=="1" else "android-reports-unlocked-unverified" if lock=="0" else "unknown",
                 "verified_boot":verified_boot or "unknown"},
       "rom":{"path":str(rom),"filename":rom.name,"size":size,
              "format":spec["format"] if known else "unknown",
@@ -65,7 +80,8 @@ def assess_rom_handoff(*, properties:dict[str,str], rom:Path, serial:str, verify
              "expected_md5":spec["official_md5"] if known else None,
              "observed_md5":digest,"verified":good_rom,"metadata_only":not verify_bytes},
       "readiness":{"target_matches":product=="sky","rom_verified":good_rom,
-                   "physical_unlock_observed":unlocked,"installer_qualified":False,
+                   "physical_unlock_observed":unlocked,"android_lock_reports_unlocked":lock=="0",
+                   "sleeper_acceptance":proof.get("verdict", "not-collected"),"installer_qualified":False,
                    "installation_admitted":False},
       "reasons":issues,
       "next_step":("Select and verify a compatible sky Fastboot ROM and qualified installer."

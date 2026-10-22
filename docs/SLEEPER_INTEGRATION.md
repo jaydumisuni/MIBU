@@ -81,3 +81,21 @@ China-to-Global recovery OTA was previously rejected by the stock updater
 bootloader transition. Only a separately qualified, exact-device installation
 method and independent physical bootloader proof can change that status.
 The donor 17Unlock engineering ABL/kernel method remains unqualified for sky.
+
+
+### Sleeper physical-unlock acceptance bound to ROM Check (2026-10-22)
+
+ROM Check now distinguishes an Android `ro.boot.flash.locked=0` *report*
+from independent physical Fastboot unlock proof. It can consume Sleeper's
+read-only `xiaomi_sky_acceptance.inspect_physical_acceptance` result for the
+selected serial, when the checker and platform-tools are available. It fails
+closed if absent or inconclusive. A physical unlock is recognized only when
+the selected serial and `sky` product agree, Sleeper reports Fastboot PASS
+with both independent unlocked readbacks, and Android's current lock report
+is consistent.
+
+The linked Sleeper acceptance implementation was pushed to the existing
+`feature/x100-fdl-qualification-20261004` branch at `5fb0f05`.
+Neither an integrity-verified recovery ZIP nor a physical unlock check
+qualifies a ROM installer; ROM Check remains strictly read-only.
+The original KRATOS MIBU/Sleeper checkouts and unrelated work remain untouched.

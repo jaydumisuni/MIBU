@@ -39,8 +39,36 @@ class RomHandoffTests(unittest.TestCase):
     def test_unlocked_does_not_qualify_installer(self):
         r=assess_rom_handoff(properties=dict(CN,**{"ro.boot.flash.locked":"0"}),
                              rom=Path("/nonexistent.zip"),serial="s")
-        self.assertTrue(r["readiness"]["physical_unlock_observed"])
+        self.assertFalse(r["readiness"]["physical_unlock_observed"])
+        self.assertTrue(r["readiness"]["android_lock_reports_unlocked"])
         self.assertFalse(r["readiness"]["installer_qualified"])
+
+    def test_physical_proof_requires_matching_serial_and_sky_product(self):
+        unlocked_props=dict(CN,**{"ro.boot.flash.locked":"0"})
+        base={"mode":"fastboot","verdict":"PASS","physical_unlock_proven":True,
+              "serial":"s","observations":{"product":"sky","getvar_unlocked":"yes",
+                                           "device_unlocked":"true"}}
+        r=assess_rom_handoff(properties=unlocked_props,rom=Path("/nonexistent.zip"),
+                             serial="s",sleeper_acceptance=base)
+        self.assertTrue(r["readiness"]["physical_unlock_observed"])
+        self.assertFalse(r["readiness"]["installation_admitted"])
+        wrong=dict(base,serial="another")
+        r2=assess_rom_handoff(properties=unlocked_props,rom=Path("/nonexistent.zip"),
+                              serial="s",sleeper_acceptance=wrong)
+        self.assertFalse(r2["readiness"]["physical_unlock_observed"])
+        wrong_product=dict(base,observations=dict(base["observations"],product="other"))
+        r3=assess_rom_handoff(properties=unlocked_props,rom=Path("/nonexistent.zip"),
+                              serial="s",sleeper_acceptance=wrong_product)
+        self.assertFalse(r3["readiness"]["physical_unlock_observed"])
+
+    def test_stale_fastboot_pass_cannot_override_android_locked_state(self):
+        proof={"mode":"fastboot","verdict":"PASS","physical_unlock_proven":True,
+              "serial":"s","observations":{"product":"sky","getvar_unlocked":"yes",
+                                           "device_unlocked":"true"}}
+        r=assess_rom_handoff(properties=CN,rom=Path("/nonexistent.zip"),
+                             serial="s",sleeper_acceptance=proof)
+        self.assertFalse(r["readiness"]["physical_unlock_observed"])
+        self.assertEqual(r["device"]["bootloader"],"locked")
 
     def test_bad_md5_blocks(self):
         with patch("mibu_rom_preflight._md5_file",return_value="0"*32), \
@@ -63,6 +91,7 @@ class RomHandoffTests(unittest.TestCase):
         self.assertIn("selected_adb_serial()",block)
         self.assertIn("assess_rom_handoff",block)
         self.assertNotIn("run_fastboot(",block)
+        self.assertIn("inspect_physical_acceptance(",block)
         self.assertNotIn("erase",block)
 
     def test_ui_button_is_read_only_and_background(self):
