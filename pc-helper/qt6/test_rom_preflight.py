@@ -70,6 +70,25 @@ class RomHandoffTests(unittest.TestCase):
         self.assertFalse(r["readiness"]["physical_unlock_observed"])
         self.assertEqual(r["device"]["bootloader"],"locked")
 
+    def test_installed_linux_fastboot_is_discovered(self):
+        import tempfile
+        import os
+        from unittest.mock import patch
+        from mibu_actions import fastboot_path
+        with tempfile.TemporaryDirectory() as d:
+            tool=Path(d)/".local/share/mibu-platform-tools/current/platform-tools/fastboot"
+            tool.parent.mkdir(parents=True,exist_ok=True)
+            tool.write_bytes(b"local-fastboot-test")
+            with patch("mibu_actions.Path.home", return_value=Path(d)):
+                with patch.dict(os.environ, {"MIBU_FASTBOOT":"","FASTBOOT":""}):
+                    self.assertEqual(fastboot_path(),str(tool))
+
+    def test_bridge_uses_mibu_fastboot_resolver(self):
+        source=(Path(__file__).parent/"mibu_sleeper.py").read_text()
+        block=source.split("def rom_readiness_result(",1)[1].split("def _smart_play_descriptor(",1)[0]
+        self.assertIn("fastboot_path()",block)
+        self.assertNotIn("shutil.which(",block)
+
     def test_bad_md5_blocks(self):
         with patch("mibu_rom_preflight._md5_file",return_value="0"*32), \
              patch("pathlib.Path.is_file",return_value=True), \

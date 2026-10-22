@@ -46,6 +46,8 @@ def _tool_candidates(name: str) -> list[Path]:
         base / "_internal" / "platform-tools" / name,
         cwd / "platform-tools" / exe,
         cwd / "platform-tools" / name,
+        # MIBU's existing Linux per-user platform-tools installation.
+        Path.home() / ".local/share/mibu-platform-tools/current/platform-tools" / name,
         Path(f"D:/mibu-build-tools/android-sdk/platform-tools/{exe}"),
         Path(f"D:/mibu-build-tools/platform-tools/{exe}"),
     ]

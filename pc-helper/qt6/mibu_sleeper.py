@@ -10,6 +10,7 @@ from typing import Any
 from mibu_actions import (
     Result,
     adb_path,
+    fastboot_path,
     check_device_ready,
     run_tool,
     selected_adb_serial,
@@ -233,10 +234,9 @@ class MibuSleeperBridge:
         # available. ADB-mode properties never become a Fastboot PASS.
         acceptance = None
         try:
-            import shutil
             import subprocess
             from techguy_netunlock.sleeper.xiaomi_sky_acceptance import inspect_physical_acceptance
-            fb = os.environ.get("FASTBOOT_EXECUTABLE", "").strip() or shutil.which("fastboot")
+            fb = os.environ.get("FASTBOOT_EXECUTABLE", "").strip() or fastboot_path()
             adb_bin = adb_path()
             if fb and adb_bin and properties.get("ro.product.device") == "sky":
                 acceptance = inspect_physical_acceptance(
